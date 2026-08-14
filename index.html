@@ -1023,9 +1023,20 @@ const PROVIDERS={
         contents:rest.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
       };
     },
+    /* Los Gemini con razonamiento descuentan de `maxOutputTokens` lo que
+       piensan por dentro. Con las seis etapas de este prompt se gastaban el
+       presupuesto pensando y la respuesta salía cortada a media frase, justo
+       antes del dato: el asesor veía el razonamiento y ninguna contestación.
+       Subir el tope no bastó —con 8000 seguía cortándose—, así que se apaga el
+       pensamiento interno. No se pierde nada: este asistente ya razona en seis
+       etapas visibles y auditables, que es precisamente lo contrario de un
+       razonamiento que no se puede leer. */
+    _genConfig(maxTokens,temperature){
+      return{maxOutputTokens:maxTokens,temperature:temperature||0.2,thinkingConfig:{thinkingBudget:0}};
+    },
     async call(key,messages,model,maxTokens,temperature){
       const{systemInstruction,contents}=this._toGeminiMessages(messages);
-      const body={contents,generationConfig:{maxOutputTokens:maxTokens,temperature:temperature||0.2}};
+      const body={contents,generationConfig:this._genConfig(maxTokens,temperature)};
       if(systemInstruction)body.systemInstruction=systemInstruction;
       const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
@@ -1038,7 +1049,7 @@ const PROVIDERS={
     },
     async stream({key, messages, model, maxTokens, temperature, onDelta, signal}) {
       const {systemInstruction, contents} = this._toGeminiMessages(messages);
-      const body = {contents, generationConfig: {maxOutputTokens: maxTokens, temperature: temperature || 0.2}};
+      const body = {contents, generationConfig: this._genConfig(maxTokens, temperature)};
       if (systemInstruction) body.systemInstruction = systemInstruction;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`;
       return streamGemini(url, body, onDelta, signal);
@@ -1794,8 +1805,15 @@ function parseAIResponse(text){
     }
   }
 
-  // Caso 4 — fallback: devolver texto completo sin parsear
-  return{thinking:null,final:raw,parsed:false};
+  /* Caso 4 — fallback: devolver texto completo sin parsear.
+
+     Con una salvedad: si el texto trae las marcas del razonamiento por etapas
+     pero no llegó nunca a la respuesta final, no es una respuesta sin formato,
+     es una respuesta que se cortó. Devolverla tal cual dejaba en pantalla el
+     razonamiento a medias haciéndose pasar por contestación, que es la peor
+     forma de fallar: parece que contestó. */
+  const razonando=/\[PENSAMIENTO\s+INTERNO|\bETAPA\s+[1-5]\b|Clasifico la pregunta|Busco en el contexto/i.test(raw);
+  return{thinking:null,final:raw,parsed:false,cortada:razonando};
 }
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
@@ -3326,7 +3344,10 @@ async function sendMessage(){
       key:appState.apiKey,
       messages,
       model:appState.chatModel,
-      maxTokens:2500,
+      /* Margen para las seis etapas visibles. Subir esto NO era el arreglo del
+         corte de respuesta —medido: con 8000 se seguía cortando—; eso se
+         resuelve apagando el pensamiento interno del proveedor. */
+      maxTokens:6000,
       temperature:appState.temperature,
       onDelta:renderChunk,
       signal:currentAbort.signal
@@ -3567,8 +3588,14 @@ function verificarContraContexto(respuesta,contexto){
     cifras.add(n);
   }
   const ctx=contexto.replace(/\s+/g,' ');
+  /* El separador decimal se acepta indistinto (20.8 y 20,8 son el mismo dato).
+     Ojo con encadenar dos replace aquí: el primero introduce una coma dentro
+     de la clase de caracteres y el segundo la vuelve a sustituir, produciendo
+     «20[.[.,]]8», que no coincide con nada. Así, TODA cifra decimal se marcaba
+     como no verificable aunque estuviera en el contexto —y estos manuales son
+     decimales por todas partes: 20.8%, 38.5%, 11.5%—. Una sola pasada. */
   const noVerificadas=[...cifras].filter(n=>{
-    const esc=n.replace('.','[.,]').replace(',','[.,]');
+    const esc=n.replace(/[.,]/g,'[.,]');
     return!new RegExp('(?<![\\d.,])'+esc+'(?![\\d])').test(ctx)
   });
 
@@ -3593,13 +3620,23 @@ function renderAvisoVerificacion(res){
 }
 
 function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
-  const{thinking,final,parsed}=parseAIResponse(rawText);
+  const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
   const msgBody=loaderEl.querySelector('.msg-body');
   const msgLabel=loaderEl.querySelector('.msg-label');
   loaderEl.classList.remove('loading');
   msgBody.innerHTML=safeMarkdown(cleanFinal);
   msgLabel.innerHTML=`Asistente <span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
+
+  /* El razonamiento a medias no es una respuesta. Se dice antes de que el
+     asesor lea nada, porque un texto cortado a mitad de frase se parece
+     demasiado a una contestación. */
+  if(cortada){
+    const corte=document.createElement('div');
+    corte.className='verify-warn';
+    corte.textContent='⚠ La respuesta se cortó antes de terminar: esto es el razonamiento, no la contestación. Vuelve a preguntar, o pregunta algo más concreto.';
+    loaderEl.insertBefore(corte,msgBody);
+  }
 
   const alerta=renderAvisoVerificacion(verificarContraContexto(cleanFinal,contextoEnviado));
   if(alerta)loaderEl.appendChild(alerta);

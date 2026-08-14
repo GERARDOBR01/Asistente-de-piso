@@ -175,6 +175,24 @@ sistema dice más de él que la lista de lo que hace:
    "¿a qué hora abre la tienda?" llega a 7.5 porque *tienda* es palabra central del manual.
    No hay corte que separe. Los dos se quedaron fuera. Calibrar un umbral con un solo
    documento es como probar el código con un solo caso: sale bien y no significa nada.
+8. **La respuesta no llegaba: se cortaba justo antes del dato.** Durante meses interpreté
+   esto como "la IA contesta mal". No contestaba en absoluto. Los modelos con razonamiento
+   interno —`gemini-3.5-flash` entre ellos— **descuentan de `maxOutputTokens` lo que piensan
+   por dentro**, y con seis etapas de razonamiento visible el presupuesto se agotaba pensando.
+   En pantalla quedaba el razonamiento truncado a media frase, y el fallback del parser lo
+   presentaba como si fuera la contestación: *parecía* que había respondido. Subir el tope no
+   bastó (con 8000 se seguía cortando); el arreglo es apagar el pensamiento interno del
+   proveedor, que aquí sobra — este asistente ya razona en seis etapas que se pueden leer, que
+   es exactamente lo contrario de un razonamiento que no se puede auditar. Ahora, además, un
+   razonamiento sin respuesta final se anuncia como lo que es y no se disfraza de respuesta.
+9. **El verificador de cifras marcaba como inventado todo número decimal.** La defensa
+   estrella contra la alucinación tenía un bug de dos líneas:
+   `n.replace('.','[.,]').replace(',','[.,]')` — el primer `replace` mete una coma dentro de
+   la clase de caracteres y el segundo la vuelve a sustituir, produciendo `20[.[.,]]8`, un
+   patrón que no coincide con nada. Resultado: **preguntar por el 20.8% de participación
+   devolvía el dato correcto con un sello de "no pude verificarlo"**, y estos manuales son
+   decimales por todas partes (20.8%, 38.5%, 11.5%). Un aviso que desconfía de lo correcto
+   gasta la credibilidad que necesita para cuando de verdad haya una invención.
 
 ## Relación con Veristack
 
