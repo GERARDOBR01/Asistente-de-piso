@@ -61,7 +61,10 @@ todo lo demás:
   existe.
 - **Cada fragmento sabe de dónde salió.** Documento, página y sección viajan pegados al
   texto hasta el prompt, y la sección se asigna por posición —el título que está encima y en
-  la misma columna—, no por orden de lectura. Citar mal la sección es peor que no citarla.
+  la misma columna—, no por orden de lectura. Citar mal la sección es peor que no citarla:
+  por eso el título vigente se reinicia en cada página y, cuando la lámina no lleva ninguno
+  en mayúsculas, se usa su propio nombre —el rótulo corto de la franja superior, "Rotación",
+  "Perímetros de Básicos"—, que es lo que el asesor tiene delante en la hoja.
 - **Figuras.** Los planogramas de estos manuales son dibujos vectoriales, no fotos: extraer
   las imágenes incrustadas devuelve íconos de leyenda de 36×18 px y se deja justo lo que más
   se consulta. Así que se hace lo que hacen los parsers serios (Marker, MinerU): renderizar
@@ -73,6 +76,21 @@ todo lo demás:
   contra los fragmentos que realmente se enviaron, y cada página citada contra las que
   existen. Lo que no cuadra sale marcado. No detecta un razonamiento equivocado; detecta el
   dato traído de fuera del manual, que es el que llega al piso.
+- **La lámina que acompaña sale de lo que la respuesta citó**, no de lo que el buscador
+  trajo: las páginas citadas se cruzan con los fragmentos enviados para saber de qué manual
+  son, y si la respuesta no cita ninguna página no se muestra ninguna imagen. Los recortes
+  repetidos se reconocen por una firma visual del propio recorte, no por su posición en la
+  lámina.
+- **Manda el manual del asesor.** Con un PDF cargado, ese es el que se está ejecutando en su
+  piso: su valor es el operativo, el conocimiento interno queda como referencia general y,
+  si los dos hablan del mismo dato, la diferencia se menciona como nota — nunca como empate
+  que deje al asesor eligiendo.
+- **El contexto se recorta con números, no con intuición.** Corte relativo al mejor
+  fragmento de cada consulta, deduplicado de casi-idénticos dentro de un mismo documento,
+  tope por página y nada de fragmentos cortados a la mitad: ~60% menos contexto, medido
+  contra 51 preguntas de respuesta conocida en 17 manuales reales de dos plantillas
+  distintas, sin perder ninguna. La regla de aceptación es de veto: una configuración que
+  pierda un solo fragmento con la respuesta se descarta, ahorre lo que ahorre.
 - **Descripción de figuras con IA, opcional y apagada.** Un modelo con visión transcribe los
   rótulos de un plano una sola vez por figura, y el texto queda indexado. Sin key la app
   funciona igual, solo sin esa capa.
@@ -102,9 +120,12 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 ## Límites conocidos
 
 - **El retrieval no lematiza de verdad.** Del lado de la pregunta prueba unas cuantas formas
-  ("pasillos" → "pasillo"), lo justo para que el plural del asesor encuentre el singular del
-  manual, pero no entiende morfología: "colores" no encuentra "COLORIZACIÓN" por sí solo —
-  depende del diccionario de sinónimos, que se llena a mano y por lo tanto está incompleto.
+  —plural ("pasillos" → "pasillo") y género ("rebajado" → "rebajada")—, lo justo para que la
+  palabra del asesor encuentre la del manual, pero no entiende morfología: "exhibir" no
+  alcanza "exhibición" por sí solo, y ningún salto de significado ocurre sin el diccionario
+  de sinónimos, que se llena a mano y por lo tanto está incompleto. Lo que sí hay es dónde
+  arreglarlo: las variantes se generan solo del lado de la pregunta, así que ampliarlas no
+  obliga a reprocesar ningún manual ya guardado.
 - **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
   casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
   rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
@@ -124,8 +145,24 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   Sirve cuando el resultado lo va a leer un modelo, que sabe descartar lo que no viene al
   caso; mentiría en el modo manual. Por eso ahí se exige al menos un acierto real de
   término antes de mostrar cualquier sección.
+- **La lámina que se muestra puede ser la vecina.** Si en la página citada ninguna figura se
+  puede identificar por sección ni por las palabras de la respuesta, se muestran las de esa
+  página: son la página correcta, pero no necesariamente *la* imagen que sostiene el dato.
+  El pie dice siempre manual, página y sección para que se vea de dónde salió.
+- **El recorte de contexto se midió sobre 17 manuales de dos plantillas distintas** —51
+  preguntas de respuesta conocida, ninguna perdida—, pero el margen del caso más ajustado
+  bajó de 51% a 42% al ampliar el diccionario: cada sinónimo nuevo sube la puntuación del
+  mejor fragmento y, con ella, el listón del corte relativo. Sigue habiendo holgura sobre
+  α=0.25, pero es un número que hay que volver a medir cada vez que se toca el vocabulario,
+  no una constante. El arnés no vive en el repo; se reconstruye en una tarde.
+- **El nombre de la lámina se deduce de la maquetación.** Se toma la línea corta y sin
+  puntuación de la franja superior de la página. Acierta en los 17 manuales, pero es una
+  regla geométrica: en una lámina cuyo rótulo esté partido en dos líneas se queda con la
+  etiqueta del panel ("Montaje") en vez del título completo ("Mercadeo de Cestos en
+  Perímetro"). Es menos preciso, no falso.
 - **El conocimiento es sintético**, así que las respuestas son coherentes pero no son el
-  estándar de nadie. Sirve para ver la mecánica, no para montar una tienda.
+  estándar de nadie. Sirve para ver la mecánica, no para montar una tienda. Con un PDF real
+  cargado deja de competir: pasa a referencia secundaria y manda el manual del asesor.
 
 ## Lo que encontré al prepararlo para publicar
 
@@ -193,6 +230,58 @@ sistema dice más de él que la lista de lo que hace:
    devolvía el dato correcto con un sello de "no pude verificarlo"**, y estos manuales son
    decimales por todas partes (20.8%, 38.5%, 11.5%). Un aviso que desconfía de lo correcto
    gasta la credibilidad que necesita para cuando de verdad haya una invención.
+10. **La imagen decía que el dato salía de ahí, y no salía de ningún lado.** A la pregunta por
+    la temperatura de la sección el modelo contestó bien —*"el manual no lo especifica"*— y
+    debajo aparecieron dos láminas igual, además idénticas entre sí. La tira de evidencia se
+    armaba con **los ~20 fragmentos que entraron al contexto**, no con lo que la respuesta
+    acabó citando, y el descarte de plantilla comparaba la **posición** del recorte, no su
+    contenido. Un asesor cree la foto antes que el texto: una lámina que no sostiene lo que
+    se lee es peor que ninguna. Ahora la tira se arma con las páginas que la respuesta citó
+    —desambiguadas contra los fragmentos, porque con dos manuales cargados "pág. 11" es
+    ambiguo—, sin cita no se muestra nada, y si de la página se puede identificar *la* lámina
+    (su sección es la del fragmento citado) se enseña esa sola en vez de la página entera.
+11. **Recortar el contexto sin perder la respuesta: medido, no supuesto.** Se enviaban ~20
+    fragmentos por pregunta, y ahí es donde se va la cuota. Se midieron cinco filtros sobre
+    24 preguntas de respuesta conocida en los siete manuales —seis de ellas formuladas *sin*
+    las palabras de la lámina, que son las únicas que ponen a prueba un corte por
+    puntuación—, con una regla de veto: cualquier configuración que pierda un solo fragmento
+    con la respuesta queda descartada aunque ahorre mucho. Quedó un corte **relativo** al
+    mejor fragmento de cada consulta (el absoluto ya había fallado, hallazgo 7), más
+    deduplicado de casi-idénticos, tope por página y prohibición de enviar fragmentos
+    truncados: **60% menos contexto sin perder ninguna respuesta**. El α agresivo ahorraba
+    72% y también pasaba, pero el caso más difícil quedaba a la mitad de margen; no vale la
+    pena por una pregunta que no esté en la muestra.
+12. **Un deduplicado sensato borró el dato.** El filtro de casi-duplicados comparaba solo el
+    cuerpo del fragmento. Con dos manuales cargados, la lámina «PRÁCTICO **(20.8%)**» de
+    Blancos y la «PRÁCTICO» de Caballero tienen **el mismo párrafo debajo** —comparten
+    plantilla— y el dato distintivo vive en el título. El filtro tiraba la de Blancos por
+    parecida, y la respuesta correcta salía con el sello de "no pude verificar 20.8". Se
+    arregló metiendo el título en la firma y **no comparando nunca entre documentos
+    distintos**: que dos manuales digan lo mismo no vuelve prescindible al del asesor.
+13. **Un número es un dato para buscar y una coincidencia para reconocer.** Al elegir qué
+    lámina acompaña a la respuesta, «(pág. 3) … el 20.8%» compartía el «8» y el «3» con una
+    lámina titulada «VANGUARDISTA (8.3%)», que no tiene nada que ver, y la ponía como
+    evidencia. Las cifras sueltas quedan fuera de ese cotejo — no del buscador, donde un
+    "40%" sí es información.
+
+14. **La sección se heredaba de la página anterior.** El título vigente arrancaba con el
+    documento, no con la página, así que una lámina sin títulos en mayúsculas se quedaba con
+    el de la anterior: la regla del producto descontinuado se citaba como «pág. 9 ·
+    ESQUINEROS», que es una sección de la pág. 8. Y como el título también se indexa, no solo
+    se citaba mal: se buscaba mal. Solo se vio al probar manuales de otra plantilla, donde
+    las láminas llevan su nombre en minúsculas y el detector de títulos no lo reconocía.
+
+15. **Cada lámina ya traía su nombre; nadie lo estaba leyendo.** "Rotación", "Planograma",
+    "Perímetros de Básicos" están arriba a la izquierda de cada página, pero en minúsculas, y
+    el detector solo aceptaba mayúsculas. Acababan de primera línea del cuerpo. Reconocerlos
+    dio sección a 17/17 manuales y dejó en cero las figuras sin sección — el pie de foto pasó
+    de "pág. 8" a "pág. 8 · Montaje".
+
+16. **Dos de los cuatro fallos que encontré eran de mis pruebas, no del producto.** Un regex
+    pedía "no desarmar el set" y el manual parte la frase en dos líneas; otro daba por hecho
+    que Manual Blancos documenta la altura del sensor, y no la documenta. Un arnés que falla
+    por su cuenta gasta el tiempo en el sitio equivocado y, peor, esconde los fallos de
+    verdad: los dos reales —"espacio de paso" y "lo rebajado"— estaban en la misma lista.
 
 ## Relación con Veristack
 
