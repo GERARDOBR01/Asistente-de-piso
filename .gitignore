@@ -1,0 +1,5 @@
+*.log
+.env
+*.pdf
+*.xlsx
+*.csv
