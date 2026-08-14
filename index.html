@@ -775,6 +775,11 @@ CONFLICTOS DOCUMENTADOS (ej. entallado 4 vs 5 vs 6 piezas):
 - Si el contexto registra un conflicto entre manuales, CÍTALO. Prohibido decir "El manual no especifica" cuando hay conflicto documentado.
 - Indica los valores en conflicto y la regla general (progresión chica→grande).
 
+QUÉ FUENTE MANDA:
+- Si el asesor cargó un manual en PDF, ese es el que se está ejecutando en su piso HOY: su valor es el que se aplica.
+- El manual interno Mercadep es referencia general, para lo que el PDF no cubra.
+- Si los dos dan un valor para el mismo dato: responde el del PDF con su página, y deja el otro como nota de una línea al final. Nunca los presentes como empate.
+
 SOBRE TU CREADOR: Solo si preguntan EXPLÍCITAMENTE quién te creó o programó, responde: "Fui creado por Gerardo Barrera, Asesor de piso de Mercadep Zona Piloto." En cualquier otra respuesta, NUNCA menciones quién te creó.
 
 NUNCA repitas ni resumas el razonamiento interno dentro de [RESPUESTA FINAL]. Ahí va únicamente la respuesta directa al asesor.
@@ -1495,24 +1500,76 @@ function chunkLabel(c){
    puntuaron alto: es la única lista contra la que tiene sentido verificar la
    respuesta y de la que se pueden sacar las figuras que la acompañan. */
 let ultimosFragmentos=[];
-function packChunks(results,maxChars){
-  let out='',chars=0;
+
+/* Se enviaban ~20 fragmentos por pregunta —41 con dos manuales cargados—, y eso
+   es lo que quema la cuota. Estos cuatro filtros se midieron sobre 24 preguntas
+   de respuesta conocida en los 7 manuales reales, incluidas seis en las que el
+   asesor NO usa las palabras de la lámina (que son las únicas que ponen a prueba
+   un corte por puntuación). Bajan el contexto de 7199 a 2860 caracteres —60%
+   menos— sin perder una sola respuesta.
+
+   El corte es RELATIVO al mejor fragmento de esa consulta, no absoluto: ya se
+   probó y se descartó el umbral fijo, porque las puntuaciones no son comparables
+   entre manuales —«¿a qué hora abre la tienda?» llega a 7.5 y una pregunta buena
+   se queda en 2.3—. Relativo, cada pregunta trae su propia escala.
+
+   α=0.25 y no más: el caso más ajustado de los medidos —«¿dónde coloco la alarma
+   en el pantalón?», que llega por sinónimo— se queda al 52% del mejor. Con 0.25
+   hay el doble de holgura; con 0.35 el ahorro sube al 72% pero el margen cae a
+   la mitad, y no vale la pena para una pregunta que no esté en la muestra. */
+const CTX_ALPHA=0.25;             // corte relativo al mejor fragmento
+const CTX_JACCARD=0.8;            // dos fragmentos casi iguales: sobra uno
+const CTX_MAX_POR_PAGINA=3;       // una lámina verbosa no se come el presupuesto
+
+function jaccardTokens(a,b){
+  let comunes=0;
+  for(const t of a)if(b.has(t))comunes++;
+  return comunes/(a.size+b.size-comunes||1)
+}
+
+function packChunks(results,maxChars,maxFrag){
+  let out='',chars=0,n=0;
+  const corte=results.length?results[0].score*CTX_ALPHA:0;
+  const firmas=[],porPagina=new Map();
   for(const r of results){
     if(chars>=maxChars)break;
+    if(maxFrag&&n>=maxFrag)break;
+    if(r.score<corte)continue;
+    if(r.c.page){
+      const k=r.c.docName+'|'+r.c.page;
+      if((porPagina.get(k)||0)>=CTX_MAX_POR_PAGINA)continue;
+      porPagina.set(k,(porPagina.get(k)||0)+1);
+    }
+    /* Los 7 manuales comparten plantilla, así que el mismo párrafo aparece
+       cinco veces con otro número dentro. Repetirlo no informa, solo ocupa.
+       Dos precauciones que costaron una respuesta en la prueba con dos manuales
+       cargados: la firma incluye el TÍTULO, porque el dato distintivo suele
+       vivir ahí —«PRÁCTICO» en un manual y «PRÁCTICO (20.8%):» en el otro, con
+       el mismo párrafo debajo—; y nunca se comparan fragmentos de documentos
+       distintos, porque que dos manuales digan lo mismo no vuelve prescindible
+       al del asesor. Sin esto, el 20.8% de Blancos desaparecía del contexto por
+       parecerse a una lámina de Caballero. */
+    const firma=new Set(tokenize((r.c.heading||'')+' '+r.c.text));
+    if(firmas.some(g=>g.doc===r.c.docName&&jaccardTokens(firma,g.set)>=CTX_JACCARD))continue;
     const header=chunkLabel(r.c)+'\n';
     const space=maxChars-chars-header.length;
     if(space<80)break;
-    const body=r.c.text.length>space?r.c.text.slice(0,space)+'\n[...]':r.c.text;
-    out+=header+body+'\n\n';
-    chars+=header.length+body.length;
+    /* Antes el último fragmento entraba cortado a la mitad con «[...]». Media
+       regla es peor que ninguna: el modelo la cita completa igual, y la
+       verificación numérica no encuentra la cifra que quedó fuera. */
+    if(r.c.text.length>space)break;
+    out+=header+r.c.text+'\n\n';
+    chars+=header.length+r.c.text.length;
+    n++;
+    firmas.push({doc:r.c.docName,set:firma});
     ultimosFragmentos.push(r.c);
   }
   return out.trim()
 }
-function getManualContext(query,maxChars){
+function getManualContext(query,maxChars,maxFrag){
   const results=retrieve(query,{source:'manual'});
   if(!results.length)return manualSections.slice(0,3).map(s=>s.text).join('\n\n').slice(0,maxChars);
-  return packChunks(results,maxChars)
+  return packChunks(results,maxChars,maxFrag)
 }
 
 /* ════════════════════════════════════════════════
@@ -1574,9 +1631,12 @@ function buildChunks(pages,docName){
   return chunks
 }
 
+/* 40 candidatos era generoso de más: después de los filtros de packChunks nunca
+   sobreviven más de 9, así que puntuar el doble solo alarga la lista. */
+const PDF_CANDIDATOS=20;
 function getPdfContext(query,maxChars){
   if(!docChunks.length)return'';
-  const results=retrieve(query,{source:'pdf'});
+  const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS});
   if(results.length)return packChunks(results,maxChars);
   /* Sin una sola coincidencia: en vez de callar, se entrega el arranque de
      cada manual para que el modelo vea de qué trata y pueda decir que no
@@ -1595,6 +1655,11 @@ function getPdfContext(query,maxChars){
 ════════════════════════════════════════════════ */
 const PDF_BUDGET=12000,MANUAL_BUDGET=6000,EXTRA_BUDGET=600;
 const PDF_BUDGET_GEMINI=20000;
+/* Con un manual real cargado, el conocimiento interno pasa a segundo plano: se
+   consulta para lo que el PDF no cubra —muebles POS, mundos, entallado— pero
+   deja de competir por el presupuesto. Sin PDF no cambia nada: ahí el interno
+   ES el asistente. */
+const MANUAL_BUDGET_CON_PDF=2500,MANUAL_MAX_FRAG_CON_PDF=4;
 function buildContext(query){
   ultimosFragmentos=[];
   const hasPdfs=docChunks.length>0;
@@ -1603,9 +1668,9 @@ function buildContext(query){
   const pdfBudget=isGemini?PDF_BUDGET_GEMINI:PDF_BUDGET;
   if(hasPdfs){
     const pdfCtx=getPdfContext(query,pdfBudget);
-    if(pdfCtx)parts.push(`=== MANUAL DE TEMPORADA (PDF CARGADO) ===\n${pdfCtx}`);
-    const manCtx=getManualContext(query,MANUAL_BUDGET);
-    if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP (BIBLIA DE 12 MANUALES) ===\n${manCtx}`);
+    if(pdfCtx)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (FUENTE QUE MANDA) ===\n${pdfCtx}`);
+    const manCtx=getManualContext(query,MANUAL_BUDGET_CON_PDF,MANUAL_MAX_FRAG_CON_PDF);
+    if(manCtx)parts.push(`=== REFERENCIA GENERAL — MANUAL INTERNO MERCADEP (SECUNDARIO) ===\n${manCtx}`);
   }else{
     const manCtx=getManualContext(query,pdfBudget+MANUAL_BUDGET);
     if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${manCtx}`);
@@ -1696,7 +1761,7 @@ function clearMemory(){
 ════════════════════════════════════════════════ */
 /* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
    viejo guardado en localStorage, sin pedirle que borre nada a mano. */
-const PROMPT_VERSION='8.0';
+const PROMPT_VERSION='9.0';   // 9.0: el PDF cargado manda sobre el manual interno
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
@@ -1704,13 +1769,17 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 3. Menciona al creador SOLO si preguntan explícitamente quién te creó o programó.
 4. [RESPUESTA FINAL] contiene SOLO la respuesta al asesor — nunca repitas ETAPAS ni razonamiento interno.
 5. Conflictos documentados en el contexto → cítalos; nunca digas "no especifica" si hay conflicto registrado.
+   Si el conflicto es entre el PDF cargado y el manual interno, el valor operativo es el del PDF (ver regla 9).
 6. Otra tienda + tema VM → aclara que solo conoces Mercadep y responde la regla Mercadep si está en el contexto.
 7. CITA OBLIGATORIA: cada fragmento del contexto llega rotulado con su origen — [documento · pág. N · sección].
    Toda medida, cantidad, porcentaje o regla que tomes de un manual con página va seguida de "(pág. N)".
    Si el dato viene del manual interno, di "(manual interno)". El asesor tiene que poder ir a verlo.
 8. CERO INVENCIÓN: no completes con conocimiento general de visual merchandising lo que el contexto no diga.
    Si la respuesta no está en el contexto, dilo con esas palabras: "el manual no lo especifica".
-   Una regla plausible pero no escrita es peor que un "no está": el asesor la ejecuta en el piso.`;
+   Una regla plausible pero no escrita es peor que un "no está": el asesor la ejecuta en el piso.
+9. QUIÉN MANDA: si hay un PDF cargado, ese es el manual que se está ejecutando en ese piso y su valor es el
+   que se aplica. El manual interno solo cubre lo que el PDF no trae. Cuando los dos hablen del mismo dato,
+   responde con el del PDF y su página, y deja la diferencia como nota al final — no como empate.`;
 
 const GREETING_PATTERNS=/^(?:\s*(?:hola|hey|hi|hello|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?|qu[eé]\s+tal|saludos?|buen\s+d[ií]a))[\s!.?]*$/i;
 
@@ -2455,6 +2524,64 @@ function captionParaFigura(box,blocks){
   return best?best.text.replace(/\s+/g,' ').trim().slice(0,160):''
 }
 
+/* Firma visual de 64 bits del recorte (average hash): se reduce a 8×8 en gris y
+   cada celda vale 1 si supera la media. Sirve para saber que dos láminas son la
+   MISMA imagen aunque estén en páginas distintas. Comparar la posición no basta
+   —la plantilla se corre unos puntos de una lámina a otra— y comparar el JPEG
+   byte a byte falla por un solo píxel de diferencia. */
+function firmaVisual(canvas){
+  const s=document.createElement('canvas');s.width=s.height=8;
+  const ctx=s.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(canvas,0,0,8,8);
+  const d=ctx.getImageData(0,0,8,8).data;
+  const gris=[];
+  for(let i=0;i<64;i++)gris.push((d[i*4]*3+d[i*4+1]*6+d[i*4+2])/10);
+  const media=gris.reduce((a,b)=>a+b,0)/64;
+  let hex='';
+  for(let i=0;i<64;i+=4){
+    let nib=0;
+    for(let j=0;j<4;j++)if(gris[i+j]>media)nib|=1<<(3-j);
+    hex+=nib.toString(16);
+  }
+  return hex
+}
+
+/* Los manuales guardados antes de que existiera la firma no la traen. Volver a
+   procesar 38 páginas por eso sería absurdo: el recorte ya está guardado, así
+   que se decodifica y se firma. */
+function firmaDesdeDataUrl(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth;c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      let f='';try{f=firmaVisual(c)}catch{}
+      c.width=c.height=0;
+      resolve(f);
+    };
+    img.onerror=()=>resolve('');
+    img.src=dataUrl;
+  })
+}
+
+/* 0 = misma imagen. Se compara nibble a nibble porque la firma viaja en hex
+   para poder guardarse en IndexedDB como texto. Sin firma no se puede afirmar
+   que dos recortes sean iguales: se devuelve el máximo, que es "distintos". */
+function distanciaVisual(a,b){
+  if(!a||!b||a.length!==b.length)return 64;
+  let d=0;
+  for(let i=0;i<a.length;i++){
+    let x=parseInt(a[i],16)^parseInt(b[i],16);
+    while(x){d+=x&1;x>>=1}
+  }
+  return d
+}
+/* 8×8 es una firma gruesa: dos planogramas distintos de la misma sección pueden
+   parecerse. Por eso el corte es estrecho —recortes idénticos dan 0 y el ruido
+   del JPEG no pasa de 2—, para no esconder nunca una lámina que sí es otra. */
+const FIG_DIST_IGUAL=3;
+
 function recortar(canvas,box,scale){
   const sx=Math.max(0,box.x0*scale),sy=Math.max(0,box.y0*scale);
   const sw=Math.min(canvas.width-sx,(box.x1-box.x0)*scale);
@@ -2464,7 +2591,7 @@ function recortar(canvas,box,scale){
   const out=document.createElement('canvas');
   out.width=Math.round(w);out.height=Math.round(h);
   out.getContext('2d').drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height);
-  return out.toDataURL('image/jpeg',FIG_JPEG_QUALITY)
+  return{dataUrl:out.toDataURL('image/jpeg',FIG_JPEG_QUALITY),firma:firmaVisual(out)}
 }
 
 /* Un panel de color con texto encima deja, al borrar el texto, un rectángulo
@@ -2563,11 +2690,11 @@ async function detectarFiguras(page,pageInfo,docName){
   const figuras=[];
   for(const c of cajas){
     const txt=coberturaDeTexto(c,pageInfo.blocks);
-    const dataUrl=recortar(canvas,c,FIG_SCALE);
-    if(!dataUrl)continue;
+    const corte=recortar(canvas,c,FIG_SCALE);
+    if(!corte)continue;
     figuras.push({
       id:docName+'#f'+pageInfo.page+'-'+figuras.length,
-      docName,page:pageInfo.page,box:c,dataUrl,txt,
+      docName,page:pageInfo.page,box:c,dataUrl:corte.dataUrl,firma:corte.firma,txt,
       caption:captionParaFigura(c,pageInfo.blocks),
       heading:headingForBox(c,titulos),
       vlmDescription:null
@@ -2589,7 +2716,24 @@ function descartarRepetidas(figuras,totalPaginas){
     paginasPorClave.get(k).add(f.page);
   }
   const limite=Math.max(3,Math.ceil(totalPaginas*FIG_REPEAT_RATIO));
-  return figuras.filter(f=>paginasPorClave.get(clave(f)).size<limite)
+
+  /* La posición sola se deja engañar: basta con que la plantilla se corra unos
+     puntos entre láminas para que cada instancia cuente como caja distinta y
+     todas sobrevivan. La firma visual las reconoce estén donde estén, así que
+     lo mismo dibujado en muchas páginas se descarta aunque no coincida en
+     coordenadas. Los grupos se forman por vecindad con el primero de su clase:
+     con recortes idénticos —que es el caso de una plantilla— alcanza. */
+  const grupos=[];
+  for(const f of figuras){
+    if(!f.firma)continue;
+    const g=grupos.find(g=>distanciaVisual(g.firma,f.firma)<=FIG_DIST_IGUAL);
+    if(g){g.paginas.add(f.page);g.miembros.push(f)}
+    else grupos.push({firma:f.firma,paginas:new Set([f.page]),miembros:[f]});
+  }
+  const plantilla=new Set();
+  for(const g of grupos)if(g.paginas.size>=limite)for(const f of g.miembros)plantilla.add(f);
+
+  return figuras.filter(f=>paginasPorClave.get(clave(f)).size<limite&&!plantilla.has(f))
 }
 
 function pagesToText(pages){
@@ -2709,6 +2853,22 @@ async function guardarManual(hash,doc,chunks,figuras){
   await txDB('readwrite',st=>st.put({hash,doc,chunks:limpio,figuras,guardado:Date.now()}));
 }
 const leerManual=hash=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
+
+/* Un manual indexado antes de que la firma visual existiera se restaura sin
+   ella, y sin firma no hay forma de saber que dos láminas son la misma imagen.
+   Se calculan aquí, sobre el recorte ya guardado, y se reescribe el registro
+   para no repetirlo la próxima vez. Si algo falla, la figura se queda sin firma
+   y simplemente no se deduplica: nunca por eso se pierde una lámina. */
+async function firmarPendientes(figuras,hash,guardado){
+  const faltan=figuras.filter(f=>!f.firma);
+  if(!faltan.length)return;
+  for(const f of faltan){
+    try{f.firma=await firmaDesdeDataUrl(f.dataUrl)}catch{f.firma=''}
+  }
+  if(hash&&guardado){
+    try{await guardarManual(hash,guardado.doc,guardado.chunks,figuras)}catch(e){console.warn('refirmar',e)}
+  }
+}
 const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
 
 async function borrarManualesGuardados(){
@@ -2904,7 +3064,9 @@ async function handleFiles(fileList){
     const guardado=hash?await leerManual(hash):null;
     if(guardado&&guardado.chunks&&guardado.chunks.length){
       docChunks.push(...guardado.chunks.map(indexChunk));
-      docFigures.push(...(guardado.figuras||[]));
+      const restauradas=guardado.figuras||[];
+      await firmarPendientes(restauradas,hash,guardado);
+      docFigures.push(...restauradas);
       docs.push(guardado.doc);
       rebuildCorpus();
       showToast(`✓ "${file.name}" restaurado de este dispositivo — no hizo falta reprocesarlo`,'success',3500);
@@ -3299,7 +3461,7 @@ async function sendMessage(){
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
   const sourceNotice=hasPdfs
-    ?'\n\n⚠ FUENTES DISPONIBLES: Hay un manual de temporada (PDF) y el manual interno Mercadep (15 manuales consolidados). NINGUNA fuente tiene prioridad automática — usa la que realmente contenga la respuesta a la pregunta. Si la pregunta es sobre una sección, mueble o regla que solo aparece en el manual interno, úsalo aunque haya un PDF cargado. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes del PDF.'
+    ?'\n\n⚠ FUENTES DISPONIBLES Y CUÁL MANDA: El PDF que el asesor cargó es el MANUAL OPERATIVO — es el que se está ejecutando hoy en ese piso de venta y MANDA sobre cualquier otra fuente. El manual interno Mercadep es REFERENCIA GENERAL: úsalo solo para lo que el PDF no cubra (muebles POS, mundos, reglas transversales). Si los dos dan un valor para lo mismo, el valor bueno es el del PDF: respóndelo como la regla a aplicar y menciona la diferencia en una línea al final ("el manual interno registra otro valor: X"). NUNCA los presentes como empate ni dejes al asesor eligiendo. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes del PDF.'
     :'\n\n⚠ FUENTES DISPONIBLES: Solo hay manual interno Mercadep disponible. REVÍSALO para responder.';
   const fullSystem=system+GUARDRAIL_APPEND+(memCtx?'\n\n'+memCtx:'')+sourceNotice;
   const messages=[{role:'system',content:fullSystem}];
@@ -3526,25 +3688,100 @@ function appendMsg(role,text,loading){
    que salió el dato, que es lo que el asesor puede ir a contrastar.
 ════════════════════════════════════════════════ */
 const MAX_EVIDENCIA=3;
-function figurasDeFragmentos(chunks){
+
+/* La tira de evidencia se armaba con TODOS los fragmentos que entraron al
+   contexto —41 en una pregunta normal—, así que acompañaba la respuesta con
+   láminas de páginas que la respuesta ni miró. El caso que lo destapó: a
+   «¿a qué temperatura debe estar la sección?» el modelo contestó bien que el
+   manual no lo especifica, y debajo salieron dos láminas igual. La imagen
+   afirmaba que el dato salía de ahí, y no salía de ningún lado.
+
+   Ahora manda lo que la respuesta CITÓ. Sin cita, ninguna imagen: enseñar una
+   lámina que no sostiene lo que se lee es peor que no enseñar nada, porque el
+   asesor cree la foto antes que el texto.
+
+   `citas` son las páginas que citó el modelo. En modo sin API se pasa null: ahí
+   los fragmentos se enseñan enteros en pantalla, así que su página es
+   literalmente de dónde sale lo que se está leyendo. */
+function figurasDeFragmentos(chunks,citas,respuesta){
   if(!docFigures.length||!chunks||!chunks.length)return[];
-  const claves=new Set(),paginas=new Set();
+  if(citas&&!citas.size)return[];
+
+  /* Con dos manuales cargados «pág. 11» es ambiguo: los dos tienen una. El
+     número se resuelve contra los fragmentos que de verdad se enviaron, que sí
+     saben de qué documento salieron; y si la respuesta nombra un manual, ese
+     manda sobre el otro. */
+  const nombrados=respuesta
+    ?docs.filter(d=>respuesta.includes(d.name)||respuesta.includes(d.name.replace(/\.pdf$/i,''))).map(d=>d.name)
+    :[];
+  const paginas=new Map();
   for(const c of chunks){
     if(c.source!=='pdf'||!c.page)continue;
-    paginas.add(c.docName+'|'+c.page);
-    if(c.heading)claves.add(c.docName+'|'+c.page+'|'+normalizeText(c.heading));
+    if(citas&&!citas.has(String(c.page)))continue;
+    if(nombrados.length&&!nombrados.includes(c.docName))continue;
+    const k=c.docName+'|'+c.page;
+    if(!paginas.has(k))paginas.set(k,new Set());
+    if(c.heading)paginas.get(k).add(normalizeText(c.heading));
   }
-  const exactas=docFigures.filter(f=>f.heading&&claves.has(f.docName+'|'+f.page+'|'+normalizeText(f.heading)));
-  const dePagina=docFigures.filter(f=>paginas.has(f.docName+'|'+f.page)&&!exactas.includes(f));
-  return exactas.concat(dePagina).slice(0,MAX_EVIDENCIA)
+  if(!paginas.size)return[];
+
+  /* Dentro de una página citada puede haber varias láminas. Primero la de la
+     misma sección que el fragmento; luego la que comparte palabras con la
+     respuesta, que es la que el asesor espera ver. */
+  /* Las cifras sueltas se quedan fuera del cotejo: la respuesta «(pág. 3) … el
+     20.8%» comparte el «8» y el «3» con una lámina titulada «VANGUARDISTA
+     (8.3%)», que no tiene nada que ver. Para buscar en el manual un número es
+     un dato; para reconocer una lámina es una coincidencia. */
+  const terminos=respuesta?new Set(tokenize(respuesta).filter(t=>!/^\d+$/.test(t))):null;
+  const puntuar=f=>{
+    const titulos=paginas.get(f.docName+'|'+f.page);
+    let p=f.heading&&titulos.has(normalizeText(f.heading))?4:0;
+    if(terminos){
+      let comunes=0;
+      for(const t of new Set(tokenize((f.caption||'')+' '+(f.heading||'')+' '+(f.vlmDescription||''))))
+        if(!/^\d+$/.test(t)&&terminos.has(t))comunes++;
+      p+=Math.min(comunes,3);
+    }
+    return p
+  };
+  let orden=docFigures.filter(f=>paginas.has(f.docName+'|'+f.page))
+    .map((f,i)=>({f,p:puntuar(f),i}))
+    .sort((a,b)=>b.p-a.p||a.i-b.i);
+  /* Si alguna lámina se pudo identificar —su sección es la del fragmento citado,
+     o su rótulo aparece en la respuesta—, se enseña esa y nada más. Las otras de
+     la misma página ya no son evidencia, son relleno: a la pregunta por el
+     cliente práctico la acompañaban dos láminas de VANGUARDISTA. Solo cuando no
+     hay forma de distinguir se enseña la página entera. */
+  if(orden.length&&orden[0].p>0)orden=orden.filter(o=>o.p>0);
+
+  /* Dos recortes de la misma imagen llenaban la tira con lo mismo repetido —es
+     lo que se vio en pantalla: el mismo edificio dos veces—. Se descarta el
+     repetido, pero solo si además comparte sección: a 8×8 dos iconos de perfil
+     distintos («VANGUARDISTA (11.5%)» y «(8.3%)») salen a distancia 1, y son
+     láminas diferentes. Si el manual las tituló distinto, son distintas.
+     Sin firma, `distanciaVisual` devuelve el máximo, así que una figura sin
+     firmar nunca se descarta por parecido. */
+  const salida=[];
+  const mismoTitulo=(a,b)=>normalizeText(a.heading||'')===normalizeText(b.heading||'');
+  for(const{f}of orden){
+    if(salida.length>=MAX_EVIDENCIA)break;
+    if(salida.some(g=>distanciaVisual(g.firma,f.firma)<=FIG_DIST_IGUAL&&mismoTitulo(g,f)))continue;
+    salida.push(f);
+  }
+  return salida
 }
 
-function renderEvidencia(container,figuras){
+function renderEvidencia(container,figuras,citado){
   if(!figuras.length)return;
   const wrap=document.createElement('div');wrap.className='evidencia';
   const titulo=document.createElement('div');titulo.className='evidencia-titulo';
-  titulo.textContent=figuras.length===1?'Del manual, la lámina de la que sale esto:':'Del manual, las láminas de las que sale esto:';
+  /* El rótulo promete exactamente lo que se puede sostener: con un modelo de
+     por medio, que la lámina es de la página que él citó. */
+  titulo.textContent=citado
+    ?(figuras.length===1?'Lámina de la página que cita la respuesta:':'Láminas de las páginas que cita la respuesta:')
+    :(figuras.length===1?'Del manual, la lámina de la que sale esto:':'Del manual, las láminas de las que sale esto:');
   wrap.appendChild(titulo);
+  const varios=docs.length>1;
   const tira=document.createElement('div');tira.className='evidencia-tira';
   for(const f of figuras){
     const fig=document.createElement('figure');fig.className='evidencia-fig';
@@ -3552,7 +3789,8 @@ function renderEvidencia(container,figuras){
     img.src=f.dataUrl;img.loading='lazy';
     img.alt=(f.caption||f.heading||'Figura')+' — página '+f.page;
     const pie=document.createElement('figcaption');
-    pie.textContent='pág. '+f.page+(f.heading?' · '+f.heading:'');
+    /* Con más de un manual cargado, «pág. 11» a secas no le sirve a nadie. */
+    pie.textContent=(varios?f.docName.replace(/\.pdf$/i,'')+' · ':'')+'pág. '+f.page+(f.heading?' · '+f.heading:'');
     fig.appendChild(img);fig.appendChild(pie);
     fig.onclick=()=>fig.classList.toggle('ampliada');
     tira.appendChild(fig);
@@ -3574,7 +3812,7 @@ function renderEvidencia(container,figuras){
    fuera del manual, que es la falla que llega al piso.
 ════════════════════════════════════════════════ */
 function verificarContraContexto(respuesta,contexto){
-  const vacio={cifras:[],paginas:[]};
+  const vacio={cifras:[],paginas:[],citadas:new Set()};
   if(!respuesta||!contexto)return vacio;
 
   const texto=respuesta
@@ -3605,7 +3843,12 @@ function verificarContraContexto(respuesta,contexto){
   for(const m of contexto.matchAll(/p[áa]g\.\s*(\d+)/gi))paginasReales.add(m[1]);
   const paginasInventadas=[...paginasCitadas].filter(p=>!paginasReales.has(p));
 
-  return{cifras:noVerificadas,paginas:paginasInventadas}
+  /* Las páginas citadas que sí existen en el contexto no son solo lo que
+     sobrevive a la verificación: son la única lista honesta de la que se pueden
+     sacar las láminas que acompañan a la respuesta. */
+  const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
+
+  return{cifras:noVerificadas,paginas:paginasInventadas,citadas}
 }
 
 function renderAvisoVerificacion(res){
@@ -3638,9 +3881,10 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     loaderEl.insertBefore(corte,msgBody);
   }
 
-  const alerta=renderAvisoVerificacion(verificarContraContexto(cleanFinal,contextoEnviado));
+  const verif=verificarContraContexto(cleanFinal,contextoEnviado);
+  const alerta=renderAvisoVerificacion(verif);
   if(alerta)loaderEl.appendChild(alerta);
-  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos));
+  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal),true);
 
   const footer=document.createElement('div');footer.className='msg-footer';
 
