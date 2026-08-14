@@ -1023,9 +1023,20 @@ const PROVIDERS={
         contents:rest.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
       };
     },
+    /* Los Gemini con razonamiento descuentan de `maxOutputTokens` lo que
+       piensan por dentro. Con las seis etapas de este prompt se gastaban el
+       presupuesto pensando y la respuesta salía cortada a media frase, justo
+       antes del dato: el asesor veía el razonamiento y ninguna contestación.
+       Subir el tope no bastó —con 8000 seguía cortándose—, así que se apaga el
+       pensamiento interno. No se pierde nada: este asistente ya razona en seis
+       etapas visibles y auditables, que es precisamente lo contrario de un
+       razonamiento que no se puede leer. */
+    _genConfig(maxTokens,temperature){
+      return{maxOutputTokens:maxTokens,temperature:temperature||0.2,thinkingConfig:{thinkingBudget:0}};
+    },
     async call(key,messages,model,maxTokens,temperature){
       const{systemInstruction,contents}=this._toGeminiMessages(messages);
-      const body={contents,generationConfig:{maxOutputTokens:maxTokens,temperature:temperature||0.2}};
+      const body={contents,generationConfig:this._genConfig(maxTokens,temperature)};
       if(systemInstruction)body.systemInstruction=systemInstruction;
       const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
@@ -1038,7 +1049,7 @@ const PROVIDERS={
     },
     async stream({key, messages, model, maxTokens, temperature, onDelta, signal}) {
       const {systemInstruction, contents} = this._toGeminiMessages(messages);
-      const body = {contents, generationConfig: {maxOutputTokens: maxTokens, temperature: temperature || 0.2}};
+      const body = {contents, generationConfig: this._genConfig(maxTokens, temperature)};
       if (systemInstruction) body.systemInstruction = systemInstruction;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`;
       return streamGemini(url, body, onDelta, signal);
@@ -1305,7 +1316,14 @@ let docFigures=[];
 let corpus=[];
 const bm25={N:0,avgdl:1,df:Object.create(null),k1:1.5,b:0.75};
 
-function tokenize(t){return normalizeText(t).split(/\s+/).filter(w=>w.length>2&&!STOPWORDS.has(w))}
+/* El corte por longitud dejaba fuera «cm», que en un manual de exhibición es
+   de las palabras que más información llevan: la lámina que contesta "¿cuánto
+   dejo de pasillo?" dice literalmente "dejando 80 cm" y no menciona la palabra
+   pasillo. También entran las cifras sueltas, porque aquí un "40%" es un dato,
+   no ruido. */
+const UNIDADES=new Set(['cm','mm','mt','mts','m2','kg','ml','lt','pz','pzs']);
+function tokenize(t){return normalizeText(t).split(/\s+/)
+  .filter(w=>!STOPWORDS.has(w)&&(w.length>2||UNIDADES.has(w)||/^\d+$/.test(w)))}
 
 function indexChunk(c){
   const toks=tokenize((c.heading?c.heading+' ':'')+c.text);
@@ -1350,17 +1368,45 @@ function initManualSections(){
    menos que la palabra que el asesor realmente escribió: expandir sin
    descontar es lo que hacía que una consulta se fuera por la tangente. */
 const SYNONYM_WEIGHT=0.55;
+
+/* Formas candidatas de una palabra, para que el plural del asesor encuentre el
+   singular del manual. Se generan solo del lado de la pregunta: el índice no se
+   toca, así que los manuales ya guardados siguen valiendo. No pretende ser un
+   lematizador —«muebles» produce también «muebl», que no es palabra—; las
+   variantes que no existen simplemente no coinciden con nada y no estorban. */
+function variantes(w){
+  const v=[w];
+  if(w.length>4&&w.endsWith('s')){
+    v.push(w.slice(0,-1));
+    if(w.endsWith('es'))v.push(w.slice(0,-2));
+    if(w.endsWith('ces'))v.push(w.slice(0,-3)+'z');
+  }
+  return[...new Set(v)]
+}
+
+/* Cada término recuerda de qué palabra del asesor salió (`g`). Sin eso,
+   «pasillos» aportaría un acierto por cada forma que probamos y el conteo de
+   aciertos —que es el que decide si hay respuesta o no— quedaría inflado por
+   una sola palabra. */
 function weightedTerms(query){
-  const base=extractKeywords(query);
+  const palabras=extractKeywords(query);
   const terms=new Map();
-  for(const k of base)for(const t of tokenize(k))if(!terms.has(t))terms.set(t,1);
-  for(const k of base){
-    for(const phrase of expandKeywords([k])){
-      if(phrase===k)continue;
-      for(const t of tokenize(phrase))if(!terms.has(t))terms.set(t,SYNONYM_WEIGHT);
+  const add=(t,w,g)=>{if(t&&!terms.has(t))terms.set(t,{w,g})};
+  for(const k of palabras){
+    for(const t of tokenize(k)){
+      add(t,1,k);
+      /* La variante solo se prueba si la palabra tal cual no existe en el
+         corpus; si existe, el manual ya usa la forma que se escribió. */
+      if(!bm25.df[t])for(const v of variantes(t))add(v,1,k);
     }
   }
-  return[...terms].map(([t,w])=>({t,w}))
+  for(const k of palabras){
+    for(const base of variantes(k))for(const phrase of expandKeywords([base])){
+      if(phrase===base)continue;
+      for(const t of tokenize(phrase))add(t,SYNONYM_WEIGHT,'~'+k);
+    }
+  }
+  return[...terms].map(([t,{w,g}])=>({t,w,g}))
 }
 
 function queryShingles(query){
@@ -1393,7 +1439,8 @@ function retrieve(query,opts){
   const{source=null,limit=40}=opts||{};
   const terms=weightedTerms(query);
   if(!terms.length)return[];
-  const strong=terms.filter(t=>t.w===1).map(t=>t.t);
+  const strong=terms.filter(t=>t.w===1);
+  const flojos=terms.filter(t=>t.w!==1);
   const shingles=queryShingles(query);
   const wantsNumber=NUMERIC_INTENT.test(query);
   const out=[];
@@ -1402,19 +1449,34 @@ function retrieve(query,opts){
     let score=bm25Score(c,terms);
     if(score<=0)continue;
     const norm=normalizeText((c.heading?c.heading+' ':'')+c.text);
-    let hits=0;
-    for(const t of strong)if(norm.includes(t))hits++;
+    const gAcierto=new Set();
+    for(const{t,g}of strong)if(norm.includes(t))gAcierto.add(g);
+    const hits=gAcierto.size;
+    /* Los aciertos por sinónimo se cuentan aparte: valen menos que la palabra
+       que el asesor escribió, pero un fragmento que solo se encontró por el
+       diccionario es exactamente el caso para el que existe el diccionario.
+       Aquí sí cuenta cada término y no cada palabra de origen: que una lámina
+       diga «alineación», «circulación» y «80 cm» a la vez es evidencia, aunque
+       las tres salgan de haber escrito «pasillo». */
+    let hitsSyn=0;
+    for(const{t}of flojos)if(norm.includes(t))hitsSyn++;
     let phrase=0;
     for(const sh of shingles)if(norm.includes(sh))phrase++;
     score+=Math.min(phrase,3)*1.5;
     if(c.heading){
       const h=normalizeText(c.heading);
-      for(const t of strong)if(h.includes(t)){score+=2;break}
+      for(const{t}of strong)if(h.includes(t)){score+=2;break}
     }
     if(wantsNumber&&c.hasDigits)score+=1.5;
-    if(/\[mandatory\]/i.test(c.text))score+=2;
-    if(/conflicto documentado/i.test(c.text))score+=2.5;
-    out.push({c,score,hits});
+    /* Estos dos bonos suben un fragmento por lo que ES, no por lo que se
+       preguntó. Sin evidencia léxica de por medio convertían cualquier regla
+       obligatoria en la respuesta a todo, que es como una pregunta de cocina
+       acababa devolviendo la sección de entallado. */
+    if(hits+hitsSyn>0){
+      if(/\[mandatory\]/i.test(c.text))score+=2;
+      if(/conflicto documentado/i.test(c.text))score+=2.5;
+    }
+    out.push({c,score,hits,hitsSyn});
   }
   return out.sort((a,b)=>b.score-a.score||b.hits-a.hits).slice(0,limit)
 }
@@ -1743,8 +1805,15 @@ function parseAIResponse(text){
     }
   }
 
-  // Caso 4 — fallback: devolver texto completo sin parsear
-  return{thinking:null,final:raw,parsed:false};
+  /* Caso 4 — fallback: devolver texto completo sin parsear.
+
+     Con una salvedad: si el texto trae las marcas del razonamiento por etapas
+     pero no llegó nunca a la respuesta final, no es una respuesta sin formato,
+     es una respuesta que se cortó. Devolverla tal cual dejaba en pantalla el
+     razonamiento a medias haciéndose pasar por contestación, que es la peor
+     forma de fallar: parece que contestó. */
+  const razonando=/\[PENSAMIENTO\s+INTERNO|\bETAPA\s+[1-5]\b|Clasifico la pregunta|Busco en el contexto/i.test(raw);
+  return{thinking:null,final:raw,parsed:false,cortada:razonando};
 }
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
@@ -3124,9 +3193,35 @@ const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
    Busca sobre el corpus completo: manual interno **y** el PDF que el asesor
    acaba de cargar. Antes solo miraba el manual interno, así que sin API key el
    manual recién subido se ignoraba por completo — el usuario veía su PDF en la
-   lista y recibía respuestas que no salían de él. */
+   lista y recibía respuestas que no salían de él.
+
+   Exigir un acierto de la palabra literal era demasiado estricto: un manual
+   puede contestar "¿cuánto dejo de pasillo?" con una lámina titulada
+   ALINEACIÓN que dice "dejando 80 cm" y nunca escribe "pasillo". Ese salto es
+   justo lo que hace el diccionario de sinónimos, así que también se acepta el
+   fragmento que llegó por ahí — pero pidiendo dos coincidencias distintas,
+   para que una casualidad suelta no cuente como respuesta.
+
+   Queda fuera la coincidencia incidental: «¿cómo cambio la llanta del coche?»
+   devuelve una lámina solo porque dice «cambio». Probé dos filtros para
+   cortarla y medí los dos sobre siete manuales reales, porque ninguno se
+   sostenía solo con intuición:
+
+   · Por idf del término acertado. No funciona: «cambio» aparece en un único
+     fragmento, así que puntúa 4.17 de idf, por encima de «sensor» (3.66).
+     Raro no es lo mismo que relevante.
+   · Por puntuación mínima. Tampoco: las distribuciones se solapan. «¿A qué
+     hora abre la tienda?» llega a 7.5 porque «tienda» es palabra central del
+     manual, mientras que «¿a qué altura va el sensor?» se queda en 2.3 en el
+     manual de Blancos. Cualquier corte que tape el ruido tumba preguntas
+     buenas: a 5 dejaba pasar 3 ruidos y mataba 5 legítimas.
+
+   Así que no hay filtro. La garantía de este modo no es rechazar lo que no
+   sabe, es no fingir que lo sabe: entrega el fragmento tal cual, con su página
+   y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
+   contesta lo que preguntó. */
 function seccionesPorRelevancia(q){
-  return retrieve(q,{limit:12}).filter(r=>r.hits>0)
+  return retrieve(q,{limit:12}).filter(r=>r.hits>0||r.hitsSyn>=2)
 }
 function responderSinModelo(q){
   switchTab('chat');
@@ -3249,7 +3344,10 @@ async function sendMessage(){
       key:appState.apiKey,
       messages,
       model:appState.chatModel,
-      maxTokens:2500,
+      /* Margen para las seis etapas visibles. Subir esto NO era el arreglo del
+         corte de respuesta —medido: con 8000 se seguía cortando—; eso se
+         resuelve apagando el pensamiento interno del proveedor. */
+      maxTokens:6000,
       temperature:appState.temperature,
       onDelta:renderChunk,
       signal:currentAbort.signal
@@ -3490,8 +3588,14 @@ function verificarContraContexto(respuesta,contexto){
     cifras.add(n);
   }
   const ctx=contexto.replace(/\s+/g,' ');
+  /* El separador decimal se acepta indistinto (20.8 y 20,8 son el mismo dato).
+     Ojo con encadenar dos replace aquí: el primero introduce una coma dentro
+     de la clase de caracteres y el segundo la vuelve a sustituir, produciendo
+     «20[.[.,]]8», que no coincide con nada. Así, TODA cifra decimal se marcaba
+     como no verificable aunque estuviera en el contexto —y estos manuales son
+     decimales por todas partes: 20.8%, 38.5%, 11.5%—. Una sola pasada. */
   const noVerificadas=[...cifras].filter(n=>{
-    const esc=n.replace('.','[.,]').replace(',','[.,]');
+    const esc=n.replace(/[.,]/g,'[.,]');
     return!new RegExp('(?<![\\d.,])'+esc+'(?![\\d])').test(ctx)
   });
 
@@ -3516,13 +3620,23 @@ function renderAvisoVerificacion(res){
 }
 
 function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
-  const{thinking,final,parsed}=parseAIResponse(rawText);
+  const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
   const msgBody=loaderEl.querySelector('.msg-body');
   const msgLabel=loaderEl.querySelector('.msg-label');
   loaderEl.classList.remove('loading');
   msgBody.innerHTML=safeMarkdown(cleanFinal);
   msgLabel.innerHTML=`Asistente <span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
+
+  /* El razonamiento a medias no es una respuesta. Se dice antes de que el
+     asesor lea nada, porque un texto cortado a mitad de frase se parece
+     demasiado a una contestación. */
+  if(cortada){
+    const corte=document.createElement('div');
+    corte.className='verify-warn';
+    corte.textContent='⚠ La respuesta se cortó antes de terminar: esto es el razonamiento, no la contestación. Vuelve a preguntar, o pregunta algo más concreto.';
+    loaderEl.insertBefore(corte,msgBody);
+  }
 
   const alerta=renderAvisoVerificacion(verificarContraContexto(cleanFinal,contextoEnviado));
   if(alerta)loaderEl.appendChild(alerta);

@@ -101,9 +101,16 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 
 ## Límites conocidos
 
-- **El retrieval no lematiza.** Busca coincidencias de texto normalizado, así que
-  "colores" no encuentra "COLORIZACIÓN" por sí solo — depende del diccionario de sinónimos,
-  que se llena a mano y por lo tanto está incompleto.
+- **El retrieval no lematiza de verdad.** Del lado de la pregunta prueba unas cuantas formas
+  ("pasillos" → "pasillo"), lo justo para que el plural del asesor encuentre el singular del
+  manual, pero no entiende morfología: "colores" no encuentra "COLORIZACIÓN" por sí solo —
+  depende del diccionario de sinónimos, que se llena a mano y por lo tanto está incompleto.
+- **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
+  casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
+  rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
+  reales: ninguno funciona**, porque el ruido y las preguntas legítimas se solapan. Lo que
+  el modo garantiza no es rechazar lo que no sabe, sino no fingir que lo sabe: entrega el
+  fragmento con su página y dice que nadie lo interpretó.
 - **Un PDF escaneado no se puede leer.** Si la lámina es una imagen sin capa de texto, el
   sistema lo dice y no lo carga, en vez de fingir que lo entendió. Haría falta OCR.
 - **La detección de figuras está calibrada sobre manuales tipo presentación.** El corte
@@ -150,6 +157,42 @@ sistema dice más de él que la lista de lo que hace:
 5. **Sin API key, el PDF recién cargado se ignoraba por completo.** La búsqueda del modo
    manual solo recorría el conocimiento embebido. El usuario veía su manual en la lista,
    preguntaba, y recibía respuestas que no salían de él.
+6. **El filtro de honestidad tiraba justo las respuestas buenas.** Salió probando con siete
+   manuales de secciones distintas, y es el reverso del hallazgo 2. Para poder decir "no sé",
+   el modo manual exigía que alguna palabra de la pregunta apareciera literalmente en el
+   fragmento. Pero el manual de Caballero contesta "¿cuánto dejo de pasillo?" con una lámina
+   titulada ALINEACIÓN que dice *"dejando 80 cm"* y **nunca escribe la palabra pasillo**.
+   BM25 la encontraba igual, por el diccionario de sinónimos, y la ponía primera — y el
+   filtro la descartaba por no tener coincidencias literales. **El puente estaba construido y
+   el filtro no dejaba cruzarlo.** Se sumaba que `cm`, en un manual que es medidas de punta a
+   punta, no era ni siquiera una palabra buscable: el tokenizador descartaba todo lo de dos
+   letras. Las tres formas de preguntarlo fallaban; ahora las tres caen en la lámina correcta.
+7. **Dos filtros que parecían buenos y no lo eran.** Para cortar las coincidencias
+   incidentales probé filtrar por rareza del término (idf). Falla de raíz: "cambio" aparece
+   en un solo fragmento y puntúa 4.17, **por encima de "sensor" (3.66)** — raro no es lo
+   mismo que relevante. El segundo intento, una puntuación mínima, parecía perfecto en un
+   manual (el ruido en 3.3–4.4, lo legítimo desde 6.5) y se derrumbó al medirlo en los siete:
+   "¿a qué hora abre la tienda?" llega a 7.5 porque *tienda* es palabra central del manual.
+   No hay corte que separe. Los dos se quedaron fuera. Calibrar un umbral con un solo
+   documento es como probar el código con un solo caso: sale bien y no significa nada.
+8. **La respuesta no llegaba: se cortaba justo antes del dato.** Durante meses interpreté
+   esto como "la IA contesta mal". No contestaba en absoluto. Los modelos con razonamiento
+   interno —`gemini-3.5-flash` entre ellos— **descuentan de `maxOutputTokens` lo que piensan
+   por dentro**, y con seis etapas de razonamiento visible el presupuesto se agotaba pensando.
+   En pantalla quedaba el razonamiento truncado a media frase, y el fallback del parser lo
+   presentaba como si fuera la contestación: *parecía* que había respondido. Subir el tope no
+   bastó (con 8000 se seguía cortando); el arreglo es apagar el pensamiento interno del
+   proveedor, que aquí sobra — este asistente ya razona en seis etapas que se pueden leer, que
+   es exactamente lo contrario de un razonamiento que no se puede auditar. Ahora, además, un
+   razonamiento sin respuesta final se anuncia como lo que es y no se disfraza de respuesta.
+9. **El verificador de cifras marcaba como inventado todo número decimal.** La defensa
+   estrella contra la alucinación tenía un bug de dos líneas:
+   `n.replace('.','[.,]').replace(',','[.,]')` — el primer `replace` mete una coma dentro de
+   la clase de caracteres y el segundo la vuelve a sustituir, produciendo `20[.[.,]]8`, un
+   patrón que no coincide con nada. Resultado: **preguntar por el 20.8% de participación
+   devolvía el dato correcto con un sello de "no pude verificarlo"**, y estos manuales son
+   decimales por todas partes (20.8%, 38.5%, 11.5%). Un aviso que desconfía de lo correcto
+   gasta la credibilidad que necesita para cuando de verdad haya una invención.
 
 ## Relación con Veristack
 
