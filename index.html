@@ -6,11 +6,11 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://models.inference.ai.azure.com https://api.openai.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests;"/>
 <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
 <meta name="referrer" content="no-referrer"/>
-<title>Asistente Visual LV — Hombres v7.3 · XSS + sync + parse fix</title>
+<title>Asistente de piso — Mercadep · Visual Merchandising</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha512-j5X5Jx+uQ3sgSjz/Uk7S6M4HQflpHHQULyTbc6rm8EkGQ1r0D2ZqF9t8a4OwX+gM9TP/4ijLGV42acIy0LcOAQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" integrity="sha512-pmjEJQ7CveksANaAKdCJZMig7eAcCFFzE1b5XnlnxdB/vU3AOStJ5SF7w4tFuqskuU31ETnAaWTYRQOYg2WHKw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha512-jB0TkTBeQC9ZSkBqDhdmfTv1qdfbWpGE72yJ/01Srq6hEzZIz2xkz1e57p9ai7IeHMwEG7HpzG6NdptChif5Pg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -319,6 +319,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .msg.assistant .msg-body strong{font-weight:500;color:var(--text)}
 .msg.assistant .msg-body em{color:var(--gold2);font-style:italic}
 .msg.assistant .msg-body code{font-family:monospace;font-size:11.5px;background:var(--s3);padding:1px 5px;border-radius:3px;color:var(--gold2)}
+.msg.assistant .msg-body pre{background:var(--s3);border:1px solid var(--border2);border-left:2px solid var(--gold2);border-radius:4px;padding:9px 11px;margin:8px 0;max-width:100%;overflow-x:auto}
+.msg.assistant .msg-body pre code{display:block;background:none;padding:0;color:var(--text2);font-size:11px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.assistant .msg-body h1,.msg.assistant .msg-body h2,.msg.assistant .msg-body h3{font-family:'Cormorant Garamond',serif;color:var(--gold2);font-weight:400;margin:10px 0 5px;font-size:16px}
 .msg.assistant .msg-body table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
 .msg.assistant .msg-body th{background:var(--s3);color:var(--gold2);padding:5px 8px;text-align:left;font-weight:500;border:1px solid var(--border2)}
@@ -581,9 +583,9 @@ footer span {
 
 <header>
   <div class="hdr-left">
-    <h1>Asistente <em>Visual</em> <strong>LV</strong> — <em>Hombres</em></h1>
-    <p>Visual Merchandising · Sección Hombres · Mercadep GDL</p>
-    <div class="hdr-version">v7.3 · XSS fix · expert sync · parse fallback · +history · autofoco</div>
+    <h1>Asistente <em>de</em> <strong>piso</strong> — <em>Mercadep</em></h1>
+    <p>Visual Merchandising · Departamento Hombres</p>
+    <div class="hdr-version">v1.0.0 · demo con conocimiento sintético</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar entre modo oscuro y claro">
@@ -650,7 +652,8 @@ footer span {
     <div class="chat-messages" id="chat-messages">
       <div class="chat-empty" id="chat-empty">
         <span class="chat-empty-icon">✦</span>
-        Carga un manual o usa un acceso rápido para comenzar
+        Pregunta algo o usa un acceso rápido.<br/>
+        Sin API key se responde con el manual tal cual; con key, razonado en 6 etapas.
       </div>
     </div>
     <div class="token-bar-wrap">
@@ -763,7 +766,7 @@ ETAPA 1 — INTENT
 Clasifico la pregunta:
 - mercadeo: cómo armar/montar algo físicamente
 - clasificación: dónde va qué marca o producto
-- marcas propias: MarcaDemoB / MarcaDemoA / That's It
+- marcas propias: MarcaDemoB / MarcaDemoA / MarcaDemoC
 - básicos: reglas operativas (sensor, gancho, etiqueta)
 - normativa: medidas, pasillos, capacidades
 
@@ -863,7 +866,7 @@ Negritas solo para términos técnicos del manual.]</textarea>
 </div>
 
 </div>
-<footer>Creado por <span>Gerardo Barrera</span> · Asesor de piso · Mercadep Zona Piloto &nbsp;·&nbsp; v7.0 · API Experta · Seguridad hardened</footer>
+<footer>Creado por <span>Gerardo Barrera</span> &nbsp;·&nbsp; v1.0.0 · demo público · conocimiento sintético</footer>
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
@@ -1024,49 +1027,50 @@ const PROVIDERS={
 ════════════════════════════════════════════════ */
 const MANUAL_INTERNO=`
 === BIBLIA DE CONOCIMIENTO — VISUAL MERCHANDISING HOMBRES MERCADEP ===
-Estado: CONSOLIDACIÓN FINAL (15 Manuales: 246/247, 261, 271, 245, 251, 276/279, 241, 242, 252, Softline EU, 285, 288, 282, 213, 237)
+Estado: CONSOLIDACIÓN FINAL (12 manuales de referencia: M-01 a M-12, incluido el de Softline SL)
+Nota: cliente ficticio. Marcas, mundos, porcentajes y números de manual son de demostración.
 
 ## 1. REGLAS DE EXHIBICIÓN GLOBALES
 
 [MANDATORY] ENGANCHADO: El gancho siempre hacia la izquierda (signo ?). Pantalones Suit Separate colgados doblados. Conjuntos de pijamas usan gancho cristal (alto) y pinza (bajo) combinados. Batas de baño en barras.
 [MANDATORY] ENTALLADO (General): Progresión estricta de chica a grande, izquierda a derecha, arriba a abajo, adelante hacia atrás. EXCEPCIÓN: Góndolas de ropa interior van de adelante hacia atrás.
-[MANDATORY] SENSORES: Ocultos a 10-15 cm de la bastilla. Usar sensor blando (adherible) en corbatas para evitar daños.
+[MANDATORY] SENSORES: Ocultos a 12-18 cm de la bastilla. Usar sensor blando (adherible) en corbatas para evitar daños.
 [MANDATORY] ETIQUETADO OCULTO:
   · Ropa: Etiqueta siempre hacia adentro.
   · Ropa Interior: Blister (atrás), caja (costado derecho), sin empaque (costura izquierda).
   · Pijamas: Manga larga (puño izq), Manga corta (cuello trasero).
   · Accesorios: Sombreros (interior), cinturones (hebilla), joyería/llaveros (broche), plumas (tapón), lentes (pata derecha).
   · Zapatos: Casual/Vestir (suela pie derecho + caja costado derecho). Deportivo (unida en orificio superior izq o velcro).
-[MANDATORY] MANIQUÍES Y DISPLAYS: Retirar sensores y etiquetas, planchar, actualizar cada 15 días. Piezas "Pompas" o "Pies" deben vestir productos de color contrastante (1 pieza por utilería).
-[MANDATORY] MARCADEMOA (Softline): Prohibido mezclar meses. Identificador: "EU+Año/Mes+Estilo". Mes actual al frente, anterior al perímetro.
-[MANDATORY] ALMAS DE PAPEL: Estrictamente prohibidas en Hombre Contemporáneo (Genérico/EU), Juveniles (Project), Tallas Especiales y Zona Urbana (Genérico).
+[MANDATORY] MANIQUÍES Y DISPLAYS: Retirar sensores y etiquetas, planchar, actualizar cada 21 días. Piezas "Pompas" o "Pies" deben vestir productos de color contrastante (1 pieza por utilería).
+[MANDATORY] MARCADEMOA (Softline): Prohibido mezclar meses. Identificador: "SL+Año/Mes+Estilo". Mes actual al frente, anterior al perímetro.
+[MANDATORY] ALMAS DE PAPEL: Estrictamente prohibidas en Hombre Contemporáneo (Genérico/SL), Juveniles (Project), Tallas Especiales y Zona Urbana (Genérico).
 [EXCEPTION] SILUETAS INCOMPLETAS: Si no hay marca para ambas partes (saco/pantalón), combinar marcas del mismo mundo.
-[EXCEPTION] COLORIZACIÓN: Aplica únicamente en: Boutique Diseñadores, MarcaDemoD Genérico, Camisas/Corbatas, Juveniles (That's It/Project) y Zona Urbana.
+[EXCEPTION] COLORIZACIÓN: Aplica únicamente en: Boutique Diseñadores, Contemporáneo Genérico, Camisas/Corbatas, Juveniles (MarcaDemoC/Project) y Zona Urbana.
 
 ## 2. JERARQUÍA DE CLASIFICACIÓN MAESTRA
 
-SACOS Y PANTALONES: Mundos: MarcaDemoD 45%, Formal 45%, Smart 10%. Marcas: CK, Tommy, Hugo, Nautica, MarcaDemoB. Planograma: Smart al frente, MarcaDemoD puente, Formal colinda Trajes.
-DISEÑADORES: Corner 90%, Boutique 10%. Marcas: CK, Lacoste, Hugo, Chubbies. Corner asignado. Boutique en alto tráfico genérico.
-CASUAL: Corner 30%, Temp 30%, Gen 20%, Out 15%, Lino 5%. Marcas: Dockers, Old Navy, Eddie Bauer. Temp al frente. Outdoor tras corners. Lino colinda genérico.
-HOMBRE MarcaDemoD: Genérico 80%, Corner 20%. Marcas: EU, Guess, Karl Lagerfeld. Genérico agrupado por concepto.
-JUVENILES: Corner 70%, Project 30%. Marcas: Levi's, That's It!, Univrs. Corners en perímetro. Project a costados.
-CAMISAS Y CORBATAS: Formal 60%, MarcaDemoD 30%, Smart 10%. Marcas: Hugo, Nautica, CK, Spagnolo. Smart al frente. Formal domina el piso.
-TRAJES: Premium, Españolas, Smart, MarcaDemoD, Formal, Etiqueta. Marcas: Boss, PuroEgo, MarcaDemoB. Premium al frente. Etiqueta al fondo colindando Camisas.
-TALLAS ESPECIALES: Casual 50%, Diseñadores 27%, Juveniles 22%. Marcas: Polo RL, MarcaDemoB, Levi's. Diseñadores al pasillo. Casual medio. Juveniles final.
-ZONA URBANA: Genérico 80%, Corner 20%. Marcas: Puma, NBA, NFL. Recorrido continuo Genérico.
-ROPA INTERIOR: Premium 46%, MarcaDemoD 24%, Básicos 17%, Urbano 13%. Marcas: CK, Tommy, Skiny. Premium frente. Básicos al interior/fondo.
-PIJAMAS: MarcaDemoD 56%, Básicos 20%, Premium 18%, Loungewear 6%. Marcas: EU, Armani, That's It!, Guasch. Premium/Loungewear frente. Básicos fondo.
-CALCETINES: Premium 43%, MarcaDemoD 26%, Básicos 20%, Urbano 11%. Marcas: Armani, Perry Ellis, MarcaDemoB. Premium frente. Básicos interior.
-ACCESORIOS: Formal 50%, MarcaDemoD 30%, Urbano 20%. Marcas: Victorinox, CK, Vans. Urbano en rejas. Formal en cinturoneras.
-ZAPATOS: Sneakers 30%, Tenis Casual 20%, Casual 15%, Vestir/Confort/Botas 10% c/u, Sandalias 5%. Marcas: Nike, MarcaDemoB, Flexi, Timberland. Vestir al inicio. Sneakers al final o frente a Tenis Casual.
+SACOS Y PANTALONES: Mundos: Contemporáneo 40%, Formal 50%, Smart 10%. Marcas: MarcaDemoE, MarcaDemoF, MarcaDemoG, MarcaDemoB. Planograma: Smart al frente, Contemporáneo puente, Formal colinda Trajes.
+DISEÑADORES: Corner 85%, Boutique 15%. Marcas: MarcaDemoE, MarcaDemoH, MarcaDemoG. Corner asignado. Boutique en alto tráfico genérico.
+CASUAL: Corner 35%, Temp 25%, Gen 20%, Out 15%, Lino 5%. Marcas: MarcaDemoJ, MarcaDemoK, MarcaDemoL. Temp al frente. Outdoor tras corners. Lino colinda genérico.
+HOMBRE CONTEMPORÁNEO: Genérico 75%, Corner 25%. Marcas: MarcaDemoA, MarcaDemoD, MarcaDemoH. Genérico agrupado por concepto.
+JUVENILES: Corner 60%, Project 40%. Marcas: MarcaDemoJ, MarcaDemoC, MarcaDemoL. Corners en perímetro. Project a costados.
+CAMISAS Y CORBATAS: Formal 55%, Contemporáneo 35%, Smart 10%. Marcas: MarcaDemoG, MarcaDemoF, MarcaDemoE. Smart al frente. Formal domina el piso.
+TRAJES: Premium, Españolas, Smart, Contemporáneo, Formal, Etiqueta. Marcas: MarcaDemoG, MarcaDemoD, MarcaDemoB. Premium al frente. Etiqueta al fondo colindando Camisas.
+TALLAS ESPECIALES: Casual 45%, Diseñadores 30%, Juveniles 25%. Marcas: MarcaDemoH, MarcaDemoB, MarcaDemoJ. Diseñadores al pasillo. Casual medio. Juveniles final.
+ZONA URBANA: Genérico 70%, Corner 30%. Marcas: MarcaDemoK, MarcaDemoL. Recorrido continuo Genérico.
+ROPA INTERIOR: Premium 40%, Contemporáneo 25%, Básicos 20%, Urbano 15%. Marcas: MarcaDemoE, MarcaDemoF, MarcaDemoD. Premium frente. Básicos al interior/fondo.
+PIJAMAS: Contemporáneo 50%, Básicos 25%, Premium 15%, Loungewear 10%. Marcas: MarcaDemoA, MarcaDemoC, MarcaDemoG. Premium/Loungewear frente. Básicos fondo.
+CALCETINES: Premium 40%, Contemporáneo 30%, Básicos 20%, Urbano 10%. Marcas: MarcaDemoG, MarcaDemoD, MarcaDemoB. Premium frente. Básicos interior.
+ACCESORIOS: Formal 45%, Contemporáneo 35%, Urbano 20%. Marcas: MarcaDemoK, MarcaDemoE, MarcaDemoL. Urbano en rejas. Formal en cinturoneras.
+ZAPATOS: Sneakers 35%, Tenis Casual 20%, Casual 15%, Vestir/Confort 10% c/u, Botas 5%, Sandalias 5%. Marcas: MarcaDemoK, MarcaDemoB, MarcaDemoJ, MarcaDemoL. Vestir al inicio. Sneakers al final o frente a Tenis Casual.
 
 NOTA REBAJAS (BARATA): Todos operan con 40% al flujo (1ª Etapa) y 50%+20% al flujo (2ª/3ª Etapa).
 
 ## 3. MARCAS PROPIAS ESTRATÉGICAS
 
 MarcaDemoB (Institucional Formal/Confort): Transversal en Formal, Casual, Zapatos y Tallas Especiales. Privilegio normativo de "Prioridad 2" en POS genéricos.
-MARCADEMOA (Contemporáneo): Pilar de Hombre MarcaDemoD. Rotación mensual estricta (EU+Año/Mes). Cruce de mercancía restrictivo (solo EU).
-THAT'S IT! (Juveniles/Loungewear): Marca ancla con utillería visual exclusiva (props: polaroids, melted paint).
+MARCADEMOA (Contemporáneo): Pilar de Hombre Contemporáneo. Rotación mensual estricta (SL+Año/Mes). Cruce de mercancía restrictivo (solo Softline SL).
+MARCADEMOC (Juveniles/Loungewear): Marca ancla con utillería visual exclusiva (props: polaroids, pintura escurrida).
 
 ## 4. FÓRMULAS DE EXHIBICIÓN Y POS
 
@@ -1076,7 +1080,7 @@ MUEBLES POS — Estratificación de 3 prioridades + Básico (Aguas en fondo). Mo
   · Sacos/Pantalones: Pañuelos/Moños > Acc.cuello > Calcetines
   · Diseñadores: Art.marca > Gorras > Neceser
   · Casual: Calcetines > Set MarcaDemoB > Gorras
-  · Contemporáneo: Acc.EU > Acc.sección > Gorras/Lentes
+  · Contemporáneo: Acc.SL > Acc.sección > Gorras/Lentes
   · Juveniles: Calcetines urbanos > Gorras > Cangureras
   · Ropa Interior: R.int.caja > Sets > Térmicos(temp)
   · Pijamas: Calcetines > Sets > Térmicos(temp)
@@ -1086,9 +1090,9 @@ VITRINAS (Accesorios): Exclusivas para tratamiento especial (mancuernillas, cart
 
 ## 5. PASILLOS Y DATOS TÉCNICOS CONFIRMADOS
 
-Pasillos: 80 cm exactos.
+Pasillos: 90 cm exactos.
 Gancho: izquierda (signo de interrogación).
-Sensor: 10-15 cm bastilla, sobre costura.
+Sensor: 12-18 cm bastilla, sobre costura.
 Sensor blando: solo para corbatas.
 Colorización: solo en Genérico/Boutique.
 Perímetros: patrón A, C, B (C = descanso visual).
@@ -1097,20 +1101,20 @@ Mesa: estilo de vida siempre esquina superior derecha.
 ## 6. ENTALLADO HOMBRES — REFERENCIA RÁPIDA
 
 [MANDATORY] ENTALLADO (General): Progresión estricta de chica a grande, izquierda a derecha, arriba a abajo, adelante hacia atrás. EXCEPCIÓN: Góndolas de ropa interior van de adelante hacia atrás.
-[CONFLICTO DOCUMENTADO] CANTIDAD DE PIEZAS EN ENTALLADO: manual 261 indica 4 piezas · manual 271 indica 5 piezas · manual 245 indica 6 piezas. NUNCA responder "no especifica" — siempre citar este conflicto y la regla de progresión de tallas.
+[CONFLICTO DOCUMENTADO] CANTIDAD DE PIEZAS EN ENTALLADO: manual M-03 indica 4 piezas · manual M-05 indica 5 piezas · manual M-09 indica 6 piezas. NUNCA responder "no especifica" — siempre citar este conflicto y la regla de progresión de tallas.
 
 ## 7. CONFLICTOS DOCUMENTADOS (responder con transparencia)
 
 ENTALLADO: ver sección 6 arriba — 4 vs 5 vs 6 piezas según manual; citar el conflicto, no resolver arbitrariamente.
 CHECKLIST: Varios manuales tienen títulos de otras secciones — error de origen corregido en esta biblia.
 POS CALCETINES: Página duplicada de ropa interior en origen — ignorar duplicado.
-CROCS: Aparece en Tenis Casual Y Sandalias — GAP sin resolución definitiva.
+CALZADO ANFIBIO: MarcaDemoL aparece en Tenis Casual Y Sandalias — GAP sin resolución definitiva.
 LIQUIDACIÓN: Ubicación depende de pauta de corner — GAP si no hay pauta específica.
 CAPACIDAD DE MUEBLE: No hay regla matemática en los manuales — GAP documentado.
 
 ## 8. MAPA DE CONFIANZA
 
-Reglas Básicas: ALTA (estandarizado en 15 manuales).
+Reglas Básicas: ALTA (estandarizado en los 12 manuales).
 Jerarquías: MEDIA-ALTA (afectada por GAPs documentales, falta % en Trajes).
 Perfiles de Cliente: ALTA (extraídos fielmente de infografías origen).
 Props y Maniquíes: ALTA (SKUs y catálogos de utilería capturados al 100%).
@@ -1121,7 +1125,7 @@ Mitigación de Errores: ALTA (conflictos de checklist corregidos en este consoli
 ENGANCHADO: Gancho apunta hacia adentro (signo de interrogación). Prenda derecha.
 ROTACIÓN: Producto nuevo detrás, antiguo al frente (FIFO). Slow movers a mayor visibilidad.
 COLORIZACIÓN POR BLOQUES: Izq a der: Blancos/crudos → Amarillos/naranja → Rosas/rojos → Morados/azules → Verdes → Cafés/beige → Grises → Negros. Estampados al final de cada bloque según color base.
-FOCAL: 1-3 maniquíes, triangulación, producto estrella. Cambiar cada 2-3 semanas.
+FOCAL: 1-3 maniquíes, triangulación, producto estrella. Cambiar cada 3-4 semanas.
 CROSS-MERCHANDISING: Relación lógica de uso. Máx 3-4 categorías. Producto protagonista claro.
 SLOW MOVERS: Reubicar a focal → cross-merchandising → cambiar presentación → señalética → iluminación → estilo de vida.
 SUPERVISIÓN DIARIA: Enganchado ✓ Alineación ✓ Colorización ✓ Maniquíes ✓ Tallas ✓ Limpieza ✓ Precios ✓
@@ -1216,8 +1220,8 @@ const SYNONYMS={
   'planograma':['layout','plano piso','mapa seccion'],
   // ═══ MARCAS PROPIAS ═══
   'marca propia':['MarcaDemoB','MarcaDemoA','MarcaDemoC','marca mercadep'],
-  'marcademob':['Jean Baptiste Eylau','marca propia formal','marca institucional'],
-  'marcademoa':['MarcaDemoA','MarcaDemoD','marca propia contemporaneo'],
+  'marcademob':['marca propia formal','marca institucional','prioridad 2 POS'],
+  'marcademoa':['softline','contemporaneo','marca propia contemporaneo'],
   'marcademoc':['marca propia juvenil','juveniles mercadep','project anchor'],
   // ═══ REGLAS OPERATIVAS ═══
   'sensor':['galleta','sensor galleta','sensor blando','antirrobo'],
@@ -1345,7 +1349,7 @@ function buildContext(query){
     const pdfCtx=getPdfContext(query,pdfBudget);
     if(pdfCtx)parts.push(`=== MANUAL DE TEMPORADA (PDF CARGADO) ===\n${pdfCtx}`);
     const manCtx=getManualContext(query,MANUAL_BUDGET);
-    if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP (BIBLIA DE 15 MANUALES) ===\n${manCtx}`);
+    if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP (BIBLIA DE 12 MANUALES) ===\n${manCtx}`);
   }else{
     const manCtx=getManualContext(query,pdfBudget+MANUAL_BUDGET);
     if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${manCtx}`);
@@ -1372,10 +1376,10 @@ function buildContext(query){
 ════════════════════════════════════════════════ */
 let memory={fails:[],successes:[]};
 function loadMemory(){
-  try{const s=localStorage.getItem('lv_memory_v5');if(s)memory=JSON.parse(s);memory.fails=memory.fails||[];memory.successes=memory.successes||[];}
+  try{const s=localStorage.getItem('ap_memory_v5');if(s)memory=JSON.parse(s);memory.fails=memory.fails||[];memory.successes=memory.successes||[];}
   catch{memory={fails:[],successes:[]}}
 }
-function saveMemory(){try{localStorage.setItem('lv_memory_v5',JSON.stringify(memory))}catch{}}
+function saveMemory(){try{localStorage.setItem('ap_memory_v5',JSON.stringify(memory))}catch{}}
 function addMemoryFail(q,a,note){
   memory.fails.unshift({question:q,answer:a.slice(0,300),note:note||'',date:new Date().toLocaleDateString('es-MX')});
   if(memory.fails.length>50)memory.fails=memory.fails.slice(0,50);
@@ -1596,7 +1600,7 @@ function selectProvider(id,btn){
   if(p.chatModels.includes(appState.chatModel))chatSel.value=appState.chatModel;
   // v7.0 paso 3: cargar key del proveedor seleccionado
   try{
-    const provKey='lv_api_key_'+id;
+    const provKey='ap_api_key_'+id;
     const stored=sessionStorage.getItem(provKey)||'';
     document.getElementById('api-key-input').value=stored;
     appState.apiKey=stored;
@@ -1609,25 +1613,25 @@ function selectProvider(id,btn){
 ════════════════════════════════════════════════ */
 function loadSaved(){
   try{
-    appState.provider=localStorage.getItem('lv_provider')||'github';
+    appState.provider=localStorage.getItem('ap_provider')||'github';
     // v7.0: API key migrada a sessionStorage — carga por proveedor
     try {
-      const provKey = 'lv_api_key_' + appState.provider;
-      appState.apiKey = sessionStorage.getItem(provKey) || sessionStorage.getItem('lv_api_key') || '';
+      const provKey = 'ap_api_key_' + appState.provider;
+      appState.apiKey = sessionStorage.getItem(provKey) || sessionStorage.getItem('ap_api_key') || '';
     } catch { appState.apiKey = ''; }
     // Limpieza defensiva: si quedó rastro en localStorage v6, eliminarlo
     if (!appState.apiKey) {
-      try { localStorage.removeItem('lv_api_key'); } catch {}
+      try { localStorage.removeItem('ap_api_key'); } catch {}
     }
-    appState.chatModel=localStorage.getItem('lv_chat_model')||'gpt-4o-mini';
-    if(localStorage.getItem('lv_prompt_version')!=='7.2'){
+    appState.chatModel=localStorage.getItem('ap_chat_model')||'gpt-4o-mini';
+    if(localStorage.getItem('ap_prompt_version')!=='7.2'){
       appState.system=document.getElementById('system-prompt').value;
-      try{localStorage.setItem('lv_system',appState.system);localStorage.setItem('lv_prompt_version','7.2');}catch{}
+      try{localStorage.setItem('ap_system',appState.system);localStorage.setItem('ap_prompt_version','7.2');}catch{}
     }else{
-      appState.system=localStorage.getItem('lv_system')||document.getElementById('system-prompt').value;
+      appState.system=localStorage.getItem('ap_system')||document.getElementById('system-prompt').value;
     }
-    appState.extra=localStorage.getItem('lv_extra')||'';
-    appState.tokenLimit=parseInt(localStorage.getItem('lv_token_limit')||'80000',10);
+    appState.extra=localStorage.getItem('ap_extra')||'';
+    appState.tokenLimit=parseInt(localStorage.getItem('ap_token_limit')||'80000',10);
     document.getElementById('api-key-input').value=appState.apiKey;
     document.getElementById('system-prompt').value=appState.system;
     document.getElementById('extra-ctx').value=appState.extra;
@@ -1637,10 +1641,10 @@ function loadSaved(){
     else selectProvider('github',document.querySelector('.prov-tab'));
     const chatSel=document.getElementById('chat-model-select');
     if([...chatSel.options].some(o=>o.value===appState.chatModel))chatSel.value=appState.chatModel;
-    try{quickBtns=JSON.parse(localStorage.getItem('lv_quick'))||[...DEFAULT_QUICK]}catch{quickBtns=[...DEFAULT_QUICK]}
-    appState.memoryEnabled=localStorage.getItem('lv_memory_enabled')!=='false';
-    appState.extraEnabled=localStorage.getItem('lv_extra_enabled')!=='false';
-    appState.temperature=parseFloat(localStorage.getItem('lv_temperature')||'0.2');
+    try{quickBtns=JSON.parse(localStorage.getItem('ap_quick'))||[...DEFAULT_QUICK]}catch{quickBtns=[...DEFAULT_QUICK]}
+    appState.memoryEnabled=localStorage.getItem('ap_memory_enabled')!=='false';
+    appState.extraEnabled=localStorage.getItem('ap_extra_enabled')!=='false';
+    appState.temperature=parseFloat(localStorage.getItem('ap_temperature')||'0.2');
     document.getElementById('toggle-memory').checked=appState.memoryEnabled;
     document.getElementById('toggle-extra').checked=appState.extraEnabled;
     document.getElementById('temp-slider').value=Math.round(appState.temperature*100);
@@ -1653,7 +1657,7 @@ function loadSaved(){
   if (warnEl && appState.apiKey) warnEl.classList.add('show');
   renderDocs();renderQuickBtns();updateTokenBar();renderMemoryPanel();
   // v7.0: banner de restore desde sessionStorage
-  if(sessionStorage.getItem('lv_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show');
+  if(sessionStorage.getItem('ap_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show');
   // v7.0 paso 3: sincronizar selector API Experta
   syncExpertSelector();
 }
@@ -1691,8 +1695,8 @@ function updateKeyStatus(key){
     badge.className='status-pill ok';badge.textContent='API conectada';
     status.className='key-status ok';status.textContent=`✓ ${pName} activa`;
   }else{
-    badge.className='status-pill warn';badge.textContent='Sin API';
-    status.className='key-status warn';status.textContent='⚠ Sin clave — configura en pestaña Config';
+    badge.className='status-pill warn';badge.textContent='Modo manual';
+    status.className='key-status warn';status.textContent='⚪ Sin clave: se responde con el manual, sin interpretación';
   }
 }
 function toggleKey(){const inp=document.getElementById('api-key-input');inp.type=inp.type==='password'?'text':'password'}
@@ -1708,13 +1712,13 @@ function updateTempDisplay(val){
 function saveChatHistory(){
   try{
     if(history.length){
-      sessionStorage.setItem('lv_chat_history_v5', JSON.stringify(history));
-      sessionStorage.setItem('lv_chat_history_exists', '1');
+      sessionStorage.setItem('ap_chat_history_v5', JSON.stringify(history));
+      sessionStorage.setItem('ap_chat_history_exists', '1');
       // Limpieza defensiva de localStorage v6
-      try { localStorage.removeItem('lv_chat_history_v5'); localStorage.removeItem('lv_chat_history_exists'); } catch {}
+      try { localStorage.removeItem('ap_chat_history_v5'); localStorage.removeItem('ap_chat_history_exists'); } catch {}
     } else {
-      sessionStorage.removeItem('lv_chat_history_v5');
-      sessionStorage.removeItem('lv_chat_history_exists');
+      sessionStorage.removeItem('ap_chat_history_v5');
+      sessionStorage.removeItem('ap_chat_history_exists');
     }
   } catch (e) {
     if (e?.name === 'QuotaExceededError') {
@@ -1724,7 +1728,7 @@ function saveChatHistory(){
 }
 function loadChatHistory(){
   try{
-    const s=sessionStorage.getItem('lv_chat_history_v5');
+    const s=sessionStorage.getItem('ap_chat_history_v5');
     if(!s)return;
     const h=JSON.parse(s);
     if(!Array.isArray(h)||!h.length)return;
@@ -1741,13 +1745,13 @@ function loadChatHistory(){
     }
     scrollToBottom();
     document.getElementById('restore-banner').classList.remove('show');
-    sessionStorage.removeItem('lv_chat_history_exists');
+    sessionStorage.removeItem('ap_chat_history_exists');
   }catch{}
 }
 function restoreChatHistory(){loadChatHistory();}
 function dismissRestoreBanner(){
   document.getElementById('restore-banner').classList.remove('show');
-  sessionStorage.removeItem('lv_chat_history_exists');
+  sessionStorage.removeItem('ap_chat_history_exists');
 }
 
 /* ════════════════════════════════════════════════
@@ -1765,22 +1769,22 @@ function saveConfig(evt){
   appState.extraEnabled=document.getElementById('toggle-extra').checked;
   appState.temperature=parseInt(document.getElementById('temp-slider').value,10)/100;
   try{
-    localStorage.setItem('lv_provider',appState.provider);
+    localStorage.setItem('ap_provider',appState.provider);
     // v7.0 paso 3: API key por proveedor en sessionStorage
-    const provKey = 'lv_api_key_' + activeProv;
+    const provKey = 'ap_api_key_' + activeProv;
     if (appState.apiKey) {
-      try { sessionStorage.setItem(provKey, appState.apiKey); sessionStorage.setItem('lv_api_key', appState.apiKey); } catch {}
-      try { localStorage.removeItem('lv_api_key'); } catch {}
+      try { sessionStorage.setItem(provKey, appState.apiKey); sessionStorage.setItem('ap_api_key', appState.apiKey); } catch {}
+      try { localStorage.removeItem('ap_api_key'); } catch {}
     } else {
-      try { sessionStorage.removeItem(provKey); sessionStorage.removeItem('lv_api_key'); } catch {}
+      try { sessionStorage.removeItem(provKey); sessionStorage.removeItem('ap_api_key'); } catch {}
     }
-    localStorage.setItem('lv_chat_model',appState.chatModel);
-    localStorage.setItem('lv_system',appState.system);
-    localStorage.setItem('lv_extra',appState.extra);
-    localStorage.setItem('lv_token_limit',appState.tokenLimit);
-    localStorage.setItem('lv_memory_enabled',appState.memoryEnabled?'1':'0');
-    localStorage.setItem('lv_extra_enabled',appState.extraEnabled?'1':'0');
-    localStorage.setItem('lv_temperature',appState.temperature);
+    localStorage.setItem('ap_chat_model',appState.chatModel);
+    localStorage.setItem('ap_system',appState.system);
+    localStorage.setItem('ap_extra',appState.extra);
+    localStorage.setItem('ap_token_limit',appState.tokenLimit);
+    localStorage.setItem('ap_memory_enabled',appState.memoryEnabled?'1':'0');
+    localStorage.setItem('ap_extra_enabled',appState.extraEnabled?'1':'0');
+    localStorage.setItem('ap_temperature',appState.temperature);
   } catch (e) {
     if (e?.name === 'QuotaExceededError') {
       showToast('Almacenamiento lleno. No se pudo guardar la configuración.', 'error');
@@ -1953,7 +1957,7 @@ async function handleFiles(fileList){
 
 function renderDocs(){
   const list=document.getElementById('doc-list'),ragInfo=document.getElementById('rag-info');
-  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">📘</div><span class="doc-name">Biblia Hombres — 15 Manuales Consolidados (246/247, 261, 271, 245, 251, 276/279, 241, 242, 252, EU Softline, 285, 288, 282, 213, 237)</span><span class="doc-tag">Integrado</span></div>`;
+  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">📘</div><span class="doc-name">Biblia Hombres — 12 manuales consolidados (M-01 a M-12, incluye Softline SL) · conocimiento sintético</span><span class="doc-tag">Integrado</span></div>`;
   const userHTML=docs.map((d,i)=>`
     <div class="doc-item">
       <div class="doc-icon">📄</div>
@@ -2180,15 +2184,84 @@ function stopGeneration() {
 /* ════════════════════════════════════════════════
    SEND MESSAGE — Streaming v7.0
 ════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   MODO SIN MODELO — retrieval local, cero red
+   Sin API key el asistente no se calla: corre el mismo
+   retrieval léxico que alimenta al modelo y entrega los
+   fragmentos del manual tal cual, declarando que nadie
+   los interpretó. Prefiero enseñar el límite a fingir
+   una respuesta.
+════════════════════════════════════════════════ */
+const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
+/* getManualContext nunca devuelve vacío: si nada coincide, igual entrega las
+   secciones mejor puntuadas, y los bonos de [MANDATORY] y de conflicto pesan
+   aunque no haya un solo acierto de palabra. Para el modo manual eso mentiría
+   —contestar "entallado" a quien preguntó por otra cosa—, así que aquí se exige
+   al menos un acierto real antes de mostrar nada. */
+function seccionesPorRelevancia(q){
+  const kws=expandKeywords(extractKeywords(q));
+  if(!kws.length)return[];
+  const out=[];
+  for(const s of manualSections){
+    const norm=normalizeText(s.content);
+    let aciertos=0;
+    for(const kw of kws){
+      const n=normalizeText(kw).trim();
+      if(n&&norm.includes(n))aciertos++;
+    }
+    if(aciertos>0)out.push({content:s.content,aciertos,score:scoreText(s.content,kws)});
+  }
+  return out.sort((a,b)=>b.aciertos-a.aciertos||b.score-a.score)
+}
+function responderSinModelo(q){
+  switchTab('chat');
+  appendMsg('user',q,false);
+  if(isGreetingQuestion(q)){
+    const saludo='Hola. Estoy en **modo manual**: sin API key no interpreto nada, pero busco en el manual y te entrego lo que dice, tal cual.\n\nPregúntame de exhibición, entallado, sensores, POS o clasificación de mundos.';
+    appendMsg('assistant',saludo,false);
+    history.push({role:'user',content:q});
+    history.push({role:'assistant',content:saludo});
+    saveChatHistory();scrollToBottom();
+    return;
+  }
+  const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
+  let fragmentos='',chars=0;
+  for(const s of relevantes){
+    if(chars>=FALLBACK_BUDGET)break;
+    const espacio=FALLBACK_BUDGET-chars;
+    const trozo=s.content.length>espacio?s.content.slice(0,espacio)+'\n[...]':s.content;
+    fragmentos+=trozo+'\n\n';chars+=trozo.length;
+  }
+  fragmentos=fragmentos.trim();
+  const aviso='> ⚪ **Sin modelo conectado.** Esto es lo que dice el manual, tal cual: nadie lo interpretó.';
+  const comoFunciona='La búsqueda corrió aquí mismo, en tu dispositivo, sin salir a internet: se expandieron los sinónimos de lo que escribiste y se quedaron solo las secciones que de verdad coinciden.';
+  const invitacion='_Para la respuesta razonada en 6 etapas —intención, expansión, retrieval, razonamiento, certeza y respuesta— conecta una API key en la pestaña **⚙️ Config**._';
+  const cuerpo=fragmentos
+    ?`${aviso}\n\n${comoFunciona} Coincidieron **${relevantes.length}** ${relevantes.length===1?'sección':'secciones'}.\n\n---\n\n\`\`\`\n${fragmentos}\n\`\`\`\n\n${invitacion}`
+    :`${aviso}\n\n**Ninguna sección del manual coincide con esa pregunta.** ${comoFunciona}\n\nPrefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras. Prueba con otros términos o con un acceso rápido.\n\n${invitacion}`;
+  appendMsg('assistant',cuerpo,false);
+  history.push({role:'user',content:q});
+  history.push({role:'assistant',content:cuerpo});
+  saveChatHistory();
+  scrollToBottom();
+}
+
 async function sendMessage(){
   if(isGenerating)return;
   // v7.0 paso 3: cargar key correcta por proveedor activo
   try{
-    const provKey='lv_api_key_'+appState.provider;
-    const stored=sessionStorage.getItem(provKey)||sessionStorage.getItem('lv_api_key')||'';
+    const provKey='ap_api_key_'+appState.provider;
+    const stored=sessionStorage.getItem(provKey)||sessionStorage.getItem('ap_api_key')||'';
     if(stored)appState.apiKey=stored;
   }catch{}
-  if(!appState.apiKey||appState.apiKey.length<10){switchTab('config');showToast('⚠ Primero configura tu clave API en Config.','warn',4000);return}
+  if(!appState.apiKey||appState.apiKey.length<10){
+    const inputSinKey=document.getElementById('user-input');
+    const qSinKey=inputSinKey.value.trim();
+    if(!qSinKey)return;
+    inputSinKey.value='';
+    responderSinModelo(qSinKey);
+    return;
+  }
   if(sessionTokens>=appState.tokenLimit){showToast('🔴 Límite de tokens alcanzado. Limpia el chat o reinicia el contador.','error',5000);return}
   const input=document.getElementById('user-input');
   const q=input.value.trim();if(!q)return;
@@ -2323,13 +2396,13 @@ function toggleQuickEdit(){
   if(editingQuick)renderQuickEditor();
   document.querySelector('.quick-edit-btn').textContent=editingQuick?'✕ Cerrar':'✏ Editar';
 }
-function removeQuick(i){quickBtns.splice(i,1);try{localStorage.setItem('lv_quick',JSON.stringify(quickBtns))}catch{}renderQuickBtns();renderQuickEditor()}
+function removeQuick(i){quickBtns.splice(i,1);try{localStorage.setItem('ap_quick',JSON.stringify(quickBtns))}catch{}renderQuickBtns();renderQuickEditor()}
 function addQuick(){
   const label=document.getElementById('new-quick-label').value.trim();
   const q=document.getElementById('new-quick-q').value.trim();
   if(!label||!q){showToast('Ingresa el nombre y la pregunta.','warn',3000);return}
   quickBtns.push({label,q});
-  try{localStorage.setItem('lv_quick',JSON.stringify(quickBtns))}catch{}
+  try{localStorage.setItem('ap_quick',JSON.stringify(quickBtns))}catch{}
   document.getElementById('new-quick-label').value='';document.getElementById('new-quick-q').value='';
   renderQuickBtns();renderQuickEditor();
 }
@@ -2341,28 +2414,28 @@ function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMe
 function scrollToBottom(){const b=document.getElementById('chat-messages');b.scrollTop=b.scrollHeight}
 function clearChat(){
   history=[];
-  document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"><span class="chat-empty-icon">✦</span>Carga un manual o usa un acceso rápido para comenzar</div>`;
+  document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"><span class="chat-empty-icon">✦</span>Pregunta algo o usa un acceso rápido.<br/>Sin API key se responde con el manual tal cual; con key, razonado en 6 etapas.</div>`;
   saveChatHistory();
   showToast('🗑️ Chat limpiado', 'success', 2000);
 }
 function exportChat(){
   if(!history.length){showToast('No hay conversación para exportar.','warn',3000);return}
   const date=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const lines=[`# Asistente Visual LV — Hombres v7.0`,``,`**Fecha:** ${date}`,`**Autor:** Gerardo Barrera · Asesor de piso · Mercadep Zona Piloto`,``,`---`,``];
+  const lines=[`# Asistente de piso — Mercadep v1.0.0`,``,`**Fecha:** ${date}`,`**Autor:** Gerardo Barrera · demo con conocimiento sintético`,``,`---`,``];
   history.forEach(m=>{
-    lines.push(`## ${m.role==='user'?'Tú':'Asistente LV'}`);
+    lines.push(`## ${m.role==='user'?'Tú':'Asistente'}`);
     lines.push(``);
     lines.push(m.content);
     lines.push(``);
   });
   const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`lv-display-${Date.now()}.md`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`asistente-piso-${Date.now()}.md`;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   showToast('⬇ Conversación exportada a Markdown', 'success', 2500);
 }
 function ask(q){document.getElementById('user-input').value=q;switchTab('chat');sendMessage()}
 
-function hasKey(prov){try{return!!(sessionStorage.getItem('lv_api_key_'+prov)||'').length}catch{return false}}
+function hasKey(prov){try{return!!(sessionStorage.getItem('ap_api_key_'+prov)||'').length}catch{return false}}
 
 /* ════════════════════════════════════════════════
    API EXPERTA — Selector de modelo por rol
@@ -2506,11 +2579,11 @@ function toggleTheme() {
   const newTheme = isLight ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', newTheme);
   document.getElementById('theme-icon').textContent = newTheme === 'light' ? '🌙' : '☀';
-  try { localStorage.setItem('lv_theme', newTheme); } catch {}
+  try { localStorage.setItem('ap_theme', newTheme); } catch {}
 }
 
 function loadTheme() {
-  const saved = localStorage.getItem('lv_theme') ||
+  const saved = localStorage.getItem('ap_theme') ||
     (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
   if (saved === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
