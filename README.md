@@ -88,7 +88,7 @@ todo lo demás:
 - **El contexto se recorta con números, no con intuición.** Corte relativo al mejor
   fragmento de cada consulta, deduplicado de casi-idénticos dentro de un mismo documento,
   tope por página y nada de fragmentos cortados a la mitad: ~60% menos contexto, medido
-  contra 51 preguntas de respuesta conocida en 17 manuales reales de dos plantillas
+  contra 59 preguntas de respuesta conocida en 17 manuales reales de dos plantillas
   distintas, sin perder ninguna. La regla de aceptación es de veto: una configuración que
   pierda un solo fragmento con la respuesta se descarta, ahorre lo que ahorre.
 - **Descripción de figuras con IA, opcional y apagada.** Un modelo con visión transcribe los
@@ -159,7 +159,10 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   puntuación de la franja superior de la página. Acierta en los 17 manuales, pero es una
   regla geométrica: en una lámina cuyo rótulo esté partido en dos líneas se queda con la
   etiqueta del panel ("Montaje") en vez del título completo ("Mercadeo de Cestos en
-  Perímetro"). Es menos preciso, no falso.
+  Perímetro"). Es menos preciso, no falso. Y es solo un respaldo: donde la lámina tiene
+  título en mayúsculas manda ese, que es más específico — en Manual Mesa Fina, 17 de 26
+  páginas se llaman "Mercadeo" y aun así las respuestas se citan con `CUBIERTOS`,
+  `VAJILLA CLASICO` o `MERCADEO PERIMETRO`.
 - **El conocimiento es sintético**, así que las respuestas son coherentes pero no son el
   estándar de nadie. Sirve para ver la mecánica, no para montar una tienda. Con un PDF real
   cargado deja de competir: pasa a referencia secundaria y manda el manual del asesor.
