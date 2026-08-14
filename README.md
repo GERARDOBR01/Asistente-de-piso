@@ -9,7 +9,7 @@ mueble, **sin instalar nada y sin cuenta**.
 > son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
 > este repositorio ni en su historial.
 
-**[▶ Abrir el demo](https://gerardobr01.github.io/asistente-de-piso/)**
+**[▶ Abrir el demo](https://gerardobr01.github.io/Visual_Lv-/)**
 
 ## Qué resuelve
 
