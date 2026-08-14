@@ -1268,6 +1268,17 @@ const SYNONYMS={
   'etiqueta':['plastiflecha','precio','etiquetado','tag'],
   'medida':['centimetros','separacion','distancia','cm'],
   'pasillo':['alineacion','circulacion','80 cm','flujo cliente'],
+  /* Nadie en piso pregunta "¿cuánto pasillo dejo?": pregunta "¿cuánto espacio
+     dejo para que pase la gente?". Sin este puente, la lámina de ALINEACIÓN
+     —que dice "80 cm" y nunca escribe "pasillo"— no se alcanzaba. */
+  'paso':['pasillo','circulacion','alineacion','80 cm'],
+  'pase':['pasillo','circulacion','alineacion','80 cm'],
+  'pasar':['pasillo','circulacion','alineacion','80 cm'],
+  'circulacion':['pasillo','paso','alineacion','flujo cliente'],
+  'caminar':['pasillo','circulacion','flujo cliente'],
+  /* "Lo que acaba de llegar" es la forma normal de decir "colección reciente". */
+  'llegar':['reciente','coleccion nueva','avance temporada','nuevo'],
+  'reciente':['coleccion nueva','avance temporada','nuevo','al frente'],
   'alma':['alma papel','paper insert','relleno camisa'],
   'temporada':['coleccion nueva','avance','nueva llegada'],
   'nuevo':['coleccion nueva','avance temporada','reciente llegada'],
@@ -1381,11 +1392,19 @@ const SYNONYM_WEIGHT=0.55;
    variantes que no existen simplemente no coinciden con nada y no estorban. */
 function variantes(w){
   const v=[w];
-  if(w.length>4&&w.endsWith('s')){
-    v.push(w.slice(0,-1));
-    if(w.endsWith('es'))v.push(w.slice(0,-2));
-    if(w.endsWith('ces'))v.push(w.slice(0,-3)+'z');
-  }
+  const plural=x=>{
+    if(x.length>4&&x.endsWith('s')){
+      v.push(x.slice(0,-1));
+      if(x.endsWith('es'))v.push(x.slice(0,-2));
+      if(x.endsWith('ces'))v.push(x.slice(0,-3)+'z');
+    }
+  };
+  plural(w);
+  /* El asesor pregunta "¿dónde acomodo lo rebajado?" y el manual escribe "la
+     mercancía rebajada": misma palabra, otro género, y el buscador devolvía
+     CERO fragmentos. Se prueba el género contrario en cada forma, incluida la
+     singularizada, para que «rebajados» también llegue a «rebajada». */
+  for(const x of[...v])if(x.length>4&&/[oa]$/.test(x))v.push(x.slice(0,-1)+(x.endsWith('o')?'a':'o'));
   return[...new Set(v)]
 }
 
@@ -1610,13 +1629,19 @@ function buildChunks(pages,docName){
   };
   for(const pg of pages){
     let buf='';
+    /* El título arrancaba con el documento y no con la página, así que una
+       lámina sin títulos en mayúsculas heredaba el de la anterior: el fragmento
+       del producto descontinuado se citaba como "pág. 9 · ESQUINEROS", que es
+       una sección de la pág. 8. Y como el título se indexa, no solo se citaba
+       mal: se buscaba mal. Cada página arranca con el suyo. */
+    heading=pg.titulo||'';
     for(const b of pg.blocks){
       const h=(b.heading||'').replace(/\s+/g,' ').trim();
       if(h&&h!==heading){
         if(buf.trim())push(pg.page,buf);
         buf='';heading=h;
       }
-      if(b.isHeading)continue;
+      if(b.isHeading||b.esTitulo)continue;
       if(b.text.length>CHUNK_MAX){
         if(buf.trim())push(pg.page,buf);
         buf='';
@@ -2338,6 +2363,29 @@ function assignHeadings(blocks){
   return blocks
 }
 
+/* Cada lámina lleva su nombre arriba a la izquierda —"Rotación", "Planograma",
+   "Perímetros de Básicos"—, pero en minúsculas, así que isHeadingText no lo ve
+   y acaba de primera línea del cuerpo. Es el rótulo que el asesor reconocería,
+   y sin él una página sin títulos en mayúsculas se queda sin sección ninguna. */
+const TITULO_PAG_BANDA=0.28;   // franja superior donde vive el nombre de la lámina
+const TITULO_PAG_MAX=60;
+function tituloDePagina(blocks,altura){
+  for(const b of blocks.slice(0,4)){
+    if(b.y0>altura*TITULO_PAG_BANDA)break;
+    if(b.heading)continue;                       // ya tiene título propio
+    const t=b.text.trim();
+    if(t.includes('\n'))continue;                // el nombre de la lámina es una línea
+    if(t.length<3||t.length>TITULO_PAG_MAX)continue;
+    /* En la portada el número de departamento va arriba y solo —"276 Y 279"—:
+       no nombra nada. Pedir tres letras lo descarta sin tocar los rótulos. */
+    if(t.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g,'').length<3)continue;
+    if(/[.,;:•●]/.test(t))continue;              // eso ya es cuerpo, no rótulo
+    b.esTitulo=true;                             // pasa a título: que no cuente dos veces
+    return t;
+  }
+  return''
+}
+
 function pageToBlocks(content,vp,pageNum){
   const lines=textItemsToLines(content.items,vp);
   /* Para tapar el texto al buscar figuras hay que usar la caja de cada LÍNEA.
@@ -2346,16 +2394,14 @@ function pageToBlocks(content,vp,pageNum){
      que detectar. */
   const textBoxes=lines.map(l=>({x0:l.x0,y0:l.yTop,x1:l.x1,y1:l.yBot}));
   const blocks=orderBlocks(linesToBlocks(lines));
-  return{
-    page:pageNum,textBoxes,
-    blocks:assignHeadings(blocks.map(b=>({
-      text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
-      heading:b.heading,
-      isHeading:!b.lines.length&&!!b.heading,
-      hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
-      x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
-    })).filter(b=>b.text))
-  }
+  const finales=assignHeadings(blocks.map(b=>({
+    text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
+    heading:b.heading,
+    isHeading:!b.lines.length&&!!b.heading,
+    hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
+    x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
+  })).filter(b=>b.text));
+  return{page:pageNum,textBoxes,blocks:finales,titulo:tituloDePagina(finales,vp.height)}
 }
 
 /* ════════════════════════════════════════════════
@@ -2696,7 +2742,11 @@ async function detectarFiguras(page,pageInfo,docName){
       id:docName+'#f'+pageInfo.page+'-'+figuras.length,
       docName,page:pageInfo.page,box:c,dataUrl:corte.dataUrl,firma:corte.firma,txt,
       caption:captionParaFigura(c,pageInfo.blocks),
-      heading:headingForBox(c,titulos),
+      /* Sin título en mayúsculas encima, la figura quedaba sin sección y el pie
+         decía solo "pág. 11". El nombre de la lámina lo llevan ya los
+         fragmentos de esa página: dárselo también a la figura es lo que permite
+         reconocer que la imagen y el texto citado son de la misma sección. */
+      heading:headingForBox(c,titulos)||pageInfo.titulo||'',
       vlmDescription:null
     });
   }
