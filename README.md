@@ -22,8 +22,8 @@ pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de di
 
 | | **Modo manual** (sin API key) | **Modo razonado** (con API key) |
 |---|---|---|
-| Qué hace | Busca en el manual y entrega las secciones que coinciden, **tal cual** | Responde interpretando, en 6 etapas: intención → expansión → retrieval → razonamiento → certeza → respuesta |
-| Dónde corre | Entero en tu dispositivo | El retrieval en tu dispositivo; la interpretación en el proveedor que elijas |
+| Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Responde interpretando, en 6 etapas: intención → expansión → retrieval → razonamiento → certeza → respuesta |
+| Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | El retrieval en tu dispositivo; la interpretación en el proveedor que elijas |
 | Sale a la red | **No.** Ni una petición | Sí: la pregunta y el contexto recuperado van a Google AI Studio o a OpenAI |
 | Qué cuesta | Nada | Tu propia key y tus propios tokens |
 
@@ -39,12 +39,43 @@ pregunta, lo dice — no rellena con la sección más cercana.
 - **Conocimiento embebido y estructurado**, con un diccionario de sinónimos y alias por
   término — la gente no pregunta con el vocabulario del manual. "Acomodar" tiene que
   encontrar "exhibir", "clasificar" y "mercadear".
-- **Retrieval léxico local**: se extraen las palabras de la pregunta, se expanden con sus
-  sinónimos y se puntúan las secciones del manual por coincidencia, con peso extra para las
-  reglas `[MANDATORY]` y los conflictos documentados entre manuales.
+- **Retrieval léxico local con BM25**: se extraen las palabras de la pregunta, se expanden
+  con sus sinónimos —que pesan menos que la palabra que el usuario escribió de verdad— y se
+  puntúan los fragmentos por relevancia, con peso extra para las reglas `[MANDATORY]`, los
+  conflictos documentados y, cuando la pregunta pide una cantidad, para los fragmentos que
+  traen cifras.
 - **Conflictos documentados como feature.** Cuando dos manuales se contradicen (el entallado
   lleva 4, 5 o 6 piezas según cuál leas), el sistema tiene prohibido responder "el manual no
   especifica": cita el conflicto y la regla general.
+
+### El motor de lectura de manuales
+
+Un manual de campaña no es un documento de texto corrido: es una presentación. En una misma
+lámina conviven dos reglas distintas, una en cada columna, a la misma altura. Eso condiciona
+todo lo demás:
+
+- **Reconstrucción por columnas.** El texto se rearma en tres pasos —fragmentos → líneas,
+  cortadas donde hay hueco horizontal → bloques, agrupados por cercanía— y solo al final se
+  ordena, por bandas y de izquierda a derecha. Agrupar por coordenada vertical, que es lo
+  que hace casi cualquier extractor, fusiona las dos columnas y produce una regla que no
+  existe.
+- **Cada fragmento sabe de dónde salió.** Documento, página y sección viajan pegados al
+  texto hasta el prompt, y la sección se asigna por posición —el título que está encima y en
+  la misma columna—, no por orden de lectura. Citar mal la sección es peor que no citarla.
+- **Figuras.** Los planogramas de estos manuales son dibujos vectoriales, no fotos: extraer
+  las imágenes incrustadas devuelve íconos de leyenda de 36×18 px y se deja justo lo que más
+  se consulta. Así que se hace lo que hacen los parsers serios (Marker, MinerU): renderizar
+  la página y recortar la región, encontrándola por geometría —dónde hay tinta que no es
+  texto— como en [PDFFigures 2.0](http://pdffigures2.allenai.org/), sin ningún modelo. Para
+  las fotos, además, se le pregunta al PDF dónde coloca cada imagen. Cada figura hereda el
+  texto que la rodea, así que **ya es buscable sin ninguna IA**.
+- **Verificación de lo verificable.** Con API key, cada cifra de la respuesta se comprueba
+  contra los fragmentos que realmente se enviaron, y cada página citada contra las que
+  existen. Lo que no cuadra sale marcado. No detecta un razonamiento equivocado; detecta el
+  dato traído de fuera del manual, que es el que llega al piso.
+- **Descripción de figuras con IA, opcional y apagada.** Un modelo con visión transcribe los
+  rótulos de un plano una sola vez por figura, y el texto queda indexado. Sin key la app
+  funciona igual, solo sin esa capa.
 
 ### Dependencias y datos — lo que sí sale y lo que sí se guarda
 
@@ -58,6 +89,13 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 - **Guarda en el navegador**: la API key en `sessionStorage` (se borra al cerrar la
   pestaña, nunca en `localStorage`); el historial de chat, la memoria y los accesos rápidos
   en `localStorage`.
+- **Guarda los manuales procesados en IndexedDB**, indexados por el hash del archivo, para
+  no volver a procesar 28 láminas cada vez que se abre la página desde el celular. Incluye
+  los recortes de las figuras. **Vive en el dispositivo y no sale a la red**, y hay un botón
+  visible para borrarlo en la pestaña de manuales.
+- **Si —y solo si— se pulsa "describir figuras", los recortes salen** hacia el proveedor
+  configurado. Es la única vez que una imagen del manual deja el dispositivo, y hace falta
+  pedirlo a propósito.
 - **Sin telemetría, sin analítica, sin cuentas.** Nada se envía a ningún servidor mío,
   porque no hay servidor mío.
 
@@ -66,6 +104,15 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 - **El retrieval no lematiza.** Busca coincidencias de texto normalizado, así que
   "colores" no encuentra "COLORIZACIÓN" por sí solo — depende del diccionario de sinónimos,
   que se llena a mano y por lo tanto está incompleto.
+- **Un PDF escaneado no se puede leer.** Si la lámina es una imagen sin capa de texto, el
+  sistema lo dice y no lo carga, en vez de fingir que lo entendió. Haría falta OCR.
+- **La detección de figuras está calibrada sobre manuales tipo presentación.** El corte
+  entre "figura" y "panel de texto" salió de medir un manual real: las figuras quedan por
+  debajo de 0.11 de cobertura de texto y los paneles por encima de 0.27. Un documento con
+  otra maquetación puede caer en el hueco, y entonces sobran o faltan recortes.
+- **La verificación de cifras no distingue entre inventar y razonar.** Comprueba que el
+  número esté en el contexto recuperado; si el modelo suma dos cantidades correctas, el
+  resultado saldrá marcado aunque esté bien. Prefiero ese falso positivo al silencio.
 - **La puntuación general premia `[MANDATORY]` aunque no haya coincidencia de palabras.**
   Sirve cuando el resultado lo va a leer un modelo, que sabe descartar lo que no viene al
   caso; mentiría en el modo manual. Por eso ahí se exige al menos un acierto real de
@@ -75,7 +122,7 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 
 ## Lo que encontré al prepararlo para publicar
 
-Tres defectos que el uso normal no muestra. Los dejo escritos porque enseñar dónde falla un
+Defectos que el uso normal no muestra. Los dejo escritos porque enseñar dónde falla un
 sistema dice más de él que la lista de lo que hace:
 
 1. **El hash de integridad de DOMPurify estaba mal.** El navegador descargaba el archivo,
@@ -91,6 +138,18 @@ sistema dice más de él que la lista de lo que hace:
    real de término.
 3. **El bloque de fuentes se desbordaba en celular.** Justo en el único dispositivo donde
    esto se usa.
+4. **El asistente nunca había leído un manual cargado.** Este es el grande, y tardé meses en
+   verlo porque estaba buscándolo en el sitio equivocado. Cuando la respuesta sobre un PDF
+   salía mal, yo culpaba al prompt o al modelo. El problema estaba mucho antes: la
+   extracción agrupaba el texto solo por coordenada vertical, y en una lámina con dos reglas
+   en paralelo —ALINEACIÓN a la izquierda, LIMPIEZA a la derecha, a la misma altura— las
+   fusionaba en la misma línea. El "¿Qué es?" de una quedaba pegado al de la otra. Después,
+   el troceado cortaba ese texto ya revuelto cada 700 caracteres. **El modelo nunca recibió
+   el manual; recibió el manual licuado**, y ningún prompt arregla eso. Cuando un sistema
+   con IA falla, el instinto es tocar el prompt, porque es la pieza que se ve.
+5. **Sin API key, el PDF recién cargado se ignoraba por completo.** La búsqueda del modo
+   manual solo recorría el conocimiento embebido. El usuario veía su manual en la lista,
+   preguntaba, y recibía respuestas que no salían de él.
 
 ## Relación con Veristack
 

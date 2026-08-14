@@ -253,6 +253,13 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .doc-tag{font-size:9px;padding:2px 7px;border-radius:10px;background:var(--gdim);color:var(--gold);border:1px solid rgba(200,164,74,0.2);letter-spacing:1px;text-transform:uppercase}
 .doc-remove{background:none;border:none;cursor:pointer;color:var(--text4);font-size:13px;padding:3px 5px;border-radius:4px;transition:all .15s;flex-shrink:0}
 .doc-remove:hover{color:var(--red);background:rgba(224,82,82,0.08)}
+.docs-acciones{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.docs-nota{font-size:10px;color:var(--text3);line-height:1.6}
+.docs-btns{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.docs-describir{font-size:10.5px;padding:5px 11px;border-radius:6px;background:var(--gdim);border:1px solid rgba(212,172,84,0.35);color:var(--gold);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .18s}
+.docs-describir:hover{border-color:var(--gold);background:rgba(212,172,84,0.18)}
+.docs-borrar{font-size:10.5px;padding:5px 11px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .18s}
+.docs-borrar:hover{border-color:rgba(224,82,82,0.45);color:var(--red)}
 .rag-info{font-size:10px;color:var(--text3);padding:6px 10px;border-radius:6px;background:rgba(200,164,74,0.035);border:1px solid rgba(200,164,74,0.08);margin-top:6px;line-height:1.6;display:none}
 
 .quick-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -334,6 +341,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .reasoning-toggle:hover{color:var(--text2)}
 .rt-icon{font-size:9px;transition:transform .2s;display:inline-block}
 .reasoning-toggle.open .rt-icon{transform:rotate(90deg)}
+.evidencia{margin-top:10px}
+.evidencia-titulo{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+.evidencia-tira{display:flex;gap:10px;flex-wrap:wrap}
+.evidencia-fig{margin:0;max-width:190px;cursor:zoom-in;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--s1);transition:border-color .18s}
+.evidencia-fig:hover{border-color:rgba(212,172,84,0.4)}
+.evidencia-fig img{display:block;width:100%;height:auto}
+.evidencia-fig figcaption{padding:5px 8px;font-size:10px;color:var(--text3);border-top:1px solid var(--border)}
+.evidencia-fig.ampliada{max-width:100%;cursor:zoom-out}
+.verify-warn{margin-top:8px;padding:9px 13px;background:rgba(245,166,35,0.09);border:1px solid rgba(245,166,35,0.28);border-left:2px solid var(--amber);border-radius:0 var(--r) var(--r) 0;font-size:11.5px;color:var(--text2);line-height:1.65;font-family:'DM Sans',sans-serif}
+.verify-warn strong{color:var(--amber);font-weight:600}
 .reasoning-block{margin-top:6px;padding:10px 14px;background:var(--s1);border:1px solid var(--border);border-left:2px solid rgba(200,164,74,0.35);border-radius:0 var(--r) var(--r) 0;font-size:11.5px;color:var(--text3);line-height:1.75;display:none;font-family:'DM Sans',sans-serif}
 .reasoning-block.open{display:block}
 .reasoning-block p{margin:0 0 5px}.reasoning-block p:last-child{margin:0}
@@ -607,7 +624,7 @@ footer span {
   <div class="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="ev(event)" ondrop="dropFile(event)">
     <span class="drop-icon">📂</span>
     Arrastra los manuales de temporada aquí, o haz clic para seleccionarlos
-    <div class="drop-sub">Solo .pdf · Máximo 50 MB por archivo · Extracción de texto automática</div>
+    <div class="drop-sub">Solo .pdf · Máximo 50 MB por archivo · Texto y figuras se extraen en tu dispositivo</div>
   </div>
   <input type="file" id="file-input" accept=".pdf" multiple style="display:none" onchange="handleFiles(this.files)"/>
   <div class="proc-wrap" id="proc-wrap">
@@ -616,6 +633,13 @@ footer span {
   </div>
   <div class="doc-list" id="doc-list"></div>
   <div class="rag-info" id="rag-info"></div>
+  <div class="docs-acciones" id="docs-acciones" style="display:none">
+    <span class="docs-nota" id="docs-nota"></span>
+    <span class="docs-btns">
+      <button class="docs-describir" id="btn-describir" onclick="describirFiguras()" style="display:none"></button>
+      <button class="docs-borrar" onclick="borrarManualesGuardados()">Borrar manuales guardados</button>
+    </span>
+  </div>
 </div>
 
 <!-- CHAT -->
@@ -1264,74 +1288,243 @@ function scoreText(text,kws){
 }
 
 /* ════════════════════════════════════════════════
-   MANUAL SECTIONS INDEXADO
+   MOTOR 2 — CORPUS UNIFICADO Y RETRIEVAL BM25
+
+   El manual interno y los PDF que carga el asesor viven en el
+   mismo corpus y compiten con el mismo criterio. Antes cada uno
+   tenía su propio camino: el conteo de keywords premiaba a los
+   fragmentos largos y el modo sin API ni siquiera miraba el PDF.
+
+   Cada entrada del corpus lleva de dónde salió — documento,
+   página y sección — porque una respuesta que no se puede
+   contrastar con la lámina no sirve en el piso.
 ════════════════════════════════════════════════ */
 let manualSections=[];
+let docChunks=[];
+let docFigures=[];
+let corpus=[];
+const bm25={N:0,avgdl:1,df:Object.create(null),k1:1.5,b:0.75};
+
+function tokenize(t){return normalizeText(t).split(/\s+/).filter(w=>w.length>2&&!STOPWORDS.has(w))}
+
+function indexChunk(c){
+  const toks=tokenize((c.heading?c.heading+' ':'')+c.text);
+  const tf=Object.create(null);
+  for(const t of toks)tf[t]=(tf[t]||0)+1;
+  c.tf=tf;c.len=toks.length||1;
+  c.hasDigits=/\d/.test(c.text);
+  return c;
+}
+
+function rebuildCorpus(){
+  corpus=manualSections.concat(docChunks);
+  const df=Object.create(null);
+  let total=0;
+  for(const c of corpus){
+    if(!c.tf)indexChunk(c);
+    total+=c.len;
+    for(const t in c.tf)df[t]=(df[t]||0)+1;
+  }
+  bm25.N=corpus.length||1;
+  bm25.avgdl=corpus.length?total/corpus.length:1;
+  bm25.df=df;
+}
+
 function initManualSections(){
-  manualSections=MANUAL_INTERNO.trim().split(/\n(?=## )/).filter(p=>p.trim().length>30).map(p=>({content:p.trim()}));
+  manualSections=MANUAL_INTERNO.trim().split(/\n(?=## )/)
+    .filter(p=>p.trim().length>30)
+    .map((p,i)=>{
+      const text=p.trim();
+      const first=text.split('\n')[0];
+      return indexChunk({
+        id:'man-'+i,source:'manual',docName:'Manual interno',page:null,
+        heading:first.startsWith('## ')?first.slice(3).trim():'',
+        text,figureIds:[]
+      });
+    });
+  rebuildCorpus();
+}
+
+/* Los sinónimos siguen siendo el puente entre cómo pregunta la gente
+   ("acomodar") y cómo escribe el manual ("distribución"), pero pesan
+   menos que la palabra que el asesor realmente escribió: expandir sin
+   descontar es lo que hacía que una consulta se fuera por la tangente. */
+const SYNONYM_WEIGHT=0.55;
+function weightedTerms(query){
+  const base=extractKeywords(query);
+  const terms=new Map();
+  for(const k of base)for(const t of tokenize(k))if(!terms.has(t))terms.set(t,1);
+  for(const k of base){
+    for(const phrase of expandKeywords([k])){
+      if(phrase===k)continue;
+      for(const t of tokenize(phrase))if(!terms.has(t))terms.set(t,SYNONYM_WEIGHT);
+    }
+  }
+  return[...terms].map(([t,w])=>({t,w}))
+}
+
+function queryShingles(query){
+  const toks=normalizeText(query).split(/\s+/).filter(Boolean);
+  const out=[];
+  for(let n=3;n>=2;n--)for(let i=0;i+n<=toks.length;i++){
+    const s=toks.slice(i,i+n).join(' ');
+    if(s.length>7)out.push(s);
+  }
+  return out.slice(0,8)
+}
+
+const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separacion|separación|porcentaje|cantidad|piezas|\bcm\b|\bmts?\b|metro|%/i;
+
+function bm25Score(c,terms){
+  let s=0;
+  for(const{t,w}of terms){
+    const f=c.tf[t];if(!f)continue;
+    const n=bm25.df[t]||0;
+    const idf=Math.log(1+(bm25.N-n+0.5)/(n+0.5));
+    s+=w*idf*(f*(bm25.k1+1))/(f+bm25.k1*(1-bm25.b+bm25.b*c.len/bm25.avgdl));
+  }
+  return s
+}
+
+/* Devuelve los fragmentos ordenados, y con cuántas palabras de la pregunta
+   coincidieron de verdad (`hits`). Ese conteo es lo que permite al modo sin
+   API decir "esto no está en el manual" en vez de entregar lo menos malo. */
+function retrieve(query,opts){
+  const{source=null,limit=40}=opts||{};
+  const terms=weightedTerms(query);
+  if(!terms.length)return[];
+  const strong=terms.filter(t=>t.w===1).map(t=>t.t);
+  const shingles=queryShingles(query);
+  const wantsNumber=NUMERIC_INTENT.test(query);
+  const out=[];
+  for(const c of corpus){
+    if(source&&c.source!==source)continue;
+    let score=bm25Score(c,terms);
+    if(score<=0)continue;
+    const norm=normalizeText((c.heading?c.heading+' ':'')+c.text);
+    let hits=0;
+    for(const t of strong)if(norm.includes(t))hits++;
+    let phrase=0;
+    for(const sh of shingles)if(norm.includes(sh))phrase++;
+    score+=Math.min(phrase,3)*1.5;
+    if(c.heading){
+      const h=normalizeText(c.heading);
+      for(const t of strong)if(h.includes(t)){score+=2;break}
+    }
+    if(wantsNumber&&c.hasDigits)score+=1.5;
+    if(/\[mandatory\]/i.test(c.text))score+=2;
+    if(/conflicto documentado/i.test(c.text))score+=2.5;
+    out.push({c,score,hits});
+  }
+  return out.sort((a,b)=>b.score-a.score||b.hits-a.hits).slice(0,limit)
+}
+
+/* La etiqueta de origen viaja pegada al fragmento hasta el prompt, para que
+   el modelo pueda citar la página y el asesor pueda ir a verla. */
+function chunkLabel(c){
+  const parts=[c.docName];
+  if(c.page)parts.push('pág. '+c.page);
+  if(c.heading)parts.push(c.heading);
+  if(c.isFigure)parts.push('figura descrita por IA');
+  return'['+parts.join(' · ')+']'
+}
+
+/* Se recuerda qué fragmentos entraron de verdad al contexto, no cuáles
+   puntuaron alto: es la única lista contra la que tiene sentido verificar la
+   respuesta y de la que se pueden sacar las figuras que la acompañan. */
+let ultimosFragmentos=[];
+function packChunks(results,maxChars){
+  let out='',chars=0;
+  for(const r of results){
+    if(chars>=maxChars)break;
+    const header=chunkLabel(r.c)+'\n';
+    const space=maxChars-chars-header.length;
+    if(space<80)break;
+    const body=r.c.text.length>space?r.c.text.slice(0,space)+'\n[...]':r.c.text;
+    out+=header+body+'\n\n';
+    chars+=header.length+body.length;
+    ultimosFragmentos.push(r.c);
+  }
+  return out.trim()
 }
 function getManualContext(query,maxChars){
-  const kws=expandKeywords(extractKeywords(query));
-  if(!kws.length)return manualSections.slice(0,3).map(s=>s.content).join('\n\n').slice(0,maxChars);
-  const scored=manualSections.map(s=>({content:s.content,score:scoreText(s.content,kws)})).sort((a,b)=>b.score-a.score);
-  let result='',chars=0;
-  for(const s of scored){
-    if(chars>=maxChars)break;
-    const space=maxChars-chars;
-    const excerpt=s.content.length>space?s.content.slice(0,space)+'\n[...]':s.content;
-    result+=excerpt+'\n\n';chars+=excerpt.length;
-  }
-  return result.trim()
+  const results=retrieve(query,{source:'manual'});
+  if(!results.length)return manualSections.slice(0,3).map(s=>s.text).join('\n\n').slice(0,maxChars);
+  return packChunks(results,maxChars)
 }
 
 /* ════════════════════════════════════════════════
-   RAG — CHUNKS DE PDF MEJORADO
+   RAG — CHUNKS DEL PDF CARGADO
+
+   Un chunk = un bloque de la lámina, no 700 caracteres a ciegas.
+   Nunca cruza de página, porque la cita de página es lo que hace
+   la respuesta verificable, y arrastra el título de su sección.
 ════════════════════════════════════════════════ */
-let docChunks=[];
-function chunkDocument(text,docName){
-  const SIZE=700,OVERLAP=100,chunks=[];
-  let i=0;
-  while(i<text.length){
-    const end=Math.min(i+SIZE,text.length);
-    chunks.push({docName,text:text.slice(i,end),idx:chunks.length});
-    if(end>=text.length)break;
-    i+=SIZE-OVERLAP;
+const CHUNK_MAX=900;
+
+function splitLongBlock(text){
+  if(text.length<=CHUNK_MAX)return[text];
+  const parts=[];
+  let rest=text;
+  while(rest.length>CHUNK_MAX){
+    const window=rest.slice(0,CHUNK_MAX);
+    let cut=Math.max(window.lastIndexOf('. '),window.lastIndexOf('\n'));
+    if(cut<CHUNK_MAX*0.5)cut=window.lastIndexOf(' ');
+    if(cut<CHUNK_MAX*0.3)cut=CHUNK_MAX;
+    parts.push(rest.slice(0,cut+1).trim());
+    rest=rest.slice(cut+1);
+  }
+  if(rest.trim())parts.push(rest.trim());
+  return parts
+}
+
+function buildChunks(pages,docName){
+  const chunks=[];
+  let heading='';
+  let n=0;
+  const push=(page,text)=>{
+    const clean=text.trim();
+    if(clean.length<15)return;
+    chunks.push(indexChunk({
+      id:docName+'#'+(n++),source:'pdf',docName,page,heading,text:clean,figureIds:[]
+    }));
+  };
+  for(const pg of pages){
+    let buf='';
+    for(const b of pg.blocks){
+      const h=(b.heading||'').replace(/\s+/g,' ').trim();
+      if(h&&h!==heading){
+        if(buf.trim())push(pg.page,buf);
+        buf='';heading=h;
+      }
+      if(b.isHeading)continue;
+      if(b.text.length>CHUNK_MAX){
+        if(buf.trim())push(pg.page,buf);
+        buf='';
+        for(const part of splitLongBlock(b.text))push(pg.page,part);
+        continue;
+      }
+      if(buf.length+b.text.length+1>CHUNK_MAX){push(pg.page,buf);buf=''}
+      buf+=(buf?'\n':'')+b.text;
+    }
+    if(buf.trim())push(pg.page,buf);
   }
   return chunks
 }
+
 function getPdfContext(query,maxChars){
   if(!docChunks.length)return'';
-  const kws=expandKeywords(extractKeywords(query));
-  const scored=docChunks.map(c=>({...c,score:kws.length?scoreText(c.text,kws):0.5})).filter(c=>c.score>0).sort((a,b)=>b.score-a.score);
-  if(scored.length){
-    let result='',chars=0;
-    for(const c of scored){
-      if(chars>=maxChars)break;
-      const header=`[${c.docName}]\n`;
-      const space=maxChars-chars-header.length;
-      if(space<60)break;
-      result+=header+c.text.slice(0,space)+'\n\n';
-      chars+=header.length+Math.min(c.text.length,space);
-    }
-    return result.trim()
-  }
-  const docNames=[...new Set(docChunks.map(c=>c.docName))];
-  const samplesPerDoc=Math.max(1,Math.floor(12/docNames.length));
+  const results=retrieve(query,{source:'pdf'});
+  if(results.length)return packChunks(results,maxChars);
+  /* Sin una sola coincidencia: en vez de callar, se entrega el arranque de
+     cada manual para que el modelo vea de qué trata y pueda decir que no
+     encontró la regla, no que el manual no existe. */
+  const byDoc=new Map();
+  for(const c of docChunks)if(!byDoc.has(c.docName))byDoc.set(c.docName,[]);
+  for(const c of docChunks){const arr=byDoc.get(c.docName);if(arr.length<Math.max(1,Math.floor(12/byDoc.size)))arr.push(c)}
   const sampled=[];
-  for(const name of docNames){
-    const these=docChunks.filter(c=>c.docName===name);
-    these.slice(0,samplesPerDoc).forEach(c=>sampled.push(c));
-  }
-  let result='',chars=0;
-  for(const c of sampled){
-    if(chars>=maxChars)break;
-    const header=`[${c.docName}]\n`;
-    const space=maxChars-chars-header.length;
-    if(space<60)break;
-    result+=header+c.text.slice(0,space)+'\n\n';
-    chars+=header.length+Math.min(c.text.length,space);
-  }
-  return result.trim()
+  for(const arr of byDoc.values())for(const c of arr)sampled.push({c,score:0,hits:0});
+  return packChunks(sampled,maxChars)
 }
 
 /* ════════════════════════════════════════════════
@@ -1341,6 +1534,7 @@ function getPdfContext(query,maxChars){
 const PDF_BUDGET=12000,MANUAL_BUDGET=6000,EXTRA_BUDGET=600;
 const PDF_BUDGET_GEMINI=20000;
 function buildContext(query){
+  ultimosFragmentos=[];
   const hasPdfs=docChunks.length>0;
   const parts=[];
   const isGemini=appState.provider==='gemini';
@@ -1438,6 +1632,9 @@ function clearMemory(){
 /* ════════════════════════════════════════════════
    PARSER DE RESPUESTA + GUARDRAILS
 ════════════════════════════════════════════════ */
+/* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
+   viejo guardado en localStorage, sin pedirle que borre nada a mano. */
+const PROMPT_VERSION='8.0';
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
@@ -1445,7 +1642,13 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 3. Menciona al creador SOLO si preguntan explícitamente quién te creó o programó.
 4. [RESPUESTA FINAL] contiene SOLO la respuesta al asesor — nunca repitas ETAPAS ni razonamiento interno.
 5. Conflictos documentados en el contexto → cítalos; nunca digas "no especifica" si hay conflicto registrado.
-6. Otra tienda + tema VM → aclara que solo conoces Mercadep y responde la regla Mercadep si está en el contexto.`;
+6. Otra tienda + tema VM → aclara que solo conoces Mercadep y responde la regla Mercadep si está en el contexto.
+7. CITA OBLIGATORIA: cada fragmento del contexto llega rotulado con su origen — [documento · pág. N · sección].
+   Toda medida, cantidad, porcentaje o regla que tomes de un manual con página va seguida de "(pág. N)".
+   Si el dato viene del manual interno, di "(manual interno)". El asesor tiene que poder ir a verlo.
+8. CERO INVENCIÓN: no completes con conocimiento general de visual merchandising lo que el contexto no diga.
+   Si la respuesta no está en el contexto, dilo con esas palabras: "el manual no lo especifica".
+   Una regla plausible pero no escrita es peor que un "no está": el asesor la ejecuta en el piso.`;
 
 const GREETING_PATTERNS=/^(?:\s*(?:hola|hey|hi|hello|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?|qu[eé]\s+tal|saludos?|buen\s+d[ií]a))[\s!.?]*$/i;
 
@@ -1624,9 +1827,9 @@ function loadSaved(){
       try { localStorage.removeItem('ap_api_key'); } catch {}
     }
     appState.chatModel=localStorage.getItem('ap_chat_model')||'gpt-4o-mini';
-    if(localStorage.getItem('ap_prompt_version')!=='7.2'){
+    if(localStorage.getItem('ap_prompt_version')!==PROMPT_VERSION){
       appState.system=document.getElementById('system-prompt').value;
-      try{localStorage.setItem('ap_system',appState.system);localStorage.setItem('ap_prompt_version','7.2');}catch{}
+      try{localStorage.setItem('ap_system',appState.system);localStorage.setItem('ap_prompt_version',PROMPT_VERSION);}catch{}
     }else{
       appState.system=localStorage.getItem('ap_system')||document.getElementById('system-prompt').value;
     }
@@ -1833,10 +2036,503 @@ function withTimeout(promise, ms, label='operación') {
   ]);
 }
 
+/* ════════════════════════════════════════════════
+   MOTOR 2 — RECONSTRUCCIÓN LAYOUT-AWARE
+
+   El manual de un cliente no es texto corrido: es una presentación.
+   En una misma lámina conviven dos reglas distintas, una en cada
+   columna, a la misma altura. El motor 1 agrupaba los fragmentos
+   solo por coordenada Y, así que fusionaba ambas columnas en una
+   línea y le entregaba al modelo una regla que no existe: el
+   "¿Qué es?" de ALINEACIÓN pegado al de LIMPIEZA.
+
+   Aquí el texto se reconstruye en tres pasos —fragmentos → líneas
+   (cortadas donde hay hueco horizontal) → bloques (agrupados por
+   cercanía)— y solo al final se ordena, por bandas horizontales y
+   de izquierda a derecha dentro de cada banda.
+════════════════════════════════════════════════ */
+const LINE_GAP_RATIO=1.2;      // hueco que corta una línea, en múltiplos de la altura de fuente
+const BLOCK_GAP_RATIO=1.7;     // separación vertical máxima dentro de un bloque
+const BLOCK_OVERLAP_MIN=0.25;  // solape horizontal mínimo para seguir en el mismo bloque
+
+function textItemsToLines(items,vp){
+  const rot=(((vp.rotation||0)%360)+360)%360;
+  const swap=(rot===90||rot===270);
+  const raw=[];
+  for(const it of items){
+    const s=it.str||'';
+    if(!s.trim())continue;
+    const t=pdfjsLib.Util.transform(vp.transform,it.transform);
+    const h=Math.abs(swap?it.width:it.height)||Math.hypot(t[2],t[3])||10;
+    const w=Math.abs(swap?it.height:it.width)||0;
+    raw.push({str:s,x0:t[4],x1:t[4]+w,yBot:t[5],h,cw:s.length?w/s.length:h*0.5});
+  }
+  if(!raw.length)return[];
+  raw.sort((a,b)=>a.yBot-b.yBot||a.x0-b.x0);
+
+  // Franjas de misma línea base
+  const rows=[];
+  for(const it of raw){
+    const row=rows[rows.length-1];
+    if(row&&Math.abs(it.yBot-row.yBot)<=Math.max(2,row.h*0.5)){
+      row.items.push(it);row.h=Math.max(row.h,it.h);
+    }else rows.push({yBot:it.yBot,h:it.h,items:[it]});
+  }
+
+  // Cada franja se corta donde hay un hueco horizontal: ahí acaba una
+  // columna y empieza otra. Es el corte que el motor 1 nunca hizo.
+  const lines=[];
+  for(const row of rows){
+    row.items.sort((a,b)=>a.x0-b.x0);
+    let seg=null;
+    for(const it of row.items){
+      const gapTol=Math.max(it.cw*2.5,row.h*LINE_GAP_RATIO);
+      if(seg&&it.x0-seg.x1<=gapTol){
+        seg.text+=(it.x0-seg.x1>it.cw*0.4?' ':'')+it.str;
+        seg.x1=Math.max(seg.x1,it.x1);
+        seg.h=Math.max(seg.h,it.h);
+      }else{
+        if(seg)lines.push(seg);
+        seg={text:it.str,x0:it.x0,x1:it.x1,yBot:row.yBot,h:Math.max(it.h,row.h)};
+      }
+    }
+    if(seg)lines.push(seg);
+  }
+  for(const ln of lines){
+    ln.text=ln.text.replace(/\s+/g,' ').trim();
+    ln.yTop=ln.yBot-ln.h;
+  }
+  return lines.filter(l=>l.text)
+}
+
+/* El solape se mide contra la ÚLTIMA línea del bloque, no contra su caja
+   acumulada. Midiendo contra la caja, en cuanto un bloque toca un título ancho
+   se vuelve ancho él mismo, y a partir de ahí absorbe las dos columnas: una
+   sola lámina termina siendo un bloque con la página entera dentro.
+
+   Y un título en mayúsculas siempre abre bloque. En estos manuales cada regla
+   empieza por su nombre —ALINEACIÓN, LIMPIEZA, SURTIDO—, así que ese es el
+   corte semántico real de la lámina. */
+function linesToBlocks(lines){
+  lines.sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
+  const blocks=[];
+  const attach=(b,ln)=>{
+    b.lines.push(ln.text);
+    b.x0=Math.min(b.x0,ln.x0);b.x1=Math.max(b.x1,ln.x1);
+    b.yBot=Math.max(b.yBot,ln.yBot);
+    b.lastX0=ln.x0;b.lastX1=ln.x1;b.lastYBot=ln.yBot;b.lastH=ln.h;
+  };
+  for(const ln of lines){
+    const esTitulo=isHeadingText(ln.text);
+    let best=null,bestGap=Infinity;
+    if(!esTitulo)for(const b of blocks){
+      const gap=ln.yTop-b.lastYBot;
+      const tol=Math.max(b.lastH,ln.h);
+      if(gap>tol*BLOCK_GAP_RATIO||gap<-tol)continue;
+      const ov=Math.min(b.lastX1,ln.x1)-Math.max(b.lastX0,ln.x0);
+      const narrow=Math.min(b.lastX1-b.lastX0,ln.x1-ln.x0)||1;
+      if(ov/narrow<BLOCK_OVERLAP_MIN)continue;
+      if(gap<bestGap){best=b;bestGap=gap}
+    }
+    if(best)attach(best,ln);
+    else blocks.push({
+      lines:esTitulo?[]:[ln.text],heading:esTitulo?ln.text:'',
+      hx0:esTitulo?ln.x0:null,hx1:esTitulo?ln.x1:null,hy1:esTitulo?ln.yBot:null,
+      x0:ln.x0,x1:ln.x1,yTop:ln.yTop,yBot:ln.yBot,
+      lastX0:ln.x0,lastX1:ln.x1,lastYBot:ln.yBot,lastH:ln.h
+    });
+  }
+  return blocks
+}
+
+/* Orden de lectura: bandas horizontales de arriba abajo, y dentro de cada
+   banda de izquierda a derecha. Ordenar por Y a secas intercala las columnas. */
+function orderBlocks(blocks){
+  blocks.sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
+  const bands=[];
+  for(const b of blocks){
+    const band=bands[bands.length-1];
+    if(band&&b.yTop<band.yBot-Math.min(b.lastH,4)){
+      band.items.push(b);band.yBot=Math.max(band.yBot,b.yBot);
+    }else bands.push({yBot:b.yBot,items:[b]});
+  }
+  const out=[];
+  for(const band of bands){band.items.sort((a,b)=>a.x0-b.x0);out.push(...band.items)}
+  return out
+}
+
+function isHeadingText(t){
+  const s=(t||'').trim();
+  if(s.length<3||s.length>80)return false;
+  if(/[,;]$/.test(s))return false;  // "TODO LUGAR," es media frase de una cita, no un título
+  const letters=s.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g,'');
+  if(letters.length<3)return false;
+  return letters===letters.toUpperCase()
+}
+
+/* El título de un bloque es el que tiene ENCIMA y en su misma columna, no el
+   último que apareció en el orden de lectura. En una lámina de dos reglas en
+   paralelo, el orden de lectura pone ALINEACIÓN, luego LIMPIEZA, y solo
+   después los cuerpos de ambas: heredar "el último título visto" le cuelga a
+   la regla de alineación la etiqueta de limpieza. Citar mal la sección es peor
+   que no citarla. */
+const HEADING_MAX_DY=500;      // más abajo de esto ya es otra sección de la lámina
+const HEADING_OFFSET_PENALTY=120; // un título que no solapa en X puede seguir siendo el tuyo, pero pesa
+function assignHeadings(blocks){
+  /* Candidato es todo bloque que empiece por título, aunque traiga cuerpo pegado:
+     SURTIDO arrastra su primera línea de texto y aun así titula las tres cajas
+     que tiene debajo. Se compara contra la caja del título, no la del bloque. */
+  const titulos=blocks.filter(b=>b.heading&&b.hy1!=null);
+  for(const b of blocks){
+    if(b.heading)continue;
+    let best=null,bestD=Infinity;
+    for(const h of titulos){
+      const dy=b.y0-h.hy1;
+      if(dy<-2||dy>HEADING_MAX_DY)continue;
+      /* Un título centrado sobre varias columnas no solapa con ninguna, así que
+         no puede exigirse solape: se penaliza y se deja competir por cercanía. */
+      const solapa=Math.min(h.hx1,b.x1)-Math.max(h.hx0,b.x0)>0;
+      const d=dy+(solapa?0:HEADING_OFFSET_PENALTY);
+      if(d<bestD){best=h;bestD=d}
+    }
+    if(best)b.heading=best.heading;
+  }
+  return blocks
+}
+
+function pageToBlocks(content,vp,pageNum){
+  const lines=textItemsToLines(content.items,vp);
+  /* Para tapar el texto al buscar figuras hay que usar la caja de cada LÍNEA.
+     La del bloque es la unión de todas sus líneas: en una lámina donde el texto
+     rodea a una foto, esa unión se traga la foto y la página se queda sin nada
+     que detectar. */
+  const textBoxes=lines.map(l=>({x0:l.x0,y0:l.yTop,x1:l.x1,y1:l.yBot}));
+  const blocks=orderBlocks(linesToBlocks(lines));
+  return{
+    page:pageNum,textBoxes,
+    blocks:assignHeadings(blocks.map(b=>({
+      text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
+      heading:b.heading,
+      isHeading:!b.lines.length&&!!b.heading,
+      hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
+      x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
+    })).filter(b=>b.text))
+  }
+}
+
+/* ════════════════════════════════════════════════
+   MOTOR 2 — DETECCIÓN DE FIGURAS
+
+   Los planogramas de estos manuales NO son fotos: son dibujos
+   vectoriales. En una lámina de planograma hay ~97 objetos de trazo y
+   las únicas imágenes incrustadas son íconos de leyenda de 36×18 px.
+   Sacar los bitmaps del PDF —lo que hace casi todo tutorial— devuelve
+   la basura y se deja justo lo que el asesor viene a consultar.
+
+   Por eso se hace lo que hacen los parsers serios (Marker, MinerU):
+   renderizar la página y recortar la REGIÓN. Y para encontrar la
+   región, el principio de PDFFigures 2.0 —geometría, sin modelos—:
+   dónde hay tinta que no es texto.
+════════════════════════════════════════════════ */
+const FIG_SCALE=2;                 // resolución del render del que se recorta
+/* La rejilla tiene que ser más fina que el hueco entre dos columnas. A 110
+   celdas cada una mide 5.6 pt y el pasillo entre los paneles de una lámina mide
+   10: cualquier vecindad los une y la página entera sale como una sola figura. */
+const FIG_GRID_COLS=220;           // ancho de la rejilla de análisis, en celdas
+const FIG_MIN_DENSITY=0.06;        // un marco vacío deja una caja enorme y sin nada dentro
+/* Medido sobre el manual real: las figuras de verdad —fotos, planogramas—
+   quedan entre 0.00 y 0.11 de cobertura de texto; los paneles de regla, entre
+   0.27 y 0.90. El corte cae en el hueco que hay entre los dos grupos. */
+const FIG_MAX_TEXT_COVER=0.25;
+const FIG_MIN_SIDE=70;             // lado mínimo en puntos PDF
+const FIG_MAX_AREA_RATIO=0.45;     // por encima de esto es el fondo de la diapositiva
+const FIG_TEXT_PAD=3;              // margen al borrar la caja de un texto
+const FIG_JPEG_QUALITY=0.72;
+const FIG_MAX_WIDTH=1000;
+const FIG_REPEAT_RATIO=0.1;        // la misma caja en el mismo sitio en varias láminas = plantilla
+
+async function renderPageCanvas(page,scale){
+  const vp=page.getViewport({scale});
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  return canvas
+}
+
+/* Rejilla de tinta: qué celdas se apartan del color de fondo. El fondo se
+   deduce del color más frecuente y no se asume blanco — estas láminas traen
+   fondos de color y con un blanco fijo la página entera contaría como figura. */
+function inkGrid(canvas,cols){
+  const rows=Math.max(1,Math.round(cols*canvas.height/canvas.width));
+  const small=document.createElement('canvas');
+  small.width=cols;small.height=rows;
+  const sctx=small.getContext('2d',{willReadFrequently:true});
+  sctx.drawImage(canvas,0,0,cols,rows);
+  const data=sctx.getImageData(0,0,cols,rows).data;
+  const cuenta=new Map();
+  for(let i=0;i<data.length;i+=4){
+    const k=((data[i]>>4)<<8)|((data[i+1]>>4)<<4)|(data[i+2]>>4);
+    cuenta.set(k,(cuenta.get(k)||0)+1);
+  }
+  let fondo=0,max=-1;
+  for(const[k,v]of cuenta)if(v>max){max=v;fondo=k}
+  const fr=((fondo>>8)&15)*17,fg=((fondo>>4)&15)*17,fb=(fondo&15)*17;
+  const grid=new Uint8Array(cols*rows);
+  for(let i=0,c=0;i<data.length;i+=4,c++){
+    const d=Math.abs(data[i]-fr)+Math.abs(data[i+1]-fg)+Math.abs(data[i+2]-fb);
+    grid[c]=d>60?1:0;
+  }
+  return{grid,cols,rows}
+}
+
+function borrarTexto(g,blocks,vpW,vpH){
+  const cw=vpW/g.cols,ch=vpH/g.rows;
+  for(const b of blocks){
+    const x0=Math.max(0,Math.floor((b.x0-FIG_TEXT_PAD)/cw));
+    const x1=Math.min(g.cols,Math.ceil((b.x1+FIG_TEXT_PAD)/cw));
+    const y0=Math.max(0,Math.floor((b.y0-FIG_TEXT_PAD)/ch));
+    const y1=Math.min(g.rows,Math.ceil((b.y1+FIG_TEXT_PAD)/ch));
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)g.grid[y*g.cols+x]=0;
+  }
+}
+
+function dilatar(g){
+  const out=new Uint8Array(g.grid.length);
+  for(let y=0;y<g.rows;y++)for(let x=0;x<g.cols;x++){
+    if(!g.grid[y*g.cols+x])continue;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const ny=y+dy,nx=x+dx;
+      if(ny>=0&&ny<g.rows&&nx>=0&&nx<g.cols)out[ny*g.cols+nx]=1;
+    }
+  }
+  return{grid:out,cols:g.cols,rows:g.rows}
+}
+
+function componentes(g){
+  const visto=new Uint8Array(g.grid.length);
+  const cajas=[];
+  const pila=[];
+  for(let i=0;i<g.grid.length;i++){
+    if(!g.grid[i]||visto[i])continue;
+    let x0=i%g.cols,x1=x0,y0=(i/g.cols)|0,y1=y0,celdas=0;
+    pila.push(i);visto[i]=1;
+    while(pila.length){
+      const p=pila.pop();celdas++;
+      const px=p%g.cols,py=(p/g.cols)|0;
+      if(px<x0)x0=px;if(px>x1)x1=px;
+      if(py<y0)y0=py;if(py>y1)y1=py;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const nx=px+dx,ny=py+dy;
+        if(nx<0||ny<0||nx>=g.cols||ny>=g.rows)continue;
+        const n=ny*g.cols+nx;
+        if(g.grid[n]&&!visto[n]){visto[n]=1;pila.push(n)}
+      }
+    }
+    cajas.push({x0,y0,x1:x1+1,y1:y1+1,celdas});
+  }
+  return cajas
+}
+
+function fusionarCajas(cajas,margen){
+  let lista=cajas.map(c=>({...c}));
+  let cambio=true;
+  while(cambio){
+    cambio=false;
+    const out=[];
+    for(const c of lista){
+      let unido=false;
+      for(const o of out){
+        if(c.x0<o.x1+margen&&c.x1>o.x0-margen&&c.y0<o.y1+margen&&c.y1>o.y0-margen){
+          o.x0=Math.min(o.x0,c.x0);o.y0=Math.min(o.y0,c.y0);
+          o.x1=Math.max(o.x1,c.x1);o.y1=Math.max(o.y1,c.y1);
+          o.celdas+=c.celdas;
+          unido=true;cambio=true;break;
+        }
+      }
+      if(!unido)out.push({...c});
+    }
+    lista=out;
+  }
+  return lista
+}
+
+function headingForBox(box,titulos){
+  let best=null,bestD=Infinity;
+  for(const h of titulos){
+    const dy=box.y0-h.hy1;
+    if(dy<-2||dy>HEADING_MAX_DY)continue;
+    const solapa=Math.min(h.hx1,box.x1)-Math.max(h.hx0,box.x0)>0;
+    const d=dy+(solapa?0:HEADING_OFFSET_PENALTY);
+    if(d<bestD){best=h;bestD=d}
+  }
+  return best?best.heading:''
+}
+
+/* El pie de figura es el texto que la toca por arriba o por dentro. Con eso la
+   figura ya se puede recuperar buscando —"planograma", "siluetas"— sin que
+   ningún modelo haya mirado el dibujo. */
+function captionParaFigura(box,blocks){
+  let best=null,bestD=Infinity;
+  for(const b of blocks){
+    const solapa=Math.min(b.x1,box.x1)-Math.max(b.x0,box.x0);
+    if(solapa<=0)continue;
+    const dyArriba=box.y0-b.y1;
+    const dentro=b.y0>=box.y0-4&&b.y1<=box.y1+4;
+    const d=dentro?0:(dyArriba>=-4&&dyArriba<=70?dyArriba+1:Infinity);
+    if(d<bestD){best=b;bestD=d}
+  }
+  return best?best.text.replace(/\s+/g,' ').trim().slice(0,160):''
+}
+
+function recortar(canvas,box,scale){
+  const sx=Math.max(0,box.x0*scale),sy=Math.max(0,box.y0*scale);
+  const sw=Math.min(canvas.width-sx,(box.x1-box.x0)*scale);
+  const sh=Math.min(canvas.height-sy,(box.y1-box.y0)*scale);
+  if(sw<4||sh<4)return null;
+  const w=Math.min(FIG_MAX_WIDTH,sw),h=sh*(w/sw);
+  const out=document.createElement('canvas');
+  out.width=Math.round(w);out.height=Math.round(h);
+  out.getContext('2d').drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height);
+  return out.toDataURL('image/jpeg',FIG_JPEG_QUALITY)
+}
+
+/* Un panel de color con texto encima deja, al borrar el texto, un rectángulo
+   relleno indistinguible de una foto: misma densidad, mismo tamaño. Lo que sí
+   los separa es cuánto de la caja ocupaba el texto — un panel de regla va casi
+   lleno; un planograma trae rótulos sueltos y una foto, ninguno. */
+function coberturaDeTexto(box,blocks){
+  const area=(box.x1-box.x0)*(box.y1-box.y0);
+  if(area<=0)return 1;
+  let cubierto=0;
+  for(const b of blocks){
+    const w=Math.min(b.x1,box.x1)-Math.max(b.x0,box.x0);
+    const h=Math.min(b.y1,box.y1)-Math.max(b.y0,box.y0);
+    if(w>0&&h>0)cubierto+=w*h;
+  }
+  return Math.min(1,cubierto/area)
+}
+
+/* La geometría encuentra dibujos, pero no separa una foto de su panel cuando
+   se tocan. Para las fotos hay una vía directa: preguntarle al PDF dónde
+   coloca cada imagen. No sustituye a la detección geométrica —los planogramas
+   no son imágenes— sino que la completa. El mínimo de tamaño se encarga de los
+   íconos de leyenda de 36×18. */
+async function rectangulosDeImagen(page,vp){
+  const OPS=pdfjsLib.OPS;
+  const ops=await page.getOperatorList();
+  let ctm=vp.transform.slice();
+  const pila=[],rects=[];
+  for(let i=0;i<ops.fnArray.length;i++){
+    const fn=ops.fnArray[i];
+    if(fn===OPS.save)pila.push(ctm.slice());
+    else if(fn===OPS.restore)ctm=pila.pop()||ctm;
+    else if(fn===OPS.transform)ctm=pdfjsLib.Util.transform(ctm,ops.argsArray[i]);
+    else if(fn===OPS.paintImageXObject||fn===OPS.paintJpegXObject||fn===OPS.paintImageMaskXObject){
+      const p=[[0,0],[1,0],[0,1],[1,1]].map(q=>pdfjsLib.Util.applyTransform(q,ctm));
+      const xs=p.map(q=>q[0]),ys=p.map(q=>q[1]);
+      rects.push({x0:Math.min(...xs),y0:Math.min(...ys),x1:Math.max(...xs),y1:Math.max(...ys)});
+    }
+  }
+  return rects
+}
+
+function seSolapan(a,b){
+  const w=Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0);
+  const h=Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0);
+  if(w<=0||h<=0)return 0;
+  const inter=w*h;
+  return inter/Math.min((a.x1-a.x0)*(a.y1-a.y0),(b.x1-b.x0)*(b.y1-b.y0))
+}
+
+const FIG_OPLIST_TIMEOUT_MS=8000;
+async function detectarFiguras(page,pageInfo,docName){
+  const vp=page.getViewport({scale:1});
+  /* Antes de renderizar: pedir la lista de operadores DESPUÉS del render deja
+     colgada la promesa y se pierden las figuras de toda la página. Con su
+     propio límite, además, un PDF raro no bloquea la carga entera. */
+  let rectsImagen=[];
+  try{
+    rectsImagen=await withTimeout(rectangulosDeImagen(page,vp),FIG_OPLIST_TIMEOUT_MS,'Imágenes de la página');
+  }catch(e){console.warn('rectangulosDeImagen',e.message)}
+  const canvas=await renderPageCanvas(page,FIG_SCALE);
+  const g=inkGrid(canvas,FIG_GRID_COLS);
+  borrarTexto(g,pageInfo.textBoxes||pageInfo.blocks,vp.width,vp.height);
+  const cw=vp.width/g.cols,ch=vp.height/g.rows;
+  const areaPagina=vp.width*vp.height;
+  const titulos=pageInfo.blocks.filter(b=>b.heading&&b.hy1!=null);
+
+  /* Primero agrupar, después filtrar. Al revés, un planograma —que es un dibujo
+     de líneas sueltas— se descarta trazo a trazo por poco denso y desaparece
+     justo la lámina que más se consulta. Agrupado, el conjunto sí tiene cuerpo. */
+  const piezas=componentes(g).filter(c=>c.celdas>=3&&Math.min(c.x1-c.x0,c.y1-c.y0)>2);
+  const aPuntos=lista=>lista
+    .map(c=>({x0:c.x0*cw,y0:c.y0*ch,x1:c.x1*cw,y1:c.y1*ch,celdas:c.celdas}))
+    .filter(c=>(c.x1-c.x0)>=FIG_MIN_SIDE&&(c.y1-c.y0)>=FIG_MIN_SIDE)
+    .filter(c=>((c.x1-c.x0)*(c.y1-c.y0))/areaPagina<=FIG_MAX_AREA_RATIO)
+    .filter(c=>(c.celdas*cw*ch)/((c.x1-c.x0)*(c.y1-c.y0))>=FIG_MIN_DENSITY);
+
+  /* Dos agrupados, porque no hay un solo margen bueno: uno amplio para que el
+     dibujo de líneas quede entero, y otro estrecho para rescatar las fotos que
+     viven DENTRO de un panel de regla — el panel se descarta por ser texto, y
+     con él se iría la foto que ilustra la regla. */
+  const amplias=aPuntos(fusionarCajas(piezas,2)).filter(c=>coberturaDeTexto(c,pageInfo.blocks)<=FIG_MAX_TEXT_COVER);
+  const dentroDe=(a,b)=>a.x0>=b.x0-2&&a.y0>=b.y0-2&&a.x1<=b.x1+2&&a.y1<=b.y1+2;
+  const finas=aPuntos(fusionarCajas(piezas,1))
+    .filter(c=>coberturaDeTexto(c,pageInfo.blocks)<=FIG_MAX_TEXT_COVER/2)
+    .filter(c=>!amplias.some(a=>dentroDe(c,a)));
+  const geometricas=amplias.concat(finas);
+
+  const imagenes=rectsImagen
+    .filter(r=>(r.x1-r.x0)>=FIG_MIN_SIDE&&(r.y1-r.y0)>=FIG_MIN_SIDE)
+    .filter(r=>((r.x1-r.x0)*(r.y1-r.y0))/areaPagina<=FIG_MAX_AREA_RATIO)
+    .filter(r=>!geometricas.some(c=>seSolapan(r,c)>0.5));
+
+  const cajas=geometricas.concat(imagenes);
+
+  const figuras=[];
+  for(const c of cajas){
+    const txt=coberturaDeTexto(c,pageInfo.blocks);
+    const dataUrl=recortar(canvas,c,FIG_SCALE);
+    if(!dataUrl)continue;
+    figuras.push({
+      id:docName+'#f'+pageInfo.page+'-'+figuras.length,
+      docName,page:pageInfo.page,box:c,dataUrl,txt,
+      caption:captionParaFigura(c,pageInfo.blocks),
+      heading:headingForBox(c,titulos),
+      vlmDescription:null
+    });
+  }
+  canvas.width=canvas.height=0;   // suelta el bitmap grande cuanto antes
+  return figuras
+}
+
+/* La banda de encabezado y el logo de esquina salen en TODAS las láminas. Son
+   plantilla, no contenido: si se dejan, cada respuesta viene acompañada del
+   logo como si fuera evidencia. */
+function descartarRepetidas(figuras,totalPaginas){
+  const clave=f=>[Math.round(f.box.x0/12),Math.round(f.box.y0/12),Math.round((f.box.x1-f.box.x0)/12),Math.round((f.box.y1-f.box.y0)/12)].join(':');
+  const paginasPorClave=new Map();
+  for(const f of figuras){
+    const k=clave(f);
+    if(!paginasPorClave.has(k))paginasPorClave.set(k,new Set());
+    paginasPorClave.get(k).add(f.page);
+  }
+  const limite=Math.max(3,Math.ceil(totalPaginas*FIG_REPEAT_RATIO));
+  return figuras.filter(f=>paginasPorClave.get(clave(f)).size<limite)
+}
+
+function pagesToText(pages){
+  return pages.map(pg=>
+    `\n[Página ${pg.page}]\n`+pg.blocks.map(b=>(b.heading&&!b.isHeading?'## '+b.heading+'\n':'')+(b.isHeading?'## ':'')+b.text).join('\n\n')
+  ).join('\n')
+}
+
 async function extractPdf(file,onProgress){
   return new Promise(resolve=>{
     const reader=new FileReader();
-    reader.onerror = () => resolve('[ERROR: No se pudo leer el archivo]');
+    reader.onerror = () => resolve({error:'No se pudo leer el archivo'});
     reader.onload=async e=>{
       try{
         const buf=e.target.result;
@@ -1851,44 +2547,239 @@ async function extractPdf(file,onProgress){
           `Extracción de "${file.name}"`
         );
         const totalPages=pdf.numPages;
-        let fullText='';
+        const pages=[];
+        let figuras=[];
 
         for(let i=1;i<=totalPages;i++){
           onProgress&&onProgress(i,totalPages);
-          const content = await withTimeout(
-            pdf.getPage(i).then(p => p.getTextContent()),
+          const page = await withTimeout(
+            pdf.getPage(i),
             PDF_TIMEOUT_MS,
             `Página ${i} de "${file.name}"`
           );
-          const pg = { getTextContent: async () => content };
-          let pageText=`\n[Página ${i}]\n`;
-          let lastY=null,currentLine='';
-          for(const item of content.items){
-            const y=Math.round(item.transform[5]);
-            if(lastY!==null&&Math.abs(y-lastY)>3){
-              if(currentLine.trim()){
-                const clean=currentLine.trim();
-                const isHeader=clean.length<80&&clean===clean.toUpperCase()&&clean.length>2;
-                pageText+=(isHeader?'\n## ':'')+clean+'\n';
-              }
-              currentLine='';
-            }
-            currentLine+=(item.str||'')+' ';lastY=y;
-          }
-          if(currentLine.trim())pageText+=currentLine.trim()+'\n';
-          fullText+=pageText;
+          const content = await withTimeout(
+            page.getTextContent(),
+            PDF_TIMEOUT_MS,
+            `Texto de la página ${i} de "${file.name}"`
+          );
+          const info=pageToBlocks(content,page.getViewport({scale:1}),i);
+          pages.push(info);
+          /* Si el motor visual falla en una página no se cae la carga: el texto
+             de esa lámina sigue sirviendo, solo se queda sin figura. */
+          try{
+            figuras.push(...await withTimeout(
+              detectarFiguras(page,info,file.name),
+              PDF_TIMEOUT_MS,
+              `Figuras de la página ${i} de "${file.name}"`
+            ));
+          }catch(e){console.warn('detectarFiguras pág.',i,e)}
         }
-        resolve(fullText.trim()||'[PDF sin contenido extraíble]')
+
+        const chars=pages.reduce((n,pg)=>n+pg.blocks.reduce((m,b)=>m+b.text.length,0),0);
+        if(chars<50)return resolve({error:'El PDF no tiene capa de texto — parece escaneado o exportado como imagen. Aún no se puede leer sin OCR.'});
+        resolve({error:null,pages,figures:descartarRepetidas(figuras,totalPages)})
       }catch(err){
         console.error('extractPdf error:', err);
         const msg = err.message?.includes('Timeout')
           ? err.message
           : 'No se pudo leer el PDF. Verifica que no esté protegido con contraseña o corrupto.';
-        resolve(`[ERROR: ${msg}]`);
+        resolve({error:msg});
       }
     };
     reader.readAsArrayBuffer(file)
   })
+}
+
+/* ════════════════════════════════════════════════
+   MANUALES GUARDADOS EN EL DISPOSITIVO
+
+   Procesar 28 láminas cuesta ~20 s. Volver a pagarlos cada vez que
+   el asesor abre la página, desde el celular y de pie frente al
+   mueble, es la diferencia entre una herramienta y una demo.
+
+   Se guarda el índice ya cocinado —texto, fragmentos y figuras—
+   indexado por el hash del archivo. Vive en el dispositivo del
+   asesor, nunca sale a la red, y hay un botón visible para
+   borrarlo. Las API keys siguen en sessionStorage: aquí no entra
+   ninguna credencial.
+════════════════════════════════════════════════ */
+const DB_NOMBRE='asistente_piso',DB_STORE='manuales',DB_VERSION=1;
+
+function abrirDB(){
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB)return reject(new Error('sin IndexedDB'));
+    const req=indexedDB.open(DB_NOMBRE,DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE,{keyPath:'hash'});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  })
+}
+
+function txDB(modo,fn){
+  return abrirDB().then(db=>new Promise((resolve,reject)=>{
+    const tx=db.transaction(DB_STORE,modo);
+    const req=fn(tx.objectStore(DB_STORE));
+    tx.oncomplete=()=>{db.close();resolve(req&&req.result)};
+    tx.onerror=()=>{db.close();reject(tx.error)};
+  }))
+}
+
+async function hashArchivo(file){
+  const buf=await file.arrayBuffer();
+  const digest=await crypto.subtle.digest('SHA-256',buf);
+  return[...new Uint8Array(digest)].slice(0,10).map(b=>b.toString(16).padStart(2,'0')).join('')
+}
+
+/* Los campos del índice invertido (tf, len) no se guardan: se recalculan al
+   restaurar. Ocupan más que el texto del que salen y se derivan de él. */
+async function guardarManual(hash,doc,chunks,figuras){
+  const limpio=chunks.map(c=>({id:c.id,source:c.source,docName:c.docName,page:c.page,heading:c.heading,text:c.text,figureIds:c.figureIds}));
+  await txDB('readwrite',st=>st.put({hash,doc,chunks:limpio,figuras,guardado:Date.now()}));
+}
+const leerManual=hash=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
+const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
+
+async function borrarManualesGuardados(){
+  try{
+    await txDB('readwrite',st=>st.clear());
+    showToast('🗑️ Manuales guardados borrados de este dispositivo. Los que ya están cargados siguen en esta sesión.','warn',4000);
+  }catch(e){showToast('No se pudieron borrar los manuales guardados.','error',4000)}
+  renderDocs();
+}
+
+async function renderAccionesDocs(){
+  const wrap=document.getElementById('docs-acciones'),nota=document.getElementById('docs-nota'),btn=document.getElementById('btn-describir');
+  if(!wrap)return;
+
+  /* El botón de describir solo aparece si hay algo que describir y con qué:
+     ofrecerlo sin key sería prometer algo que no va a pasar. */
+  const pendientes=docFigures.filter(f=>!f.vlmDescription).length;
+  if(btn){
+    if(describiendo){btn.style.display='';btn.textContent='■ Detener descripción'}
+    else if(pendientes&&appState.apiKey&&appState.apiKey.length>=10){
+      btn.style.display='';
+      btn.textContent=`👁 Describir ${pendientes} figura${pendientes>1?'s':''} con IA`;
+    }else btn.style.display='none';
+  }
+
+  let guardados=[];
+  try{guardados=await listarManuales()||[]}catch{}
+  if(!guardados.length&&!(btn&&btn.style.display===''))
+    {wrap.style.display='none';return}
+  const figs=guardados.reduce((n,g)=>n+(g.figuras?g.figuras.length:0),0);
+  nota.textContent=guardados.length
+    ?`${guardados.length} manual${guardados.length>1?'es':''} guardado${guardados.length>1?'s':''} en este dispositivo (${figs} figuras). No sale a la red; se restaura sin volver a procesarlo.`
+    :'';
+  wrap.style.display='flex';
+}
+
+/* ════════════════════════════════════════════════
+   DESCRIPCIÓN DE FIGURAS CON IA — opcional
+
+   Con el caption por proximidad, una figura ya se encuentra: el
+   planograma se recupera buscando "planograma". Lo que el caption no
+   da es lo que hay DENTRO — los rótulos del plano, cuántas prendas
+   hay en la barra, qué dice la medida escrita sobre la foto.
+
+   Eso lo lee un modelo con visión, una sola vez por figura, y se
+   guarda como texto indexado. Es opcional y va apagado: sin key la
+   app funciona igual, solo sin esta capa.
+════════════════════════════════════════════════ */
+const VLM_PROMPT=`Estás viendo un recorte de un manual de exhibición de tienda. Describe SOLO lo que se ve, en español, en 2 a 4 frases:
+· Transcribe literalmente cualquier rótulo, número, medida o porcentaje visible.
+· Si es un plano o diagrama, di qué zonas y muebles aparecen y cómo se distribuyen.
+· Si es una foto de producto o maniquí, di qué prendas se ven y cómo están colocadas.
+No interpretes reglas ni añadas nada que no esté a la vista. Si algo no se distingue, dilo.`;
+const VLM_MAX_TOKENS=300,VLM_PAUSA_MS=400;
+let describiendo=false;
+
+async function describirFiguraConIA(fig,provider,key,model,signal){
+  if(provider==='gemini'){
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},signal,
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:VLM_PROMPT},{inline_data:{mime_type:'image/jpeg',data:fig.dataUrl.split(',')[1]}}]}],
+        generationConfig:{maxOutputTokens:VLM_MAX_TOKENS,temperature:0.1}
+      })
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
+    return(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
+  }
+  const url=provider==='openai'
+    ?'https://api.openai.com/v1/chat/completions'
+    :'https://models.inference.ai.azure.com/chat/completions';
+  const res=await fetch(url,{
+    method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},signal,
+    body:JSON.stringify({model,max_tokens:VLM_MAX_TOKENS,temperature:0.1,messages:[{role:'user',content:[
+      {type:'text',text:VLM_PROMPT},
+      {type:'image_url',image_url:{url:fig.dataUrl}}
+    ]}]})
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
+  return(data.choices?.[0]?.message?.content||'').trim();
+}
+
+function chunkDeFigura(fig){
+  return indexChunk({
+    id:fig.id+'-desc',source:'pdf',docName:fig.docName,page:fig.page,
+    heading:fig.heading,isFigure:true,figureIds:[fig.id],
+    text:(fig.caption?fig.caption+'\n':'')+fig.vlmDescription
+  })
+}
+
+async function describirFiguras(){
+  if(describiendo){describiendo=false;return}
+  const provider=appState.provider,key=appState.apiKey;
+  if(!key||key.length<10){showToast('Conecta una API key en ⚙️ Config para describir figuras.','warn',4000);return}
+  const pendientes=docFigures.filter(f=>!f.vlmDescription);
+  if(!pendientes.length){showToast('Todas las figuras ya están descritas.','info',3000);return}
+
+  describiendo=true;
+  renderAccionesDocs();
+  const procWrap=document.getElementById('proc-wrap'),procMsg=document.getElementById('proc-msg'),procBar=document.getElementById('proc-bar');
+  procWrap.style.display='block';
+  const model=appState.chatModel;
+  let hechas=0,fallos=0;
+  for(const fig of pendientes){
+    if(!describiendo)break;
+    procMsg.textContent=`👁 Describiendo figura ${hechas+1}/${pendientes.length} (pág. ${fig.page})…`;
+    procBar.style.width=Math.round((hechas/pendientes.length)*100)+'%';
+    try{
+      fig.vlmDescription=await describirFiguraConIA(fig,provider,key,model);
+      if(fig.vlmDescription){docChunks.push(chunkDeFigura(fig));hechas++;fallos=0}
+    }catch(e){
+      console.warn('describirFigura',e);
+      fallos++;
+      /* Tres fallos seguidos es un problema de cuota o de key, no de una figura
+         concreta: seguir sería quemar peticiones para nada. */
+      if(fallos>=3){showToast(`Se detuvo tras 3 errores seguidos: ${e.message}`,'error',6000);break}
+    }
+    await new Promise(r=>setTimeout(r,VLM_PAUSA_MS));
+  }
+  describiendo=false;
+  procWrap.style.display='none';
+  rebuildCorpus();
+  renderDocs();
+  if(hechas)await reguardarManuales();
+  showToast(hechas?`👁 ${hechas} figura${hechas>1?'s':''} descrita${hechas>1?'s':''} e indexada${hechas>1?'s':''}.`:'No se describió ninguna figura.',hechas?'success':'warn',4000);
+}
+
+/* Vuelve a guardar lo que ya está en el dispositivo para que las descripciones
+   —que sí costaron peticiones— no haya que volver a pedirlas mañana. */
+async function reguardarManuales(){
+  for(const doc of docs){
+    if(!doc.hash)continue;
+    try{
+      await guardarManual(doc.hash,doc,
+        docChunks.filter(c=>c.docName===doc.name),
+        docFigures.filter(f=>f.docName===doc.name));
+    }catch(e){console.warn('reguardarManuales',e)}
+  }
 }
 
 async function handleFiles(fileList){
@@ -1935,21 +2826,44 @@ async function handleFiles(fileList){
 
   for(const file of accepted){
     procBar.style.width='0%';
-    const text=await extractPdf(file,(page,total)=>{
-      procBar.style.width=Math.round((page/total)*100)+'%';
-      procMsg.textContent=`⏳ Página ${page}/${total} — extrayendo texto…`;
-    });
 
-    // Si la extracción marcó error, no agregar el doc
-    if (text.startsWith('[ERROR:')) {
-      showToast(`❌ "${file.name}": ${text.replace('[ERROR: ','').replace(']','')}`, 'error', 6000);
+    let hash=null;
+    try{
+      procMsg.textContent='⏳ Comprobando si este manual ya está indexado…';
+      hash=await hashArchivo(file);
+    }catch(e){console.warn('hashArchivo',e)}
+    const guardado=hash?await leerManual(hash):null;
+    if(guardado&&guardado.chunks&&guardado.chunks.length){
+      docChunks.push(...guardado.chunks.map(indexChunk));
+      docFigures.push(...(guardado.figuras||[]));
+      docs.push(guardado.doc);
+      rebuildCorpus();
+      showToast(`✓ "${file.name}" restaurado de este dispositivo — no hizo falta reprocesarlo`,'success',3500);
       continue;
     }
 
-    const chunks=chunkDocument(text,file.name);
+    const result=await extractPdf(file,(page,total)=>{
+      procBar.style.width=Math.round((page/total)*100)+'%';
+      procMsg.textContent=`⏳ Página ${page}/${total} — reconstruyendo texto y figuras…`;
+    });
+
+    // Si la extracción marcó error, no agregar el doc
+    if (result.error) {
+      showToast(`❌ "${file.name}": ${result.error}`, 'error', 6000);
+      continue;
+    }
+
+    const chunks=buildChunks(result.pages,file.name);
+    const figuras=result.figures||[];
+    const doc={name:file.name,hash,size:(file.size/1024).toFixed(0)+' KB',chunkCount:chunks.length,pageCount:result.pages.length,figureCount:figuras.length};
     docChunks.push(...chunks);
-    docs.push({name:file.name,size:(file.size/1024).toFixed(0)+' KB',chunkCount:chunks.length});
-    showToast(`✓ "${file.name}" procesado (${chunks.length} fragmentos)`, 'success', 3000);
+    docFigures.push(...figuras);
+    docs.push(doc);
+    rebuildCorpus();
+    showToast(`✓ "${file.name}" procesado — ${result.pages.length} páginas, ${chunks.length} fragmentos, ${figuras.length} figuras`, 'success', 3000);
+    /* Guardar no debe poder tumbar la carga: si el dispositivo no tiene cuota
+       o bloquea IndexedDB, el manual ya está usable en esta sesión. */
+    if(hash)guardarManual(hash,doc,chunks,figuras).catch(e=>console.warn('guardarManual',e));
   }
   procWrap.style.display='none';
   renderDocs();
@@ -1963,20 +2877,23 @@ function renderDocs(){
       <div class="doc-icon">📄</div>
       <span class="doc-name">${escapeHtml(d.name)}</span>
       <span class="doc-size">${escapeHtml(d.size)}</span>
-      <span class="doc-chunks">${d.chunkCount} frag.</span>
+      <span class="doc-chunks">${d.pageCount?d.pageCount+' pág. · ':''}${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}</span>
       <button class="doc-remove" onclick="removeDoc(${i})">✕</button>
     </div>`).join('');
   list.innerHTML=builtinHTML+userHTML;
   const b=document.getElementById('badge');b.style.display='';b.textContent=docs.length+1;
   if(docs.length>0){
     ragInfo.style.display='block';
-    ragInfo.textContent=`✦ RAG activo — ${docChunks.length} fragmentos en ${docs.length} manual${docs.length>1?'es':''}.`;
+    ragInfo.textContent=`✦ RAG activo — ${docChunks.length} fragmentos y ${docFigures.length} figuras en ${docs.length} manual${docs.length>1?'es':''}.`;
   }else ragInfo.style.display='none';
+  renderAccionesDocs();
 }
 function removeDoc(i){
   const name=docs[i].name;
   docs.splice(i,1);
   docChunks=docChunks.filter(c=>c.docName!==name);
+  docFigures=docFigures.filter(f=>f.docName!==name);
+  rebuildCorpus();
   renderDocs();
   showToast(`🗑️ "${name}" eliminado`, 'warn', 2500);
 }
@@ -1986,7 +2903,12 @@ function removeDoc(i){
 ════════════════════════════════════════════════ */
 function getSourceInfo(query,contextBuilt,memUsed,hasPdfs){
   const sources=[];
-  if(hasPdfs&&contextBuilt)sources.push({type:'pdf',label:'PDF temporal'});
+  /* Con el contexto en la mano se puede decir QUÉ páginas se consultaron, no
+     solo que "había un PDF": es la diferencia entre una etiqueta y una pista. */
+  const paginas=typeof contextBuilt==='string'
+    ?[...new Set([...contextBuilt.matchAll(/p[áa]g\.\s*(\d+)/gi)].map(m=>m[1]))]
+    :[];
+  if(hasPdfs&&contextBuilt)sources.push({type:'pdf',label:paginas.length?`PDF · pág. ${paginas.slice(0,6).join(', ')}${paginas.length>6?'…':''}`:'PDF cargado'});
   if(contextBuilt)sources.push({type:'manual',label:'Manual interno'});
   if(memUsed)sources.push({type:'memory',label:'Memoria'});
   if(appState.extraEnabled&&appState.extra.trim())sources.push({type:'extra',label:'Contexto asesor'});
@@ -2193,25 +3115,18 @@ function stopGeneration() {
    una respuesta.
 ════════════════════════════════════════════════ */
 const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
-/* getManualContext nunca devuelve vacío: si nada coincide, igual entrega las
-   secciones mejor puntuadas, y los bonos de [MANDATORY] y de conflicto pesan
+/* getManualContext nunca devuelve vacío: si nada coincide, igual entrega los
+   fragmentos mejor puntuados, y los bonos de [MANDATORY] y de conflicto pesan
    aunque no haya un solo acierto de palabra. Para el modo manual eso mentiría
    —contestar "entallado" a quien preguntó por otra cosa—, así que aquí se exige
-   al menos un acierto real antes de mostrar nada. */
+   al menos un acierto real antes de mostrar nada.
+
+   Busca sobre el corpus completo: manual interno **y** el PDF que el asesor
+   acaba de cargar. Antes solo miraba el manual interno, así que sin API key el
+   manual recién subido se ignoraba por completo — el usuario veía su PDF en la
+   lista y recibía respuestas que no salían de él. */
 function seccionesPorRelevancia(q){
-  const kws=expandKeywords(extractKeywords(q));
-  if(!kws.length)return[];
-  const out=[];
-  for(const s of manualSections){
-    const norm=normalizeText(s.content);
-    let aciertos=0;
-    for(const kw of kws){
-      const n=normalizeText(kw).trim();
-      if(n&&norm.includes(n))aciertos++;
-    }
-    if(aciertos>0)out.push({content:s.content,aciertos,score:scoreText(s.content,kws)});
-  }
-  return out.sort((a,b)=>b.aciertos-a.aciertos||b.score-a.score)
+  return retrieve(q,{limit:12}).filter(r=>r.hits>0)
 }
 function responderSinModelo(q){
   switchTab('chat');
@@ -2226,20 +3141,25 @@ function responderSinModelo(q){
   }
   const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
   let fragmentos='',chars=0;
-  for(const s of relevantes){
+  for(const r of relevantes){
     if(chars>=FALLBACK_BUDGET)break;
-    const espacio=FALLBACK_BUDGET-chars;
-    const trozo=s.content.length>espacio?s.content.slice(0,espacio)+'\n[...]':s.content;
-    fragmentos+=trozo+'\n\n';chars+=trozo.length;
+    const etiqueta=chunkLabel(r.c)+'\n';
+    const espacio=FALLBACK_BUDGET-chars-etiqueta.length;
+    if(espacio<80)break;
+    const trozo=r.c.text.length>espacio?r.c.text.slice(0,espacio)+'\n[...]':r.c.text;
+    fragmentos+=etiqueta+trozo+'\n\n';chars+=etiqueta.length+trozo.length;
   }
   fragmentos=fragmentos.trim();
+  const paginas=[...new Set(relevantes.filter(r=>r.c.page).map(r=>r.c.page))];
+  const donde=paginas.length?` En el PDF cargado, ${paginas.length===1?'página':'páginas'} **${paginas.join(', ')}**.`:'';
   const aviso='> ⚪ **Sin modelo conectado.** Esto es lo que dice el manual, tal cual: nadie lo interpretó.';
-  const comoFunciona='La búsqueda corrió aquí mismo, en tu dispositivo, sin salir a internet: se expandieron los sinónimos de lo que escribiste y se quedaron solo las secciones que de verdad coinciden.';
+  const comoFunciona='La búsqueda corrió aquí mismo, en tu dispositivo, sin salir a internet: se expandieron los sinónimos de lo que escribiste y se quedaron solo los fragmentos que de verdad coinciden.';
   const invitacion='_Para la respuesta razonada en 6 etapas —intención, expansión, retrieval, razonamiento, certeza y respuesta— conecta una API key en la pestaña **⚙️ Config**._';
   const cuerpo=fragmentos
-    ?`${aviso}\n\n${comoFunciona} Coincidieron **${relevantes.length}** ${relevantes.length===1?'sección':'secciones'}.\n\n---\n\n\`\`\`\n${fragmentos}\n\`\`\`\n\n${invitacion}`
-    :`${aviso}\n\n**Ninguna sección del manual coincide con esa pregunta.** ${comoFunciona}\n\nPrefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras. Prueba con otros términos o con un acceso rápido.\n\n${invitacion}`;
-  appendMsg('assistant',cuerpo,false);
+    ?`${aviso}\n\n${comoFunciona} Coincidieron **${relevantes.length}** ${relevantes.length===1?'fragmento':'fragmentos'}.${donde}\n\n---\n\n\`\`\`\n${fragmentos}\n\`\`\`\n\n${invitacion}`
+    :`${aviso}\n\n**Nada del manual coincide con esa pregunta.** ${comoFunciona}\n\nPrefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras. Prueba con otros términos o con un acceso rápido.\n\n${invitacion}`;
+  const msgEl=appendMsg('assistant',cuerpo,false);
+  renderEvidencia(msgEl,figurasDeFragmentos(relevantes.map(r=>r.c)));
   history.push({role:'user',content:q});
   history.push({role:'assistant',content:cuerpo});
   saveChatHistory();
@@ -2284,7 +3204,7 @@ async function sendMessage(){
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
   const sourceNotice=hasPdfs
-    ?'\n\n⚠ FUENTES DISPONIBLES: Hay un manual de temporada (PDF) y el manual interno Mercadep (15 manuales consolidados). NINGUNA fuente tiene prioridad automática — usa la que realmente contenga la respuesta a la pregunta. Si la pregunta es sobre una sección, mueble o regla que solo aparece en el manual interno, úsalo aunque haya un PDF cargado. Revisa TODO el contexto antes de decidir que algo "no está".'
+    ?'\n\n⚠ FUENTES DISPONIBLES: Hay un manual de temporada (PDF) y el manual interno Mercadep (15 manuales consolidados). NINGUNA fuente tiene prioridad automática — usa la que realmente contenga la respuesta a la pregunta. Si la pregunta es sobre una sección, mueble o regla que solo aparece en el manual interno, úsalo aunque haya un PDF cargado. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes del PDF.'
     :'\n\n⚠ FUENTES DISPONIBLES: Solo hay manual interno Mercadep disponible. REVÍSALO para responder.';
   const fullSystem=system+GUARDRAIL_APPEND+(memCtx?'\n\n'+memCtx:'')+sourceNotice;
   const messages=[{role:'system',content:fullSystem}];
@@ -2338,18 +3258,18 @@ async function sendMessage(){
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
-    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q);
+    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context);
 
     sessionTokens+=tokens||estimateTokens(streamedText);updateTokenBar();
     history.push({role:'user',content:q});
     const{final}=parseAIResponse(streamedText);
     history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)});
-    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,!!context,!!memCtx,hasPdfs);
+    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs);
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
     if(err.name==='AbortError'){
       if(streamedText.length>50){
-        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q);
+        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context);
         history.push({role:'user',content:q});
         const{final}=parseAIResponse(streamedText);
         history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)+'\n\n_[Generación detenida por el usuario]_'});
@@ -2499,7 +3419,103 @@ function appendMsg(role,text,loading){
 /* ════════════════════════════════════════════════
    RENDER RESPUESTA ASISTENTE
 ════════════════════════════════════════════════ */
-function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion){
+/* ════════════════════════════════════════════════
+   EVIDENCIA VISUAL
+
+   La figura que acompaña a la respuesta sale de los mismos fragmentos
+   que se consultaron: misma página, y misma sección cuando la hay. No
+   se ilustra "algo bonito de ese manual" — se enseña la lámina de la
+   que salió el dato, que es lo que el asesor puede ir a contrastar.
+════════════════════════════════════════════════ */
+const MAX_EVIDENCIA=3;
+function figurasDeFragmentos(chunks){
+  if(!docFigures.length||!chunks||!chunks.length)return[];
+  const claves=new Set(),paginas=new Set();
+  for(const c of chunks){
+    if(c.source!=='pdf'||!c.page)continue;
+    paginas.add(c.docName+'|'+c.page);
+    if(c.heading)claves.add(c.docName+'|'+c.page+'|'+normalizeText(c.heading));
+  }
+  const exactas=docFigures.filter(f=>f.heading&&claves.has(f.docName+'|'+f.page+'|'+normalizeText(f.heading)));
+  const dePagina=docFigures.filter(f=>paginas.has(f.docName+'|'+f.page)&&!exactas.includes(f));
+  return exactas.concat(dePagina).slice(0,MAX_EVIDENCIA)
+}
+
+function renderEvidencia(container,figuras){
+  if(!figuras.length)return;
+  const wrap=document.createElement('div');wrap.className='evidencia';
+  const titulo=document.createElement('div');titulo.className='evidencia-titulo';
+  titulo.textContent=figuras.length===1?'Del manual, la lámina de la que sale esto:':'Del manual, las láminas de las que sale esto:';
+  wrap.appendChild(titulo);
+  const tira=document.createElement('div');tira.className='evidencia-tira';
+  for(const f of figuras){
+    const fig=document.createElement('figure');fig.className='evidencia-fig';
+    const img=document.createElement('img');
+    img.src=f.dataUrl;img.loading='lazy';
+    img.alt=(f.caption||f.heading||'Figura')+' — página '+f.page;
+    const pie=document.createElement('figcaption');
+    pie.textContent='pág. '+f.page+(f.heading?' · '+f.heading:'');
+    fig.appendChild(img);fig.appendChild(pie);
+    fig.onclick=()=>fig.classList.toggle('ampliada');
+    tira.appendChild(fig);
+  }
+  wrap.appendChild(tira);
+  container.appendChild(wrap);
+}
+
+/* ════════════════════════════════════════════════
+   VERIFICACIÓN CONTRA EL CONTEXTO
+
+   Un modelo que alucina una medida no suena distinto de uno que la
+   leyó: las dos respuestas llegan con la misma seguridad, y el asesor
+   ejecuta la que tenga enfrente. Aquí se comprueba lo comprobable —
+   que cada cifra de la respuesta esté en los fragmentos que se
+   enviaron, y que cada página citada exista entre ellos.
+
+   No detecta un razonamiento equivocado; detecta el dato traído de
+   fuera del manual, que es la falla que llega al piso.
+════════════════════════════════════════════════ */
+function verificarContraContexto(respuesta,contexto){
+  const vacio={cifras:[],paginas:[]};
+  if(!respuesta||!contexto)return vacio;
+
+  const texto=respuesta
+    .replace(/^\s*\d+[.)]\s/gm,'')                 // "1." de una lista no es un dato
+    .replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?/gi,' '); // las páginas se revisan aparte
+
+  const cifras=new Set();
+  for(const m of texto.matchAll(/\d+(?:[.,]\d+)?/g)){
+    const n=m[0];
+    if(n.length===4&&/^(19|20)\d\d$/.test(n))continue;  // un año no es una medida
+    cifras.add(n);
+  }
+  const ctx=contexto.replace(/\s+/g,' ');
+  const noVerificadas=[...cifras].filter(n=>{
+    const esc=n.replace('.','[.,]').replace(',','[.,]');
+    return!new RegExp('(?<![\\d.,])'+esc+'(?![\\d])').test(ctx)
+  });
+
+  const paginasCitadas=new Set();
+  for(const m of respuesta.matchAll(/p[áa]g\.?\s*(\d+)/gi))paginasCitadas.add(m[1]);
+  const paginasReales=new Set();
+  for(const m of contexto.matchAll(/p[áa]g\.\s*(\d+)/gi))paginasReales.add(m[1]);
+  const paginasInventadas=[...paginasCitadas].filter(p=>!paginasReales.has(p));
+
+  return{cifras:noVerificadas,paginas:paginasInventadas}
+}
+
+function renderAvisoVerificacion(res){
+  if(!res||(!res.cifras.length&&!res.paginas.length))return null;
+  const el=document.createElement('div');
+  el.className='verify-warn';
+  const partes=[];
+  if(res.cifras.length)partes.push(`${res.cifras.length===1?'el dato':'los datos'} <strong>${res.cifras.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
+  if(res.paginas.length)partes.push(`${res.paginas.length===1?'la página citada':'las páginas citadas'} <strong>${res.paginas.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
+  el.innerHTML=`⚠ No pude verificar ${partes.join(' ni ')} en los fragmentos que se consultaron. Contrasta contra el manual antes de aplicarlo.`;
+  return el
+}
+
+function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
   const{thinking,final,parsed}=parseAIResponse(rawText);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
   const msgBody=loaderEl.querySelector('.msg-body');
@@ -2507,6 +3523,10 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion){
   loaderEl.classList.remove('loading');
   msgBody.innerHTML=safeMarkdown(cleanFinal);
   msgLabel.innerHTML=`Asistente <span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
+
+  const alerta=renderAvisoVerificacion(verificarContraContexto(cleanFinal,contextoEnviado));
+  if(alerta)loaderEl.appendChild(alerta);
+  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos));
 
   const footer=document.createElement('div');footer.className='msg-footer';
 
