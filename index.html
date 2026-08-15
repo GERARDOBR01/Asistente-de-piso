@@ -1435,6 +1435,7 @@ function rebuildCorpus(){
   bm25.avgdl=corpus.length?total/corpus.length:1;
   bm25.df=df;
   vocabTrigramas=null;
+  identificadores=null;
   refrescarVocabularioManual();
 }
 
@@ -1520,6 +1521,74 @@ function nombreDeSeccion(docName){
   return docName.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'')
     .replace(/%?20/g,' ').replace(/[_\-]+/g,' ').replace(/\s+/g,' ')
     .replace(/^\d+\s+\d+\s+/,'').trim()||docName
+}
+/* ── LA SECCIÓN QUE NOMBRA LA PREGUNTA ────────────
+   Estos manuales son la misma plantilla con distintos datos. Medido entre
+   101 MUEBLES y 251 JUVENILES: 22 títulos idénticos —PROPUESTA DE VALOR,
+   CIRCULACIÓN DEL CLIENTE, DISPLAY, ALINEACIÓN, LIMPIEZA…— y bajo ALINEACIÓN
+   los dos dicen 80 cm. Pero «¿qué porcentaje es el cliente clásico?» vale 25.6%
+   en Muebles y 0% en Juveniles.
+
+   Eso hace que preguntar con la sección equivocada activa sea peor que no tener
+   manual: la respuesta no sale vacía, sale un número creíble y falso, con su
+   página y su lámina. Y ningún ajuste de la búsqueda lo puede evitar, porque el
+   vocabulario de los dos manuales es el mismo.
+
+   Lo único que los distingue es cómo se llama la sección, y eso el asesor lo
+   escribe: «los perímetros EN JUVENILES». Así que el nombre de la sección se
+   busca dentro de la pregunta.
+
+   Un término solo identifica si de verdad señala a un manual: «juveniles»
+   aparece casi solo en el suyo, pero «muebles» aparece en todos —son muebles de
+   exhibición— y no identifica nada. Se exige que la mayoría de los fragmentos
+   que contienen el término sean de ese documento. */
+const DISCRIMINA_MIN=0.7;
+let identificadores=null;
+function identificadoresDeSeccion(){
+  if(identificadores)return identificadores;
+  identificadores=[];
+  if(!docChunks.length)return identificadores;
+  const porTermino=new Map();
+  for(const c of docChunks){
+    if(!c.tf)continue;
+    for(const t in c.tf){
+      let m=porTermino.get(t);
+      if(!m){m=new Map();porTermino.set(t,m)}
+      m.set(c.docName,(m.get(c.docName)||0)+1);
+    }
+  }
+  for(const d of docs){
+    const nombre=nombreDeSeccion(d.name);
+    /* También el nombre del archivo: «Manual_Juveniles_Urban_Zone» trae «urban
+       zone», que el rótulo interno no tiene y el asesor sí usa. */
+    const crudo=d.name.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'').replace(/[_\-]+/g,' ');
+    const delNombre=new Set([...tokenize(nombre),...tokenize(crudo)]);
+    /* Los nombres bajados del portal llegan con el escape de la URL a medio
+       deshacer y el «%20» pegado a la palabra: «205_201_20BICI_N.pdf» daba
+       «20bici», que no es nada. Se prueba también sin ese 20 delante — pero solo
+       cuando lo que sigue son letras, para no convertir «205» en «5». */
+    for(const t of[...delNombre])if(/^20[a-z]{2,}$/.test(t))delNombre.add(t.slice(2));
+    const terminos=[];
+    for(const t of delNombre){
+      if(t==='manual')continue;
+      const m=porTermino.get(t);
+      /* Un código de sección («251», «101») puede no estar en el cuerpo del
+         manual y aun así ser el identificador más limpio que existe. */
+      if(!m){if(/^\d{2,4}$/.test(t))terminos.push(t);continue}
+      let total=0;for(const v of m.values())total+=v;
+      if(total&&(m.get(d.name)||0)/total>=DISCRIMINA_MIN)terminos.push(t);
+    }
+    if(terminos.length)identificadores.push({docName:d.name,nombre,terminos});
+  }
+  return identificadores
+}
+function seccionNombradaEnPregunta(q){
+  const lista=identificadoresDeSeccion();
+  /* Con un solo manual cargado no hay con qué confundirse. */
+  if(lista.length<2)return null;
+  const toks=new Set(tokenize(q||''));
+  for(const id of lista)if(id.terminos.some(t=>toks.has(t)))return id;
+  return null
 }
 function seccionActiva(){
   if(!docChunks.length)return null;
@@ -1720,6 +1789,13 @@ function chunkLabel(c){
    puntuaron alto: es la única lista contra la que tiene sentido verificar la
    respuesta y de la que se pueden sacar las figuras que la acompañan. */
 let ultimosFragmentos=[];
+/* Y si la pregunta era de otra sección cargada, cuál: el botón que ofrece el
+   cambio se pinta con la respuesta, que es donde el asesor está mirando. */
+let ultimaOtraSeccion=null;
+/* Contra qué manual se respondió de verdad, y si lo eligió la pregunta en vez
+   del selector. Va a la tira de fuentes: responder por una sección que el asesor
+   no eligió sin decírselo es la misma trampa, al revés. */
+let ultimaSeccionUsada=null,ultimaSeccionPorPregunta=false;
 
 /* Se enviaban ~20 fragmentos por pregunta —41 con dos manuales cargados—, y eso
    es lo que quema la cuota. Estos cuatro filtros se midieron sobre 24 preguntas
@@ -1930,9 +2006,9 @@ function buildChunks(pages,docName){
 /* 40 candidatos era generoso de más: después de los filtros de packChunks nunca
    sobreviven más de 9, así que puntuar el doble solo alarga la lista. */
 const PDF_CANDIDATOS=20;
-function getPdfContext(query,maxChars){
+function getPdfContext(query,maxChars,doc){
   if(!docChunks.length)return{texto:'',nivel:0};
-  const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS,doc:appState.manualActivo});
+  const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS,doc:doc===undefined?appState.manualActivo:doc});
   const nivel=nivelDeEvidencia(results,query);
   if(nivel)return{texto:packChunks(results,maxChars),nivel};
   /* Sin una sola coincidencia sólida: en vez de callar, se entrega una muestra
@@ -1966,24 +2042,43 @@ const PDF_BUDGET_GEMINI=20000;
    historial. Y se avisa en la tira de fuentes, para que no parezca magia. */
 const SEGUIMIENTO=/^\s*(?:¿\s*)?(?:y|e|entonces|pero|ok|vale|ah|ahi|ah[ií])\b/i;
 let ultimaBusquedaAmpliada=false;
-function consultaDeBusqueda(q,hist){
-  ultimaBusquedaAmpliada=false;
-  const propias=tokenize(q||'');
-  if(propias.length>=4&&!SEGUIMIENTO.test(q||''))return q;
+function preguntaAnterior(hist){
   const previas=(hist||history).filter(m=>m.role==='user');
   const previa=previas[previas.length-1];
-  if(!previa||!previa.content)return q;
+  return previa&&previa.content?previa.content:''
+}
+/* El umbral anterior —menos de 4 palabras propias— ampliaba casi siempre, porque
+   en español las que quedan tras quitar «como», «se», «los», «en» son dos o
+   tres: «explicame los perimetros en juveniles» son 3 y «como se arman las
+   mesas» son 2. Medido en el piso: la ampliación pegó la pregunta anterior a una
+   pregunta nueva y el asistente contestó la anterior, palabra por palabra.
+
+   Ahora solo se amplía de entrada cuando la pregunta está literalmente
+   incompleta: empieza por conector de seguimiento, o no llega a dos palabras
+   propias. Lo demás se rescata más tarde, y solo si sale sólido. */
+function esElipsis(q){return SEGUIMIENTO.test(q||'')||tokenize(q||'').length<=1}
+function consultaDeBusqueda(q,hist){
+  ultimaBusquedaAmpliada=false;
+  if(!esElipsis(q))return q;
+  const previa=preguntaAnterior(hist);
+  if(!previa)return q;
   ultimaBusquedaAmpliada=true;
-  return previa.content+' '+q
+  return previa+' '+q
 }
 
 /* El aviso va DENTRO del contexto y en primera posición porque es donde el
    modelo lo lee junto a la orden de "responde solo con esto". Sin él, ante una
    pregunta que el manual no cubre recibía fragmentos sueltos y la instrucción
    de responder con ellos: obedecía, y componía una regla que nadie escribió. */
-const AVISO_SIN_COINCIDENCIAS=`=== SIN COINCIDENCIAS EN EL MANUAL ===
+/* El aviso lleva la pregunta de ESTE turno escrita dentro. Sin ella, el modelo
+   recibe la orden de responder "el manual no especifica [X]" sin que nadie le
+   diga cuál es la X, y lo único parecido a una respuesta que tiene delante es la
+   suya del turno anterior: la copia entera. */
+const avisoSinCoincidencias=q=>`=== SIN COINCIDENCIAS EN EL MANUAL ===
 Ningún fragmento del manual responde a esta pregunta. Responde exactamente
-"El manual no especifica [X]" y nada más. NO completes con conocimiento general
+"El manual no especifica X" y nada más, donde X es lo que se preguntó en ESTE
+turno: "${(q||'').trim()}". No respondas a ninguna pregunta anterior de la
+conversación: esa ya se contestó. NO completes con conocimiento general
 de visual merchandising, ni con reglas de otras secciones, ni con lo que parezca
 razonable. Lo que sigue es una muestra del manual para que sepas de qué trata:
 NO es la respuesta y no debes tomar datos de ahí.`;
@@ -1991,20 +2086,91 @@ NO es la respuesta y no debes tomar datos de ahí.`;
 /* Evidencia floja: se entrega igual, pero diciendo lo que es. El modelo sabe
    leer si unos fragmentos vienen al caso; lo que no puede hacer es adivinar que
    la búsqueda apenas encontró nada. */
+/* La pregunta nombra una sección que NO es la activa. Es el caso que en el piso
+   sale caro: los fragmentos de la sección activa se parecen a los de la otra
+   —misma plantilla— así que el modelo puede componer con ellos una respuesta
+   perfectamente redactada y con la cifra de la sección equivocada. No se le pide
+   que tenga cuidado: se le prohíbe responder con datos. */
+const avisoOtraSeccionNombrada=(activa,otra)=>`=== LA PREGUNTA ES DE OTRA SECCIÓN ===
+El asesor está trabajando con la sección "${activa}", pero la pregunta nombra
+"${otra}", que también tiene cargada. Los fragmentos de abajo son de "${activa}"
+y NO sirven para responder por "${otra}", por parecidos que resulten: estos
+manuales comparten plantilla y lo que cambia son justo los datos.
+Responde solo esto, sin ninguna cifra ni regla:
+"Estás trabajando en ${activa} y me preguntas por ${otra}. Cambia de sección con
+el botón de aquí abajo y te respondo con ese manual."
+Cierra con CERTEZA: GAP.`;
+
+/* La sección activa no trae nada, pero otra cargada sí. No se responde desde
+   ella —el asesor no ha dicho que quiera cambiar— pero callarlo es lo que hizo
+   que el asistente dijera "no está en el manual" con el manual bueno cargado. */
+const avisoOtraSeccionEvidencia=(activa,otra)=>`=== PUEDE ESTAR EN OTRA SECCIÓN ===
+En "${activa}" no hay nada que responda a esta pregunta. En "${otra}", que el
+asesor también tiene cargada, sí hay material que coincide.
+Responde "El manual de ${activa} no especifica [X]", di que eso sí aparece en
+"${otra}" y que puede cambiar de sección con el botón de aquí abajo. No tomes
+ningún dato de los fragmentos. Cierra con CERTEZA: GAP.`;
+
 const AVISO_COINCIDENCIA_FLOJA=`=== COINCIDENCIA DÉBIL ===
 La búsqueda encontró poco para esta pregunta. Lee los fragmentos: si responden,
 responde citando la página. Si NO responden exactamente lo que se preguntó, di
 "El manual no especifica [X]" y cierra con CERTEZA: GAP. No estires un fragmento
 parecido para que parezca una respuesta.`;
 
+/* ¿Contra qué manual se responde esta pregunta? Tres respuestas posibles, y las
+   tres se le dicen al asesor en la tira de fuentes: la sección que eligió, la
+   que nombró en la pregunta, o ninguna. */
+function decidirSeccion(query){
+  /* Con la pregunta ESCRITA, nunca con la ampliada: si la ampliación pegó la
+     pregunta anterior, sus palabras señalarían a la sección de aquel turno. */
+  const nombrada=seccionNombradaEnPregunta(query);
+  const activo=appState.manualActivo;
+  if(!nombrada)return{doc:activo,otraSeccion:null,porPregunta:false};
+  /* Sin sección elegida, la pregunta manda: si dice "en juveniles", se busca en
+     juveniles y no en los cinco manuales a la vez. */
+  if(!activo)return{doc:nombrada.docName,otraSeccion:null,porPregunta:true};
+  if(nombrada.docName===activo)return{doc:activo,otraSeccion:null,porPregunta:false};
+  return{doc:activo,porPregunta:false,
+    otraSeccion:{docName:nombrada.docName,nombre:nombrada.nombre,motivo:'nombrada'}}
+}
+
+/* Con la sección activa vacía, ¿alguna otra cargada sí responde? Se pregunta
+   solo cuando la activa no dio nada, así que no cuesta nada en el caso normal.
+
+   Exigir evidencia sólida aquí era demasiado: medido, «¿cómo se exhiben las
+   bicicletas?» encuentra en su manual la lámina titulada BICICLETAS —pág. 32,
+   la respuesta exacta— pero se queda en nivel 1 porque solo casa una palabra.
+   Y bajar a nivel 1 a secas tampoco vale: otro manual daba nivel 1 con un
+   fragmento que no venía a cuento. Así que se pide que el mejor DESTAQUE sobre
+   el segundo. Aquí no se responde nada, solo se señala a dónde ir: el precio de
+   señalar mal es un botón que el asesor ignora. */
+const DESTAQUE_MIN=1.25;
+function otraSeccionConEvidencia(consulta,activo){
+  const cand=[];
+  for(const d of docs){
+    if(d.name===activo)continue;
+    const r=retrieve(consulta,{source:'pdf',limit:PDF_CANDIDATOS,doc:d.name});
+    const nivel=nivelDeEvidencia(r,consulta);
+    if(nivel>=1&&r.length)cand.push({docName:d.name,nivel,score:r[0].score});
+  }
+  if(!cand.length)return null;
+  cand.sort((a,b)=>b.nivel-a.nivel||b.score-a.score);
+  const[mejor,segundo]=cand;
+  if(mejor.nivel<2&&segundo&&segundo.score*DESTAQUE_MIN>mejor.score)return null;
+  return{docName:mejor.docName,nombre:nombreDeSeccion(mejor.docName),motivo:'evidencia'}
+}
+
 function buildContext(query){
   ultimosFragmentos=[];
-  const consulta=consultaDeBusqueda(query);
-  const ampliada=ultimaBusquedaAmpliada;
+  ultimaOtraSeccion=null;
+  let consulta=consultaDeBusqueda(query);
+  let ampliada=ultimaBusquedaAmpliada;
   const hasPdfs=docChunks.length>0;
   const parts=[];
   const isGemini=appState.provider==='gemini';
   const pdfBudget=isGemini?PDF_BUDGET_GEMINI:PDF_BUDGET;
+  const seccion=hasPdfs?decidirSeccion(query):{doc:null,otraSeccion:null,porPregunta:false};
+  let otraSeccion=seccion.otraSeccion;
   let nivel=0;
   if(hasPdfs){
     /* Con un manual cargado, el interno NO entra. Traía cifras propias —90 cm de
@@ -2013,11 +2179,33 @@ function buildContext(query){
        contexto. Para quien lee en el piso eso es exactamente un dato inventado:
        no está en su manual y no lo puede ir a ver. Lo que el PDF no cubra se
        consulta aparte y rotulado, desde el botón de referencia general. */
-    const pdf=getPdfContext(consulta,pdfBudget);
+    let pdf=getPdfContext(consulta,pdfBudget,seccion.doc);
+    /* Rescate: la pregunta tal cual no encontró nada. Puede ser un seguimiento
+       que no empieza por conector —«¿en juveniles?»— así que se reintenta con la
+       anterior pegada, y solo se acepta si sale SÓLIDO. Con evidencia floja lo
+       único que se logra es arrastrar el tema del turno anterior a una pregunta
+       nueva: exactamente lo que hacía el umbral viejo. */
+    if(pdf.nivel===0&&!ampliada){
+      const previa=preguntaAnterior();
+      if(previa){
+        const alt=getPdfContext(previa+' '+consulta,pdfBudget,seccion.doc);
+        if(alt.nivel===2){pdf=alt;consulta=previa+' '+consulta;ampliada=true}
+      }
+    }
     nivel=pdf.nivel;
+    /* Solo si la sección activa se quedó a cero se mira si otra la tiene. */
+    if(!otraSeccion&&nivel===0&&seccion.doc&&docs.length>1)
+      otraSeccion=otraSeccionConEvidencia(consulta,seccion.doc);
     if(pdf.texto)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n${pdf.texto}`);
   }else{
-    const man=getManualContext(consulta,pdfBudget+MANUAL_BUDGET);
+    let man=getManualContext(consulta,pdfBudget+MANUAL_BUDGET);
+    if(man.nivel===0&&!ampliada){
+      const previa=preguntaAnterior();
+      if(previa){
+        const alt=getManualContext(previa+' '+consulta,pdfBudget+MANUAL_BUDGET);
+        if(alt.nivel===2){man=alt;consulta=previa+' '+consulta;ampliada=true}
+      }
+    }
     nivel=man.nivel;
     if(man.texto)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${man.texto}`);
   }
@@ -2026,14 +2214,28 @@ function buildContext(query){
   let texto=parts.join('\n\n---\n\n');
   const sinCoincidencias=nivel===0&&!!texto;
   const flojo=nivel===1;
-  if(sinCoincidencias){
-    texto=AVISO_SIN_COINCIDENCIAS+'\n\n'+texto;
+  if(otraSeccion){
+    /* Manda sobre todo lo demás: aunque la sección activa tenga material de
+       sobra, ese material no responde a lo que se preguntó. Y se vacía la lista
+       de fragmentos, que es la garantía dura de que no saldrá debajo la lámina
+       de la sección equivocada, conteste lo que conteste el modelo. */
+    const activa=nombreDeSeccion(seccion.doc);
+    texto=(otraSeccion.motivo==='nombrada'
+      ?avisoOtraSeccionNombrada(activa,otraSeccion.nombre)
+      :avisoOtraSeccionEvidencia(activa,otraSeccion.nombre))+'\n\n'+texto;
+    ultimosFragmentos=[];
+  }else if(sinCoincidencias){
+    texto=avisoSinCoincidencias(query)+'\n\n'+texto;
     /* Lo que se envió es una muestra, no evidencia de nada. Vaciar la lista es
        la garantía dura de que no saldrá una lámina debajo de una respuesta que
        el manual no sostiene, conteste lo que conteste el modelo. */
     ultimosFragmentos=[];
   }else if(flojo)texto=AVISO_COINCIDENCIA_FLOJA+'\n\n'+texto;
-  return{texto,sinCoincidencias,flojo,ampliada,nivel}
+  ultimaOtraSeccion=otraSeccion;
+  ultimaSeccionUsada=seccion.doc;
+  ultimaSeccionPorPregunta=seccion.porPregunta;
+  return{texto,sinCoincidencias,flojo,ampliada,nivel,otraSeccion,
+    seccionUsada:seccion.doc,seccionPorPregunta:seccion.porPregunta}
 }
 
 /* Consulta explícita a la referencia general, desde el botón que aparece cuando
@@ -3471,6 +3673,7 @@ async function handleFiles(fileList){
   const procMsg=document.getElementById('proc-msg');
   const procBar=document.getElementById('proc-bar');
   procWrap.style.display='block';
+  const habia=docs.length;
 
   for(const file of accepted){
     procBar.style.width='0%';
@@ -3525,6 +3728,13 @@ async function handleFiles(fileList){
     try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
   }else if(docs.length>1&&!appState.manualActivo){
     showToast('📕 Tienes varios manuales cargados. Elige arriba con cuál estás trabajando para que las citas y las láminas salgan de ese.','info',7000);
+  }else if(appState.manualActivo&&docs.length>habia){
+    /* Cargar un manual nuevo y que la sección activa siga siendo la de antes es
+       silencioso y caro: todo lo que se pregunte del manual recién cargado se
+       busca dentro del viejo, y sale "el manual no lo especifica" con el manual
+       bueno a un clic. Pasó en el piso, con Muebles activo y Juveniles cargado. */
+    const nuevos=docs.slice(habia).map(d=>nombreDeSeccion(d.name)).join(', ');
+    showToast(`📕 Cargaste ${nuevos}. Tu sección activa sigue siendo ${nombreDeSeccion(appState.manualActivo)} — cámbiala arriba si vas a preguntar por la nueva.`,'warn',8000);
   }
   renderDocs();
 }
@@ -3613,12 +3823,21 @@ function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
   /* Hay manuales que cubren varias secciones y su rótulo es larguísimo
      («206 APARATOS DE EJERCICIO, 207 MOTOS Y 211 MOVILIDAD ELÉCTRICA»): en la
      etiqueta se recorta, en el prompt viaja entero. */
-  if(hasPdfs&&appState.manualActivo){
-    const n=nombreDeSeccion(appState.manualActivo);
-    sources.push({type:'seccion',label:'📕 '+(n.length>42?n.slice(0,40)+'…':n)});
+  const corta=n=>n.length>42?n.slice(0,40)+'…':n;
+  if(hasPdfs&&ultimaOtraSeccion){
+    sources.push({type:'seccion',label:'⚠ Preguntaste por '+corta(ultimaOtraSeccion.nombre)});
+  }
+  else if(hasPdfs&&ultimaSeccionUsada){
+    const n=corta(nombreDeSeccion(ultimaSeccionUsada));
+    /* Si la sección la eligió la pregunta y no el selector, se dice: responder
+       por un manual que el asesor no eligió sin avisar es la misma trampa. */
+    sources.push({type:'seccion',label:ultimaSeccionPorPregunta?`📕 ${n} (por tu pregunta)`:'📕 '+n});
   }
   else if(hasPdfs&&docs.length>1)sources.push({type:'seccion',label:`📚 ${docs.length} manuales a la vez`});
-  if(hasPdfs&&contextBuilt)sources.push({type:'pdf',label:paginas.length?`PDF · pág. ${paginas.slice(0,6).join(', ')}${paginas.length>6?'…':''}`:'PDF cargado'});
+  /* Con la pregunta apuntando a otra sección, las páginas que se consultaron son
+     las de la sección activa: enseñarlas debajo de un "esto es de otra sección"
+     es mandar al asesor a la página equivocada de un manual equivocado. */
+  if(hasPdfs&&contextBuilt&&!ultimaOtraSeccion)sources.push({type:'pdf',label:paginas.length?`PDF · pág. ${paginas.slice(0,6).join(', ')}${paginas.length>6?'…':''}`:'PDF cargado'});
   /* Con un PDF cargado el manual interno ya no entra al contexto: anunciarlo
      como fuente era prometer una revisión que no ocurrió. */
   if(contextBuilt&&!hasPdfs)sources.push({type:'manual',label:'Manual interno'});
@@ -3649,6 +3868,7 @@ const ERROR_GUIDE={
 };
 const ERROR_KEYWORDS=[
   {keys:['image','image input','vision','multimodal'],icon:'🖼️',msg:'El modelo no soporta imágenes.',solution:'Cambia el modelo de Visión PDF en Config por uno que sí soporte visión (gpt-4o, gemini-1.5-flash) o desactiva Visión OCR.'},
+  {keys:['high demand','overloaded','over capacity','temporary','congestion'],icon:'🔥',msg:'El modelo está saturado.',solution:'No es tu conexión ni tu manual: el proveedor está al tope. Se reintenta solo unas cuantas veces; si insiste, cambia de modelo en Config.'},
   {keys:['rate limit','too many','quota','429'],icon:'⏳',msg:'Límite de consultas excedido.',solution:'Espera 30 segundos y vuelve a intentar. Hay un límite por minuto.'},
   {keys:['auth','unauthorized','invalid key','api_key','token'],icon:'🔑',msg:'Error de autenticación.',solution:'Tu clave API no es válida. Genera una nueva y actualízala en Config.'},
   {keys:['not found','does not exist','not available','not support'],icon:'🔍',msg:'Modelo o recurso no encontrado.',solution:'El modelo seleccionado no existe para tu proveedor. Cambia el modelo en Config.'},
@@ -3760,7 +3980,11 @@ async function streamGemini(url, body, onDelta, signal) {
 ════════════════════════════════════════════════ */
 const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
 const RETRYABLE_HTTP = [408, 425, 429, 500, 502, 503, 504];
-const RETRYABLE_KEYWORDS = ['rate limit','too many','quota','temporarily','unavailable','fetch failed','network','econnreset','etimedout'];
+/* «temporarily» no casaba con lo que responde GitHub Models cuando está al tope:
+   "Spikes in demand are usually temporary". Sin código HTTP en el mensaje, no se
+   reintentaba y salía el "Error inesperado" genérico, que en el piso se lee como
+   que la app está rota. Falta de dos letras. */
+const RETRYABLE_KEYWORDS = ['rate limit','too many','quota','temporarily','temporary','high demand','overloaded','over capacity','capacity','congestion','try again later','unavailable','fetch failed','network','econnreset','etimedout'];
 
 function isRetryable(err) {
   if (err?.name === 'AbortError') return false;
@@ -4556,6 +4780,25 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
 
   const footer=document.createElement('div');footer.className='msg-footer';
 
+  /* La pregunta era de otra sección cargada. Decirlo no basta: el asesor está en
+     el piso con el teléfono en una mano, y "cámbiala arriba en el selector" es
+     una instrucción que no va a seguir. El botón cambia la sección y vuelve a
+     preguntar lo mismo, que es lo que quería hacer. */
+  if(ultimaOtraSeccion&&docs.some(d=>d.name===ultimaOtraSeccion.docName)){
+    const otra=ultimaOtraSeccion;
+    const cambiar=document.createElement('button');
+    cambiar.className='ref-general';
+    cambiar.textContent=`📕 Cambiar a ${otra.nombre} y repetir la pregunta`;
+    cambiar.onclick=()=>{
+      cambiar.disabled=true;
+      cambiarSeccion(otra.docName);
+      const input=document.getElementById('user-input');
+      input.value=originalQuestion;
+      sendMessage();
+    };
+    footer.appendChild(cambiar);
+  }
+
   /* Con un PDF cargado, el manual interno ya no entra al contexto: lo que el
      manual del asesor no cubra sale como GAP, y ahí es donde tiene sentido
      ofrecer la referencia general — pedida a propósito y rotulada como lo que
@@ -4794,6 +5037,24 @@ function pruebasConManuales(){
       filas.push({tipo:'sección',q:'sección activa: '+nombreDeSeccion(d.name),ok:!ajenos&&!figAjenas,
         detalle:ajenos||figAjenas?`${ajenos} fragmentos y ${figAjenas} láminas de OTRO manual`:'cero fragmentos y cero láminas de otro manual'});
     }
+    /* Preguntar por una sección teniendo otra activa. La pregunta se arma con el
+       identificador que el propio manual dio, así que la prueba corre igual con
+       los manuales que sean: es el caso del piso —Muebles activo, pregunta de
+       juveniles— donde la respuesta salía con la cifra del manual equivocado. */
+    for(const id of identificadoresDeSeccion()){
+      const otro=docs.find(d=>d.name!==id.docName);
+      const termino=id.terminos.find(t=>!/^\d+$/.test(t))||id.terminos[0];
+      if(!otro||!termino)continue;
+      appState.manualActivo=otro.name;
+      const q=`¿qué dice el manual de ${termino}?`;
+      const ctx=buildContext(q);
+      const ok=!!ctx.otraSeccion&&ctx.otraSeccion.docName===id.docName&&!ultimosFragmentos.length;
+      filas.push({tipo:'cruce',q,ok,
+        detalle:ok?`avisa que eso es de ${nombreDeSeccion(id.docName)} y no responde con la activa`
+          :(ctx.otraSeccion?`señala a ${ctx.otraSeccion.nombre}, que no es la esperada`
+            :`NO avisa: responde con ${nombreDeSeccion(otro.name)} y ${ultimosFragmentos.length} fragmentos suyos`),
+        nota:'la pregunta nombra otra sección cargada'});
+    }
     appState.manualActivo=guardaActivo;
     buildContext('reset');
   }
@@ -4833,6 +5094,23 @@ function correrPruebas(){
   const lam=testLaminas();
   for(const l of lam)filas.push({tipo:'láminas',q:l.nombre,ok:l.ok,detalle:`${l.obtenido} lámina(s), esperado ${l.esperado}`});
 
+  /* Seguimiento. Lo que se rompió en el piso: el umbral viejo ampliaba con la
+     pregunta anterior casi siempre —en español quedan dos o tres palabras tras
+     quitar las vacías— y el asistente acabó contestando la pregunta del turno
+     anterior, palabra por palabra. Se comprueba en los dos sentidos: que no
+     amplíe lo que está completo y que sí amplíe lo que está partido. */
+  const previo=[{role:'user',content:'explicame los perimetros en juveniles'},{role:'assistant',content:'—'}];
+  const pruebasSeguimiento=[
+    {nombre:'«como se arman las mesas» no se amplía',ok:consultaDeBusqueda('como se arman las mesas',previo)==='como se arman las mesas'},
+    {nombre:'«explicame los perimetros en juveniles» no se amplía',ok:consultaDeBusqueda('explicame los perimetros en juveniles',previo)==='explicame los perimetros en juveniles'},
+    {nombre:'«¿y en juveniles?» sí se amplía',ok:consultaDeBusqueda('¿y en juveniles?',previo)!=='¿y en juveniles?'},
+    {nombre:'«maniquis» sí se amplía',ok:consultaDeBusqueda('maniquis',previo)!=='maniquis'},
+    {nombre:'sin turno anterior no se amplía nada',ok:consultaDeBusqueda('¿y en juveniles?',[])==='¿y en juveniles?'},
+    {nombre:'el aviso de "no está" nombra la pregunta de este turno',
+      ok:avisoSinCoincidencias('como se arman las mesas').includes('como se arman las mesas')},
+  ];
+  for(const p of pruebasSeguimiento)filas.push({tipo:'seguimiento',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+
   /* La marca de certeza tiene que salir del texto visible y no llegar nunca a
      la pantalla, al portapapeles ni al historial. */
   const conMarca='Los pasillos son de 90 cm.\n\nCERTEZA: ALTA';
@@ -4853,6 +5131,7 @@ function correrPruebas(){
     verificacion:`${verifOk}/${TEST_VERIF.length}`,
     laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
     certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
+    seguimiento:`${pruebasSeguimiento.filter(p=>p.ok).length}/${pruebasSeguimiento.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',

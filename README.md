@@ -92,8 +92,11 @@ red, sobre las mismas funciones que usa el chat.
 Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
 respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier
 manual de piso: que las preguntas de siempre (pasillo, gancho, tallas, limpieza, surtido)
-encuentren algo, que el ruido no, y que con una sección activa **ni un fragmento ni una
-lámina** salgan de otro manual. Medido sobre los cinco manuales reales: 13/13.
+encuentren algo, que el ruido no, que con una sección activa **ni un fragmento ni una
+lámina** salgan de otro manual, y que preguntar por una sección teniendo otra activa avise
+en vez de contestar. Esa última prueba se arma sola con el identificador que cada manual da
+de sí mismo, así que corre igual con manuales que el sistema no ha visto nunca. Medido sobre
+los seis manuales reales: 20/20.
 
 ### El motor de lectura de manuales
 
@@ -178,10 +181,29 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   ni ninguna de sus formas está en el índice, se busca la más parecida por trigramas y entra
   con el mismo descuento que un sinónimo. Alcanza para "entayado", "corvatas" o "maniquis";
   no para una palabra mal partida ni para una que el manual sencillamente no usa.
-- **La pregunta de seguimiento se resuelve por longitud, no por comprensión.** Si la
-  pregunta es corta o empieza por "y…", la búsqueda se apoya en la anterior y se avisa en la
-  tira de fuentes. Con dos temas seguidos muy distintos puede arrastrar el equivocado: se ve
-  en la etiqueta, y basta con volver a preguntar entero.
+- **La pregunta de seguimiento se resuelve por forma, no por comprensión.** Solo se amplía
+  con la pregunta anterior lo que está literalmente incompleto: empieza por "y…", "entonces…",
+  o no llega a dos palabras propias. Lo demás se busca tal cual, y si no encuentra nada se
+  reintenta con la anterior pegada **aceptándolo solo si sale sólido**. El umbral anterior
+  —menos de cuatro palabras propias— ampliaba casi siempre, porque en español tras quitar
+  "como", "se", "los", "en" quedan dos o tres: medido en el piso, "¿cómo se arman las mesas?"
+  se buscó junto con la pregunta anterior y el asistente contestó **la anterior, palabra por
+  palabra**. Sigue siendo una heurística: un seguimiento redactado entero no se detecta, y
+  para eso está el aviso en la tira de fuentes.
+- **Que dos manuales sean la misma plantilla es el riesgo de fondo, y no lo arregla la
+  búsqueda.** Medido entre 101 MUEBLES y 251 JUVENILES: 22 títulos idénticos y, bajo
+  ALINEACIÓN, los dos dicen 80 cm. Pero "¿qué porcentaje es el cliente clásico?" vale 25.6%
+  en uno y 0% en el otro. Con la sección equivocada activa la respuesta no sale vacía: sale
+  un número creíble y falso, con su página y su lámina. Como el vocabulario de los dos
+  manuales es el mismo, ningún ajuste del retrieval puede distinguirlos. Lo que sí distingue
+  es **cómo se llama la sección**, y eso el asesor lo escribe: "los perímetros **en
+  juveniles**". Así que el nombre de la sección se busca dentro de la pregunta, y si señala a
+  otro manual cargado, el asistente no responde con datos — avisa y ofrece cambiar. Un
+  término solo cuenta como identificador si de verdad señala a un manual: medido, "juveniles"
+  sí y "muebles" no, porque aparece en los seis (son muebles de exhibición). El límite es que
+  una sección cuyo nombre el asesor nunca escribe —las bicicletas viven en "206 APARATOS DE
+  EJERCICIO, 207 MOTOS Y 211 MOVILIDAD ELÉCTRICA"— solo se alcanza por la vía de evidencia,
+  que pide que ese manual destaque sobre los demás y por lo tanto puede callarse.
 - **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
   casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
   rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
