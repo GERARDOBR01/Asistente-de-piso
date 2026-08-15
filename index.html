@@ -502,6 +502,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .src-tag.extra{background:rgba(245,166,35,0.08);color:var(--amber);border-color:rgba(245,166,35,0.2)}
 .src-tag.none{background:rgba(224,82,82,0.06);color:var(--text3);border-color:var(--border)}
 .src-tag.ampliada{background:rgba(74,158,255,0.06);color:var(--text2);border-color:rgba(74,158,255,0.18)}
+.src-tag.seccion{background:var(--gdim);color:var(--gold);border-color:rgba(200,164,74,0.22)}
+
+/* Selector de sección activa: en manuales y en la cabecera del chat, para que
+   nunca se responda sin ver contra qué manual se está respondiendo. */
+.seccion-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 11px;margin-top:8px;background:var(--gdim);border:1px solid rgba(200,164,74,0.18);border-radius:var(--r)}
+.seccion-row.chat{margin-top:0;margin-bottom:8px}
+.seccion-label{font-size:10.5px;color:var(--gold);letter-spacing:.03em;white-space:nowrap}
+.seccion-select{flex:1;min-width:140px;padding:4px 8px;background:var(--s2);color:var(--text1);border:1px solid var(--border);border-radius:var(--r);font-size:11.5px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.seccion-hint{font-size:10px;color:var(--text3);flex-basis:100%}
+.quick-btn.del-manual{background:var(--gdim);border-color:rgba(200,164,74,0.28);color:var(--gold)}
 
 /* La certeza que el propio modelo declaró, junto a su nombre: es lo primero que
    se ve, antes de leer la respuesta. */
@@ -635,7 +645,7 @@ footer span {
 <header>
   <div class="hdr-left">
     <h1>Asistente <em>de</em> <strong>piso</strong> — <em>Mercadep</em></h1>
-    <p>Visual Merchandising · Departamento Hombres</p>
+    <p id="hdr-seccion">Visual Merchandising · Departamento Hombres</p>
     <div class="hdr-version">v1.0.0 · demo con conocimiento sintético</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
@@ -666,6 +676,11 @@ footer span {
     <div class="proc-progress"><div class="proc-bar" id="proc-bar"></div></div>
   </div>
   <div class="doc-list" id="doc-list"></div>
+  <div class="seccion-row" id="seccion-activa-wrap" style="display:none">
+    <span class="seccion-label">📕 Sección que estás trabajando</span>
+    <select class="seccion-select" id="seccion-activa" onchange="cambiarSeccion(this.value)"></select>
+    <span class="seccion-hint">Solo se consulta ese manual: la cita y la lámina serán de ahí.</span>
+  </div>
   <div class="rag-info" id="rag-info"></div>
   <div class="docs-acciones" id="docs-acciones" style="display:none">
     <span class="docs-nota" id="docs-nota"></span>
@@ -699,6 +714,10 @@ footer span {
     <button class="restore-dismiss" onclick="dismissRestoreBanner()">✕</button>
   </div>
   <div class="chat-wrap">
+    <div class="seccion-row chat" id="seccion-activa-chat-wrap" style="display:none">
+      <span class="seccion-label">📕 Sección</span>
+      <select class="seccion-select" id="seccion-activa-chat" onchange="cambiarSeccion(this.value)"></select>
+    </div>
     <div class="api-experta-row">
       <span class="api-experta-label">API Experta</span>
       <div class="api-experta-btns">
@@ -793,16 +812,16 @@ footer span {
 
       <div>
         <div class="fld-label">Rol del asistente</div>
-        <textarea class="cfg-textarea" id="system-prompt" rows="24">Eres el Especialista en Visual Merchandising de la sección Hombres de Mercadep México. Tu única fuente de verdad son los manuales oficiales Mercadep del contexto. Nunca inventas reglas de display. Si algo no está en el manual, lo admites con exactamente esta frase: "El manual no especifica [X]."
+        <textarea class="cfg-textarea" id="system-prompt" rows="24">Eres el Especialista en Visual Merchandising de Mercadep México. La sección de la que hablas es la del manual cargado —el sistema te la nombra en cada consulta—; sin manual cargado, es Hombres. Tu única fuente de verdad son los manuales oficiales Mercadep del contexto. Nunca inventas reglas de display. Si algo no está en el manual, lo admites con exactamente esta frase: "El manual no especifica [X]."
 
 SALUDOS (hola, buenos días, qué tal, etc.):
-- NO es fuera de tema. Responde amable en 1-2 oraciones invitando a preguntar sobre VM Hombres Mercadep.
+- NO es fuera de tema. Responde amable en 1-2 oraciones invitando a preguntar sobre la sección del manual cargado.
 - Ejemplo: "Hola. ¿En qué te ayudo con exhibición o reglas de Hombres Mercadep?"
 - Sin formato de 6 etapas.
 
 PREGUNTAS FUERA DE TEMA (clima, tareas escolares, chisme, programación general — NO saludos):
 - NO uses el formato de 6 etapas ni [PENSAMIENTO INTERNO].
-- Responde solo: "Solo puedo ayudarte con reglas de exhibición y visual merchandising de Hombres Mercadep. ¿Tienes alguna duda de piso?"
+- Responde solo: "Solo puedo ayudarte con reglas de exhibición y visual merchandising de Mercadep. ¿Tienes alguna duda de piso?"
 - Máximo 2 oraciones. Sin bullets ni explicaciones extra.
 
 CONFLICTOS DOCUMENTADOS (ej. entallado 4 vs 5 vs 6 piezas):
@@ -1416,6 +1435,7 @@ function rebuildCorpus(){
   bm25.avgdl=corpus.length?total/corpus.length:1;
   bm25.df=df;
   vocabTrigramas=null;
+  refrescarVocabularioManual();
 }
 
 /* ── ERRATAS ──────────────────────────────────────
@@ -1457,6 +1477,55 @@ function masParecida(w){
     if(p>mejorP){mejorP=p;mejor=t}
   }
   return mejorP>=ERRATA_MIN?mejor:null
+}
+
+/* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
+   El asistente estaba cableado a «Hombres Mercadep», y delante de un manual de
+   Bebés se presentaba como algo que no es. El nombre de la sección lo lleva el
+   propio manual: estos documentos rotulan su checklist («CHECK LIST: 271
+   CASUAL») y abren con el título de la sección. El nombre de archivo es el
+   último recurso, porque suele venir con hash y guiones bajos.
+
+   El vocabulario de la sección sale de los títulos de lámina, y sustituye a la
+   lista fija de palabras de Hombres para decidir si una pregunta es del dominio:
+   medido, «¿qué se debe limpiar?» y «¿cómo acomodo las tallas?» NO se
+   reconocían con manuales de Mujer o Muebles cargados, y perdían la instrucción
+   de responder con el formato completo. */
+let vocabularioManual=new Set();
+function refrescarVocabularioManual(){
+  vocabularioManual=new Set();
+  /* Todo el índice del manual, no solo los títulos: medido, con los títulos
+     «¿qué se debe limpiar?» seguía sin reconocerse porque la lámina se titula
+     LIMPIEZA y el asesor escribe «limpiar». El cuerpo del manual sí trae la
+     palabra tal cual («¿Qué se debe limpiar? Todo: mesas de exhibición…»). */
+  for(const c of docChunks)if(c.tf)for(const t in c.tf)vocabularioManual.add(t);
+}
+function nombreDeSeccion(docName){
+  const propios=docChunks.filter(c=>c.docName===docName);
+  const util=h=>h&&h.trim().length>5&&!/:$/.test(h.trim());
+  /* Estos manuales numeran la sección en el rótulo: «271 CASUAL», «512 MUJER
+     CLÁSICA», «101 MUEBLES». Es el nombre con el que el asesor la llama. */
+  for(const c of propios){
+    const m=(c.heading||'').match(/^(\d{2,4}\s+[A-ZÁÉÍÓÚÑ][^:]*)$/);
+    if(m&&util(m[1]))return m[1].trim();
+  }
+  for(const c of propios){
+    const m=(c.heading||'').match(/CHECK\s*LIST\s*:?\s*(.+)/i);
+    if(m&&util(m[1]))return m[1].trim();
+  }
+  const primera=propios.find(c=>util(c.heading)&&c.page<=2&&!/^(propuesta|planograma|marcas?|conjunto|exterior)\b/i.test(c.heading));
+  if(primera)return primera.heading.trim();
+  /* Último recurso: el nombre de archivo. Llega con hash, guiones bajos y a
+     veces con el escape de la URL a medio deshacer, así que se limpia. */
+  return docName.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'')
+    .replace(/%?20/g,' ').replace(/[_\-]+/g,' ').replace(/\s+/g,' ')
+    .replace(/^\d+\s+\d+\s+/,'').trim()||docName
+}
+function seccionActiva(){
+  if(!docChunks.length)return null;
+  if(appState.manualActivo)return nombreDeSeccion(appState.manualActivo);
+  const nombres=docs.map(d=>nombreDeSeccion(d.name));
+  return nombres.length===1?nombres[0]:null
 }
 
 function initManualSections(){
@@ -1579,7 +1648,7 @@ function bm25Score(c,terms){
    coincidieron de verdad (`hits`). Ese conteo es lo que permite al modo sin
    API decir "esto no está en el manual" en vez de entregar lo menos malo. */
 function retrieve(query,opts){
-  const{source=null,limit=40}=opts||{};
+  const{source=null,limit=40,doc=null}=opts||{};
   const terms=weightedTerms(query);
   if(!terms.length)return[];
   const strong=terms.filter(t=>t.w===1);
@@ -1589,6 +1658,9 @@ function retrieve(query,opts){
   const out=[];
   for(const c of corpus){
     if(source&&c.source!==source)continue;
+    /* Sección activa: el asesor trabaja UN manual, y filtrar aquí deja fuera de
+       una sola vez el contexto, las láminas y la verificación. */
+    if(doc&&c.docName!==doc)continue;
     let score=bm25Score(c,terms);
     if(score<=0)continue;
     /* El acierto se cuenta por palabra entera, no por trozo. Con `includes` a
@@ -1718,19 +1790,76 @@ function packChunks(results,maxChars,maxFrag){
   }
   return out.trim()
 }
-/* Un fragmento «sólido» es el que coincidió de verdad con la pregunta, con el
-   mismo criterio que usa el modo sin API para decidir si enseña algo o no.
+/* Un fragmento «sólido» es el que coincidió de verdad con la pregunta.
    Contarlos es lo que permite avisar al modelo de que no se encontró nada, en
    vez de entregarle fragmentos sueltos bajo la orden de "responde solo con
-   esto" — que es la vía por la que entraban casi todas las invenciones. */
-const esSolido=r=>r.hits>0||r.hitsSyn>=2;
+   esto" — que es la vía por la que entraban casi todas las invenciones.
+
+   El listón depende de la escala. Con los 10 fragmentos del manual interno,
+   pedir un acierto bastaba. Con cinco manuales reales cargados —572 fragmentos—
+   un solo acierto de palabra común deja pasar cualquier cosa: medido, «¿a qué
+   hora abre la tienda?» acierta «tienda» y se lleva 8412 caracteres de contexto,
+   y «¿cómo cambio la llanta del coche?» se lleva una lámina de PLANCHADO.
+
+   Medido sobre los 5 manuales, 8 preguntas buenas contra 5 de ruido: la
+   puntuación NO separa (6.49 de una buena contra 6.7 de un ruido), pero
+   `hits+hitsSyn` sí — todas las buenas llegan a 2 y ningún ruido pasa de 1.
+
+   Pero el mismo listón aplicado al manual interno tumba respuestas buenas, y no
+   es una contradicción: es que un acierto vale distinto según con cuánto
+   compita. El interno son 10 secciones de mil caracteres, y cada una ES un tema
+   entero —acertar «producto» dentro de «BÁSICOS DE DISPLAY» apunta de verdad a
+   la regla de slow movers—. Los manuales reales son fragmentos de 185
+   caracteres: ahí la misma palabra suelta es una coincidencia.
+
+   Así que la exigencia escala con el corpus. Los dos regímenes medidos están
+   lejos —10 fragmentos el interno, 88 a 572 los reales—, así que el corte no es
+   un número afinado al borde: cualquier valor entre ambos se comporta igual.
+
+   Dos caminos, porque son dos tipos de evidencia distintos: la palabra que el
+   asesor escribió (`hits`), o dos términos del diccionario a la vez (`hitsSyn`),
+   que es el caso de «¿cuánto espacio dejo para que pase la gente?» — no comparte
+   ni una palabra con la lámina de ALINEACIÓN y aun así es su respuesta.
+
+   La excepción de una sola palabra no es un parche: «¿qué va en el POS?» y
+   «maniquis» son preguntas de una palabra y no pueden aportar dos aciertos.
+
+   Y no es una decisión binaria, porque medido no puede serlo: a escala real
+   «¿cómo acomodo las tallas?» —una pregunta central del piso— deja la misma
+   huella que «¿a qué hora abre la tienda?»: un solo acierto en el mejor
+   fragmento. Cortar ahí en seco contesta "el manual no especifica" a una
+   pregunta que el manual sí contesta, y eso vacía la herramienta mucho más
+   rápido que un contexto de más.
+
+   Así que hay tres niveles. Con evidencia sólida se responde normal; con
+   evidencia débil se entrega el contexto PERO avisando de que la coincidencia es
+   floja, y es el modelo —que sabe leer si esos fragmentos vienen al caso— quien
+   decide; sin ninguna coincidencia no se finge nada. El corte duro sigue siendo
+   la red de seguridad; el aviso de invención vive en la regla CERO INVENCIÓN y
+   en la verificación, no aquí. */
+const CORPUS_GRANDE=40;
+function exigenciaDeSolidez(consulta){
+  const palabras=palabrasDeConsulta(consulta).length||1;
+  return Math.max(1,Math.min(corpus.length>CORPUS_GRANDE?2:1,palabras))
+}
+/* Algo, aunque sea poco: un acierto de la palabra escrita o dos del diccionario. */
+const hayAlgo=r=>r.hits>=1||r.hitsSyn>=2;
+function filtroSolidez(consulta){
+  const exigidos=exigenciaDeSolidez(consulta);
+  return r=>hayAlgo(r)&&(r.hits+r.hitsSyn)>=exigidos
+}
+/* 2 = sólido · 1 = flojo · 0 = nada */
+function nivelDeEvidencia(results,consulta){
+  if(results.some(filtroSolidez(consulta)))return 2;
+  return results.some(hayAlgo)?1:0
+}
 const MUESTRA_SIN_COINCIDENCIAS=1200;
 
 function getManualContext(query,maxChars,maxFrag){
   const results=retrieve(query,{source:'manual'});
-  const solidos=results.filter(esSolido).length;
-  if(!solidos)return{texto:manualSections.slice(0,2).map(s=>s.text).join('\n\n').slice(0,MUESTRA_SIN_COINCIDENCIAS),solidos:0};
-  return{texto:packChunks(results,maxChars,maxFrag),solidos}
+  const nivel=nivelDeEvidencia(results,query);
+  if(!nivel)return{texto:manualSections.slice(0,2).map(s=>s.text).join('\n\n').slice(0,MUESTRA_SIN_COINCIDENCIAS),nivel:0};
+  return{texto:packChunks(results,maxChars,maxFrag),nivel}
 }
 
 /* ════════════════════════════════════════════════
@@ -1802,10 +1931,10 @@ function buildChunks(pages,docName){
    sobreviven más de 9, así que puntuar el doble solo alarga la lista. */
 const PDF_CANDIDATOS=20;
 function getPdfContext(query,maxChars){
-  if(!docChunks.length)return{texto:'',solidos:0};
-  const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS});
-  const solidos=results.filter(esSolido).length;
-  if(solidos)return{texto:packChunks(results,maxChars),solidos};
+  if(!docChunks.length)return{texto:'',nivel:0};
+  const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS,doc:appState.manualActivo});
+  const nivel=nivelDeEvidencia(results,query);
+  if(nivel)return{texto:packChunks(results,maxChars),nivel};
   /* Sin una sola coincidencia sólida: en vez de callar, se entrega una muestra
      corta de cada manual para que el modelo vea de qué trata y pueda decir que
      no encontró la regla, no que el manual no existe. Corta a propósito: cuanto
@@ -1816,7 +1945,7 @@ function getPdfContext(query,maxChars){
   for(const c of docChunks){const arr=byDoc.get(c.docName);if(arr.length<Math.max(1,Math.floor(4/byDoc.size)))arr.push(c)}
   const sampled=[];
   for(const arr of byDoc.values())for(const c of arr)sampled.push({c,score:0,hits:0});
-  return{texto:packChunks(sampled,MUESTRA_SIN_COINCIDENCIAS),solidos:0}
+  return{texto:packChunks(sampled,MUESTRA_SIN_COINCIDENCIAS),nivel:0}
 }
 
 /* ════════════════════════════════════════════════
@@ -1859,6 +1988,15 @@ de visual merchandising, ni con reglas de otras secciones, ni con lo que parezca
 razonable. Lo que sigue es una muestra del manual para que sepas de qué trata:
 NO es la respuesta y no debes tomar datos de ahí.`;
 
+/* Evidencia floja: se entrega igual, pero diciendo lo que es. El modelo sabe
+   leer si unos fragmentos vienen al caso; lo que no puede hacer es adivinar que
+   la búsqueda apenas encontró nada. */
+const AVISO_COINCIDENCIA_FLOJA=`=== COINCIDENCIA DÉBIL ===
+La búsqueda encontró poco para esta pregunta. Lee los fragmentos: si responden,
+responde citando la página. Si NO responden exactamente lo que se preguntó, di
+"El manual no especifica [X]" y cierra con CERTEZA: GAP. No estires un fragmento
+parecido para que parezca una respuesta.`;
+
 function buildContext(query){
   ultimosFragmentos=[];
   const consulta=consultaDeBusqueda(query);
@@ -1867,7 +2005,7 @@ function buildContext(query){
   const parts=[];
   const isGemini=appState.provider==='gemini';
   const pdfBudget=isGemini?PDF_BUDGET_GEMINI:PDF_BUDGET;
-  let solidos=0;
+  let nivel=0;
   if(hasPdfs){
     /* Con un manual cargado, el interno NO entra. Traía cifras propias —90 cm de
        pasillo, 40%, 50%— que el modelo citaba como si fueran del manual del
@@ -1876,25 +2014,26 @@ function buildContext(query){
        no está en su manual y no lo puede ir a ver. Lo que el PDF no cubra se
        consulta aparte y rotulado, desde el botón de referencia general. */
     const pdf=getPdfContext(consulta,pdfBudget);
-    solidos=pdf.solidos;
+    nivel=pdf.nivel;
     if(pdf.texto)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n${pdf.texto}`);
   }else{
     const man=getManualContext(consulta,pdfBudget+MANUAL_BUDGET);
-    solidos=man.solidos;
+    nivel=man.nivel;
     if(man.texto)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${man.texto}`);
   }
   const extra=appState.extraEnabled?(appState.extra||'').trim().slice(0,EXTRA_BUDGET):'';
   if(extra)parts.push(`=== CONTEXTO DEL ASESOR ===\n${extra}`);
   let texto=parts.join('\n\n---\n\n');
-  const sinCoincidencias=!solidos&&!!texto;
+  const sinCoincidencias=nivel===0&&!!texto;
+  const flojo=nivel===1;
   if(sinCoincidencias){
     texto=AVISO_SIN_COINCIDENCIAS+'\n\n'+texto;
     /* Lo que se envió es una muestra, no evidencia de nada. Vaciar la lista es
        la garantía dura de que no saldrá una lámina debajo de una respuesta que
        el manual no sostiene, conteste lo que conteste el modelo. */
     ultimosFragmentos=[];
-  }
-  return{texto,sinCoincidencias,ampliada,solidos}
+  }else if(flojo)texto=AVISO_COINCIDENCIA_FLOJA+'\n\n'+texto;
+  return{texto,sinCoincidencias,flojo,ampliada,nivel}
 }
 
 /* Consulta explícita a la referencia general, desde el botón que aparece cuando
@@ -1990,7 +2129,7 @@ const PROMPT_VERSION='10.0';  // 10.0: fuente única con PDF + certeza declarada
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
-2. Preguntas fuera de VM Hombres Mercadep (clima, tareas, etc.) → redirección corta, SIN formato de 6 etapas.
+2. Preguntas fuera de visual merchandising Mercadep (clima, tareas, etc.) → redirección corta, SIN formato de 6 etapas.
 3. Menciona al creador SOLO si preguntan explícitamente quién te creó o programó.
 4. [RESPUESTA FINAL] contiene SOLO la respuesta al asesor — nunca repitas ETAPAS ni razonamiento interno.
 5. Conflictos documentados en el contexto → cítalos; nunca digas "no especifica" si hay conflicto registrado.
@@ -2038,7 +2177,11 @@ function isGreetingQuestion(q){
 function assessQuestionScope(q){
   const norm=normalizeText(q||'');
   const isGreeting=isGreetingQuestion(q);
-  const hasVm=VM_SCOPE_KEYWORDS.some(k=>norm.includes(k));
+  /* Con un manual cargado manda su vocabulario, no la lista de Hombres: es lo
+     que hace que «¿qué se debe limpiar?» cuente como pregunta del dominio en un
+     manual de Muebles. La lista fija se queda para cuando no hay PDF. */
+  const enElManual=vocabularioManual.size&&tokenize(q||'').some(t=>vocabularioManual.has(t));
+  const hasVm=enElManual||VM_SCOPE_KEYWORDS.some(k=>norm.includes(k));
   const clearlyOff=!isGreeting&&!hasVm&&OFF_TOPIC_PATTERNS.some(p=>p.test(norm));
   const otherStore=hasVm&&/\b(amazon|walmart|palacio|sears|costco|coppel|zara|hm|h\s*&\s*m)\b/i.test(q||'');
   const isVmQuestion=hasVm&&!clearlyOff&&!isGreeting&&!isCreatorQuestion(q);
@@ -2144,7 +2287,11 @@ function getStreamingDisplayText(streamedText){
 const appState={
   provider:'github',apiKey:'',chatModel:'gpt-4o-mini',
   system:'',extra:'',tokenLimit:80000,
-  memoryEnabled:true,extraEnabled:true,temperature:0.2
+  memoryEnabled:true,extraEnabled:true,temperature:0.2,
+  /* `null` = todos los manuales. En el piso se trabaja UNA sección: con cinco
+     manuales de la misma plantilla cargados, la respuesta se armaba con los
+     cinco y el dato salía citado a la página de un manual que no era el suyo. */
+  manualActivo:null
 };
 let docs=[],history=[],sessionTokens=0,quickBtns=[],editingQuick=false,isGenerating=false;
 function estimateTokens(t){return Math.ceil((t||'').length/3.5)}
@@ -2218,6 +2365,7 @@ function loadSaved(){
       appState.system=localStorage.getItem('ap_system')||document.getElementById('system-prompt').value;
     }
     appState.extra=localStorage.getItem('ap_extra')||'';
+    appState.manualActivo=localStorage.getItem('ap_manual_activo')||null;
     appState.tokenLimit=parseInt(localStorage.getItem('ap_token_limit')||'80000',10);
     document.getElementById('api-key-input').value=appState.apiKey;
     document.getElementById('system-prompt').value=appState.system;
@@ -3368,6 +3516,16 @@ async function handleFiles(fileList){
     if(hash)guardarManual(hash,doc,chunks,figuras).catch(e=>console.warn('guardarManual',e));
   }
   procWrap.style.display='none';
+  /* Con un solo manual no hay ambigüedad y se activa solo. Con varios NO se
+     elige por el asesor —cuál de cinco es "el suyo" no lo sabe nadie más que
+     él—, pero sí se le dice que puede elegir: si no, la respuesta se arma con
+     los cinco y el dato sale citado a la página de un manual que no es el suyo. */
+  if(docs.length===1&&!appState.manualActivo){
+    appState.manualActivo=docs[0].name;
+    try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
+  }else if(docs.length>1&&!appState.manualActivo){
+    showToast('📕 Tienes varios manuales cargados. Elige arriba con cuál estás trabajando para que las citas y las láminas salgan de ese.','info',7000);
+  }
   renderDocs();
 }
 
@@ -3388,13 +3546,49 @@ function renderDocs(){
     ragInfo.style.display='block';
     ragInfo.textContent=`✦ RAG activo — ${docChunks.length} fragmentos y ${docFigures.length} figuras en ${docs.length} manual${docs.length>1?'es':''}.`;
   }else ragInfo.style.display='none';
+  renderSelectorSeccion();
+  renderQuickBtns();
   renderAccionesDocs();
+}
+
+/* ── SELECTOR DE SECCIÓN ACTIVA ───────────────────
+   Se pinta en la pestaña de manuales y en la cabecera del chat: no se puede
+   responder sin que se vea contra qué manual se está respondiendo. */
+function renderSelectorSeccion(){
+  const opciones=[`<option value="">Todos los manuales (${docs.length})</option>`]
+    .concat(docs.map(d=>`<option value="${escapeHtml(d.name)}"${appState.manualActivo===d.name?' selected':''}>${escapeHtml(nombreDeSeccion(d.name))}</option>`));
+  /* La cabecera también dice de qué sección es: con un manual de Bebés cargado,
+     «Departamento Hombres» es sencillamente falso. */
+  const hdr=document.getElementById('hdr-seccion');
+  const activa=seccionActiva();
+  if(hdr)hdr.textContent=activa?'Visual Merchandising · '+activa:(docs.length>1?`Visual Merchandising · ${docs.length} manuales cargados`:'Visual Merchandising · Departamento Hombres');
+  for(const id of['seccion-activa','seccion-activa-chat']){
+    const wrap=document.getElementById(id+'-wrap');
+    const sel=document.getElementById(id);
+    if(!wrap||!sel)continue;
+    /* Con un solo manual no hay nada que elegir: el selector solo estorbaría. */
+    wrap.style.display=docs.length>1?'':'none';
+    sel.innerHTML=opciones.join('');
+    sel.value=appState.manualActivo||'';
+  }
+}
+function cambiarSeccion(valor){
+  appState.manualActivo=valor||null;
+  try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
+  renderSelectorSeccion();
+  renderQuickBtns();
+  showToast(appState.manualActivo
+    ?`📕 Sección activa: ${nombreDeSeccion(appState.manualActivo)}. Solo se consulta ese manual.`
+    :'📚 Se consultarán todos los manuales cargados.','info',3500);
 }
 function removeDoc(i){
   const name=docs[i].name;
   docs.splice(i,1);
   docChunks=docChunks.filter(c=>c.docName!==name);
   docFigures=docFigures.filter(f=>f.docName!==name);
+  /* Si se quitó el manual que estaba activo, la sección activa deja de existir:
+     seguir filtrando por él dejaría el asistente mudo sin decir por qué. */
+  if(appState.manualActivo===name)cambiarSeccion(docs.length===1?docs[0].name:'');
   rebuildCorpus();
   renderDocs();
   showToast(`🗑️ "${name}" eliminado`, 'warn', 2500);
@@ -3414,6 +3608,16 @@ function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
   const paginas=typeof contextBuilt==='string'
     ?[...new Set([...contextBuilt.matchAll(/p[áa]g\.\s*(\d+)/gi)].map(m=>m[1]))]
     :[];
+  /* Con varios manuales cargados, saber de cuál salió la respuesta es la mitad
+     de la información. */
+  /* Hay manuales que cubren varias secciones y su rótulo es larguísimo
+     («206 APARATOS DE EJERCICIO, 207 MOTOS Y 211 MOVILIDAD ELÉCTRICA»): en la
+     etiqueta se recorta, en el prompt viaja entero. */
+  if(hasPdfs&&appState.manualActivo){
+    const n=nombreDeSeccion(appState.manualActivo);
+    sources.push({type:'seccion',label:'📕 '+(n.length>42?n.slice(0,40)+'…':n)});
+  }
+  else if(hasPdfs&&docs.length>1)sources.push({type:'seccion',label:`📚 ${docs.length} manuales a la vez`});
   if(hasPdfs&&contextBuilt)sources.push({type:'pdf',label:paginas.length?`PDF · pág. ${paginas.slice(0,6).join(', ')}${paginas.length>6?'…':''}`:'PDF cargado'});
   /* Con un PDF cargado el manual interno ya no entra al contexto: anunciarlo
      como fuente era prometer una revisión que no ocurrió. */
@@ -3699,7 +3903,10 @@ const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
    y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
    contesta lo que preguntó. */
 function seccionesPorRelevancia(q){
-  return retrieve(consultaDeBusqueda(q),{limit:12}).filter(esSolido)
+  const consulta=consultaDeBusqueda(q);
+  /* En modo manual el filtro de sección activa vale igual: si el asesor dijo con
+     qué manual trabaja, no tiene por qué recibir la lámina de otro. */
+  return retrieve(consulta,{limit:12,doc:docChunks.length?appState.manualActivo:null}).filter(filtroSolidez(consulta))
 }
 function responderSinModelo(q){
   switchTab('chat');
@@ -3780,8 +3987,14 @@ async function sendMessage(){
   const system=(appState.system||document.getElementById('system-prompt').value.trim());
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
+  /* La identidad sale del manual, no de una constante: delante de un manual de
+     Bebés el asistente se presentaba como especialista de Hombres. */
+  const seccion=seccionActiva();
+  const quienEres=seccion
+    ?`\n\nQUIÉN ERES EN ESTA CONSULTA: el especialista en Visual Merchandising de la sección **${seccion}**, que es la del manual cargado. Habla de esa sección y de ninguna otra.`
+    :'';
   const sourceNotice=hasPdfs
-    ?'\n\n⚠ FUENTE ÚNICA: El PDF que el asesor cargó es el manual que se está ejecutando hoy en ese piso, y es la ÚNICA fuente de esta respuesta. No hay otra en el contexto: no completes con reglas generales de Mercadep ni con conocimiento de visual merchandising. Si el PDF no lo trae, la respuesta es "El manual no especifica [X]" — el asesor tiene un botón para consultar aparte la referencia general. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes.'
+    ?quienEres+'\n\n⚠ FUENTE ÚNICA: El PDF que el asesor cargó es el manual que se está ejecutando hoy en ese piso, y es la ÚNICA fuente de esta respuesta. No hay otra en el contexto: no completes con reglas generales de Mercadep ni con conocimiento de visual merchandising. Si el PDF no lo trae, la respuesta es "El manual no especifica [X]" — el asesor tiene un botón para consultar aparte la referencia general. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes.'
     :'\n\n⚠ FUENTES DISPONIBLES: Solo hay manual interno Mercadep disponible. REVÍSALO para responder.';
   const fullSystem=system+GUARDRAIL_APPEND+(memCtx?'\n\n'+memCtx:'')+sourceNotice;
   const messages=[{role:'system',content:fullSystem}];
@@ -3794,9 +4007,9 @@ async function sendMessage(){
   if(context)messages.push({role:'user',content:'[CONTEXTO — DOCUMENTACIÓN DISPONIBLE]\n\nRevisa este contexto antes de responder. Toda tu respuesta debe basarse ÚNICAMENTE en esta información:\n\n'+context});
   let userContent=q;
   if(scope.isGreeting){
-    userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre VM Hombres Mercadep. NO uses la redirección de fuera de tema.]';
+    userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre la sección del manual cargado. NO uses la redirección de fuera de tema.]';
   }else if(scope.clearlyOff&&!isCreatorQuestion(q)){
-    userContent+='\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio VM Hombres Mercadep. Responde con la redirección corta, sin formato de 6 etapas.]';
+    userContent+='\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio de visual merchandising. Responde con la redirección corta, sin formato de 6 etapas.]';
   }else if(scope.otherStore){
     userContent+='\n\n[NOTA DEL SISTEMA: Menciona otra tienda. Aclara que solo conoces manuales Mercadep; si la pregunta incluye un producto VM (corbata, sensor, etc.), responde la regla de Mercadep del contexto.]';
   }else if(scope.isVmQuestion){
@@ -3804,6 +4017,8 @@ async function sendMessage(){
   }
   if(ctx.sinCoincidencias){
     userContent+='\n\n[NOTA DEL SISTEMA: La búsqueda no encontró ni un fragmento que coincida con esta pregunta. Responde "El manual no especifica [X]" y cierra con CERTEZA: GAP. No improvises una regla.]';
+  }else if(ctx.flojo){
+    userContent+='\n\n[NOTA DEL SISTEMA: La coincidencia con el manual es débil. Si los fragmentos no responden exactamente lo que se preguntó, dilo con "El manual no especifica [X]" y CERTEZA: GAP en vez de estirar uno parecido.]';
   }
   messages.push({role:'user',content:userContent});
 
@@ -3887,16 +4102,37 @@ function renderQuickEditor(){
       <button class="quick-editor-remove" onclick="removeQuick(${i})">✕</button>
     </div>`).join('')
 }
+/* Los accesos rápidos de fábrica son de Hombres —«Entallado Hombres», «MarcaDemoB
+   en POS»—: con un manual de Bebés o de Muebles cargado no llevan a ninguna
+   parte, y un botón que no lleva a ninguna parte es lo que hace que una
+   herramienta parezca rota en el piso. Los del manual se sacan de sus propios
+   rótulos de lámina, se marcan aparte y no tocan los que el asesor configuró. */
+const QUICK_DEL_MANUAL=6;
+function accesosDelManual(){
+  if(!docChunks.length)return[];
+  const activos=appState.manualActivo?docChunks.filter(c=>c.docName===appState.manualActivo):docChunks;
+  const cuenta=new Map();
+  for(const c of activos){
+    const h=(c.heading||'').trim();
+    /* Rótulos que son una sección de verdad: ni códigos, ni listas de marcas. */
+    if(h.length<5||h.length>34||/^\d|:$/.test(h))continue;
+    cuenta.set(h,(cuenta.get(h)||0)+1);
+  }
+  return[...cuenta.entries()].sort((a,b)=>b[1]-a[1]).slice(0,QUICK_DEL_MANUAL)
+    .map(([h])=>({label:h.charAt(0)+h.slice(1).toLowerCase(),q:`¿Qué dice el manual sobre ${h.toLowerCase()}?`}))
+}
 function renderQuickBtns(){
   const c=document.getElementById('quick-btns');if(!c)return;
   c.innerHTML='';
-  quickBtns.forEach(b=>{
+  const pinta=(b,cls)=>{
     const btn=document.createElement('button');
-    btn.className='quick-btn';
+    btn.className='quick-btn'+(cls?' '+cls:'');
     btn.textContent=b.label;
     btn.addEventListener('click',()=>ask(b.q));
     c.appendChild(btn);
-  });
+  };
+  for(const b of accesosDelManual())pinta(b,'del-manual');
+  quickBtns.forEach(b=>pinta(b));
 }
 function toggleQuickEdit(){
   editingQuick=!editingQuick;
@@ -4052,9 +4288,19 @@ function figurasDeFragmentos(chunks,citas,respuesta,certeza){
      pie de la tira cambia para no prometer una cita que no existe. */
   let porCita=true;
   if(citas&&!citas.size){
-    const primero=chunks.find(c=>c.source==='pdf'&&c.page);
+    /* Con varios manuales cargados, el mejor fragmento suelto puede ser de un
+       manual que apenas aportó nada a la respuesta: medido, «¿qué marcas van en
+       casual caballero?» acababa enseñando la lámina de MARCAS del manual de
+       Mujer. Manda el documento que MÁS fragmentos puso, y dentro de él el
+       mejor puntuado —que es el primero, porque llegan ordenados. */
+    const porDoc=new Map();
+    for(const c of chunks)if(c.source==='pdf'&&c.page)porDoc.set(c.docName,(porDoc.get(c.docName)||0)+1);
+    if(!porDoc.size)return[];
+    const dominante=[...porDoc].sort((a,b)=>b[1]-a[1])[0][0];
+    const primero=chunks.find(c=>c.source==='pdf'&&c.page&&c.docName===dominante);
     if(!primero)return[];
     citas=new Set([String(primero.page)]);
+    chunks=chunks.filter(c=>c.docName===dominante);
     porCita=false;
   }
 
@@ -4159,8 +4405,11 @@ function renderEvidencia(container,figuras,origen){
     img.src=f.dataUrl;img.loading='lazy';
     img.alt=(f.caption||f.heading||'Figura')+' — página '+f.page;
     const pie=document.createElement('figcaption');
-    /* Con más de un manual cargado, «pág. 11» a secas no le sirve a nadie. */
-    pie.textContent=(varios?f.docName.replace(/\.pdf$/i,'')+' · ':'')+'pág. '+f.page+(f.heading?' · '+f.heading:'');
+    /* Con más de un manual cargado, «pág. 11» a secas no le sirve a nadie. Y sin
+       rótulo de sección el pie se quedaba en «pág. 2» a secas: ahí manda el
+       nombre de la sección, que siempre se puede deducir del manual. */
+    const deQuien=varios||!f.heading?nombreDeSeccion(f.docName)+' · ':'';
+    pie.textContent=deQuien+'pág. '+f.page+(f.heading?' · '+f.heading:'');
     fig.appendChild(img);fig.appendChild(pie);
     fig.onclick=()=>fig.classList.toggle('ampliada');
     tira.appendChild(fig);
@@ -4451,11 +4700,17 @@ const TEST_VERIF=[
   {resp:'Deja 80 cm de pasillo entre muebles.',q:'¿cuánto mide el pasillo?',marca:1,nota:'el 80 existe en el contexto, pero como 80/20 — no son 80 cm'},
 ];
 
+/* Esta primera tanda mide el modo SIN manual cargado —el asistente con solo su
+   conocimiento interno—, así que se aparta el PDF mientras corre. Si no, con
+   manuales cargados mediría otra cosa: el interno ya ni siquiera entra al
+   contexto, a propósito, y todos los casos "fallarían" por diseño. */
 function testCtx(q,previa){
-  const guardaHist=history;
+  const guardaHist=history,guardaChunks=docChunks,guardaDocs=docs;
   history=previa?[{role:'user',content:previa},{role:'assistant',content:'—'}]:[];
+  docChunks=[];docs=[];rebuildCorpus();
   let r;
-  try{r=buildContext(q)}finally{history=guardaHist}
+  try{r=buildContext(q)}
+  finally{history=guardaHist;docChunks=guardaChunks;docs=guardaDocs;rebuildCorpus()}
   return typeof r==='string'?{texto:r,sinCoincidencias:false}:r;
 }
 
@@ -4463,13 +4718,14 @@ function testCtx(q,previa){
    trae la respuesta, dividida entre la del mejor de esa consulta. Si alguna vez
    se acerca a CTX_ALPHA, el corte está a punto de tirar una respuesta buena. */
 function testMargen(q,previa,debe){
-  const guardaHist=history;
+  const guardaHist=history,guardaChunks=docChunks,guardaDocs=docs;
   history=previa?[{role:'user',content:previa},{role:'assistant',content:'—'}]:[];
+  docChunks=[];docs=[];rebuildCorpus();
   let res;
   try{
     const consulta=typeof consultaDeBusqueda==='function'?consultaDeBusqueda(q):q;
     res=retrieve(consulta,{limit:40});
-  }finally{history=guardaHist}
+  }finally{history=guardaHist;docChunks=guardaChunks;docs=guardaDocs;rebuildCorpus()}
   if(!res.length)return null;
   const top=res[0].score||1;
   for(const r of res)if(debe.some(d=>r.c.text.includes(d)))return r.score/top;
@@ -4498,6 +4754,50 @@ function testLaminas(){
   casos.push({nombre:'la respuesta declara CERTEZA: GAP',esperado:0,obtenido:n,ok:n===0});
   docFigures=gFig;docs=gDocs;ultimosFragmentos=gUlt;
   return casos;
+}
+
+/* ── SEGUNDA TANDA: LOS MANUALES DEL ASESOR ───────
+   Solo corre si hay PDF cargado. No puede comprobar respuestas concretas —cada
+   manual dice lo suyo—, así que mide lo que sí es igual en cualquier manual de
+   piso: que las preguntas de siempre encuentren algo, que el ruido no, y que
+   con una sección activa NI UN fragmento ni UNA lámina salgan de otro manual.
+   Esto último es lo que se rompía con cinco manuales de la misma plantilla:
+   el dato salía bien y citado a la página de otro. */
+const TEST_PISO=['¿cuánto pasillo dejo entre muebles?','¿de qué lado va el gancho?','¿cómo acomodo las tallas?','¿qué se debe limpiar?','¿cada cuándo se surte el mueble?'];
+const TEST_PISO_RUIDO=['¿a qué hora abre la tienda?','¿qué receta me recomiendas para la cena?','¿quién es el gerente de la tienda?'];
+
+function pruebasConManuales(){
+  if(!docChunks.length)return[];
+  const filas=[];
+  const guardaActivo=appState.manualActivo;
+  for(const q of TEST_PISO){
+    const ctx=buildContext(q);
+    const ok=ctx.nivel>=1;
+    filas.push({tipo:'piso',q,ok,detalle:ok?`evidencia ${ctx.nivel===2?'sólida':'débil'} · ${ultimosFragmentos.length} fragmentos`:'el manual no devuelve nada para una pregunta de piso',nota:'pregunta de piso, cualquier manual'});
+  }
+  for(const q of TEST_PISO_RUIDO){
+    const ctx=buildContext(q);
+    const ok=ctx.nivel<2;
+    filas.push({tipo:'piso·ruido',q,ok,detalle:ok?(ctx.nivel?'marcado como coincidencia débil':'marcado como sin coincidencias'):'pasa como pregunta contestable'});
+  }
+  /* Contaminación entre manuales, que es el fallo que trajo el selector. */
+  if(docs.length>1){
+    for(const d of docs){
+      appState.manualActivo=d.name;
+      let ajenos=0,figAjenas=0;
+      for(const q of TEST_PISO){
+        buildContext(q);
+        ajenos+=ultimosFragmentos.filter(c=>c.docName!==d.name).length;
+        const figs=figurasDeFragmentos(ultimosFragmentos,new Set(),'respuesta con su dato');
+        figAjenas+=figs.filter(f=>f.docName!==d.name).length;
+      }
+      filas.push({tipo:'sección',q:'sección activa: '+nombreDeSeccion(d.name),ok:!ajenos&&!figAjenas,
+        detalle:ajenos||figAjenas?`${ajenos} fragmentos y ${figAjenas} láminas de OTRO manual`:'cero fragmentos y cero láminas de otro manual'});
+    }
+    appState.manualActivo=guardaActivo;
+    buildContext('reset');
+  }
+  return filas
 }
 
 function correrPruebas(){
@@ -4544,12 +4844,16 @@ function correrPruebas(){
   ];
   for(const p of pruebasCerteza)filas.push({tipo:'certeza',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
 
+  const conManuales=pruebasConManuales();
+  filas.push(...conManuales);
+
   const resumen={
     recall:`${recallOk}/${recallTot}`,
     ruido:`${ruidoOk}/${ruidoTot}`,
     verificacion:`${verifOk}/${TEST_VERIF.length}`,
     laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
     certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
+    tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',
     corpus:corpus.length+' fragmentos ('+docChunks.length+' de PDF)',

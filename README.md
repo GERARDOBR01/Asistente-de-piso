@@ -52,6 +52,24 @@ pregunta, lo dice — no rellena con la sección más cercana.
   en vez de entregar fragmentos sueltos bajo la instrucción de "responde solo con esto" —
   que es obedecer y componer una regla que nadie escribió. En ese caso tampoco se guarda
   evidencia: no puede salir una lámina debajo de una respuesta que el manual no sostiene.
+  Son **tres niveles, no dos**, y eso salió de medir: a escala real «¿cómo acomodo las
+  tallas?» —una pregunta central del piso— deja la misma huella que «¿a qué hora abre la
+  tienda?». Con evidencia sólida se responde normal; con evidencia débil el contexto va
+  igual pero avisando de que la coincidencia es floja, y decide el modelo, que sabe leer si
+  esos fragmentos vienen al caso; sin ninguna coincidencia no se finge nada. Cortar en seco
+  el caso intermedio contesta "no lo especifica" a preguntas que el manual sí contesta, y eso
+  vacía la herramienta más rápido que un contexto de más.
+- **Una sección a la vez.** El asesor elige con qué manual está trabajando y solo ese se
+  consulta; queda un «todos» explícito para comparar. No es un lujo de interfaz: medido con
+  cinco manuales reales de la misma plantilla, «¿cuánto pasillo dejo?» armaba la respuesta con
+  fragmentos de los cinco y enseñaba tres láminas de tres manuales distintos. El dato salía
+  bien y **citado a la página de un manual que no era el suyo**, que es peor que un dato
+  inventado: el asesor va a esa página y no está.
+- **La identidad la pone el manual.** El nombre de la sección se saca del propio documento
+  —«271 CASUAL», «436 COLECCIONES BEBÉS»— y con él se presenta el asistente, se rotulan las
+  respuestas y se generan accesos rápidos con los títulos de sus propias láminas. Antes se
+  presentaba como especialista de Hombres delante de un manual de Bebés, y el filtro de tema
+  —vocabulario de Hombres— dejaba fuera preguntas tan de piso como «¿qué se debe limpiar?».
 - **Una sola fuente por respuesta.** Con un PDF cargado, el conocimiento interno no entra al
   contexto. Traía cifras propias —90 cm de pasillo, 40%, 50%— que el modelo citaba como si
   fueran del manual del asesor, y la verificación las daba por buenas porque estaban en el
@@ -70,6 +88,12 @@ numérica, de láminas y de certeza. Reporta recall, cuánto ruido se atrapa y *
 caso más ajustado sobre el corte relativo `CTX_ALPHA`**, que es el número que hay que volver
 a mirar cada vez que se toca el vocabulario. Corre entero en el dispositivo, sin API y sin
 red, sobre las mismas funciones que usa el chat.
+
+Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
+respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier
+manual de piso: que las preguntas de siempre (pasillo, gancho, tallas, limpieza, surtido)
+encuentren algo, que el ruido no, y que con una sección activa **ni un fragmento ni una
+lámina** salgan de otro manual. Medido sobre los cinco manuales reales: 13/13.
 
 ### El motor de lectura de manuales
 
@@ -179,6 +203,14 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   correctas, el resultado saldrá marcado aunque esté bien. Prefiero ese falso positivo al
   silencio. Y el aviso va **encima** de la respuesta, no debajo: colgado abajo, el asesor ya
   había leído —y en el piso, ejecutado— el dato que el aviso venía a poner en duda.
+- **El listón de "esto sí es una respuesta" depende de la escala, y es un número medido, no
+  deducido.** Con las 10 secciones largas del manual interno, acertar una palabra dentro de
+  «BÁSICOS DE DISPLAY» apunta de verdad a la regla; con 572 fragmentos de 185 caracteres de
+  cinco manuales reales, la misma palabra suelta es casualidad —«tienda» aparece en
+  «TIENDA FLAGSHIP» y colaba «¿a qué hora abre la tienda?» con 8412 caracteres de contexto—.
+  Por eso la exigencia sube con el tamaño del corpus. Los dos regímenes medidos están lejos
+  (10 fragmentos contra 88–572), así que el corte no está afinado al borde; pero es un
+  número que habrá que volver a mirar con manuales de otra maquetación.
 - **La puntuación general premia `[MANDATORY]` aunque no haya coincidencia de palabras.**
   Sirve cuando el resultado lo va a leer un modelo, que sabe descartar lo que no viene al
   caso; mentiría en el modo manual. Por eso ahí se exige al menos un acierto real de
