@@ -2111,6 +2111,18 @@ Responde "El manual de ${activa} no especifica [X]", di que eso sí aparece en
 "${otra}" y que puede cambiar de sección con el botón de aquí abajo. No tomes
 ningún dato de los fragmentos. Cierra con CERTEZA: GAP.`;
 
+/* Sin sección elegida, el contexto mezcla manuales que comparten plantilla. La
+   misma pregunta tiene entonces varias respuestas verdaderas a la vez: medido,
+   «¿qué porcentaje es el cliente práctico?» devuelve 44%, 38.5%, 39.3%, 35.3% y
+   43.8%, una por sección. Elegir una es acertar en una y fallar en cuatro. */
+const avisoVariasSecciones=n=>`=== ${n} SECCIONES A LA VEZ ===
+El asesor no ha elegido sección, así que abajo hay fragmentos de ${n} secciones
+distintas. Estos manuales comparten plantilla y lo que cambia son justo los
+datos: la misma pregunta puede tener una respuesta distinta y correcta en cada
+sección. NO elijas una cifra y la des como LA respuesta. Si las secciones
+difieren, da el dato POR SECCIÓN, cada uno con el nombre de su sección y su
+página. Si no puedes separarlas, dilo y pide que se elija sección arriba.`;
+
 const AVISO_COINCIDENCIA_FLOJA=`=== COINCIDENCIA DÉBIL ===
 La búsqueda encontró poco para esta pregunta. Lee los fragmentos: si responden,
 responde citando la página. Si NO responden exactamente lo que se preguntó, di
@@ -2231,10 +2243,14 @@ function buildContext(query){
        el manual no sostiene, conteste lo que conteste el modelo. */
     ultimosFragmentos=[];
   }else if(flojo)texto=AVISO_COINCIDENCIA_FLOJA+'\n\n'+texto;
+  /* Va delante de todo lo demás: es el marco con el que hay que leer el resto. */
+  const secciones=new Set(ultimosFragmentos.map(c=>c.docName));
+  const variasSecciones=!seccion.doc&&secciones.size>1;
+  if(variasSecciones)texto=avisoVariasSecciones(secciones.size)+'\n\n'+texto;
   ultimaOtraSeccion=otraSeccion;
   ultimaSeccionUsada=seccion.doc;
   ultimaSeccionPorPregunta=seccion.porPregunta;
-  return{texto,sinCoincidencias,flojo,ampliada,nivel,otraSeccion,
+  return{texto,sinCoincidencias,flojo,ampliada,nivel,otraSeccion,variasSecciones,
     seccionUsada:seccion.doc,seccionPorPregunta:seccion.porPregunta}
 }
 
@@ -4520,6 +4536,13 @@ function figurasDeFragmentos(chunks,citas,respuesta,certeza){
     const porDoc=new Map();
     for(const c of chunks)if(c.source==='pdf'&&c.page)porDoc.set(c.docName,(porDoc.get(c.docName)||0)+1);
     if(!porDoc.size)return[];
+    /* Sin sección activa y con varias en el contexto, "el que más aportó" no
+       significa nada: medido, «¿qué porcentaje es el cliente práctico?» trae
+       cinco cifras verdaderas y distintas —44%, 38.5%, 39.3%, 35.3%, 43.8%— una
+       por sección, y la lámina salía siempre de MUJER CLÁSICA. Una imagen que
+       dice "de aquí sale el dato" cuando hay cinco datos es una afirmación
+       falsa, así que sin cita explícita no se enseña ninguna. */
+    if(!appState.manualActivo&&porDoc.size>1)return[];
     const dominante=[...porDoc].sort((a,b)=>b[1]-a[1])[0][0];
     const primero=chunks.find(c=>c.source==='pdf'&&c.page&&c.docName===dominante);
     if(!primero)return[];
@@ -5054,6 +5077,21 @@ function pruebasConManuales(){
           :(ctx.otraSeccion?`señala a ${ctx.otraSeccion.nombre}, que no es la esperada`
             :`NO avisa: responde con ${nombreDeSeccion(otro.name)} y ${ultimosFragmentos.length} fragmentos suyos`),
         nota:'la pregunta nombra otra sección cargada'});
+    }
+    /* Sin sección elegida: el contexto mezcla manuales gemelos, así que la misma
+       pregunta tiene varias respuestas verdaderas. Se comprueba que se avise y
+       que NO salga una lámina afirmando que el dato viene de una de ellas. */
+    appState.manualActivo=null;
+    for(const q of TEST_PISO.slice(0,3)){
+      const ctx=buildContext(q);
+      const secciones=new Set(ultimosFragmentos.map(c=>c.docName)).size;
+      const figs=figurasDeFragmentos(ultimosFragmentos,new Set(),'respuesta con su dato');
+      const ok=secciones<=1||(ctx.variasSecciones&&!figs.length);
+      filas.push({tipo:'todos',q,ok,
+        detalle:secciones<=1?'una sola sección en el contexto'
+          :(ok?`${secciones} secciones avisadas y sin lámina que elija una`
+             :`${secciones} secciones${ctx.variasSecciones?'':' SIN aviso'}${figs.length?` y ${figs.length} lámina(s) de una sola`:''}`),
+        nota:'sin sección activa'});
     }
     appState.manualActivo=guardaActivo;
     buildContext('reset');

@@ -204,6 +204,13 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   una sección cuyo nombre el asesor nunca escribe —las bicicletas viven en "206 APARATOS DE
   EJERCICIO, 207 MOTOS Y 211 MOVILIDAD ELÉCTRICA"— solo se alcanza por la vía de evidencia,
   que pide que ese manual destaque sobre los demás y por lo tanto puede callarse.
+- **"Todos los manuales" sirve para comparar, no para trabajar.** Sin sección elegida la
+  misma pregunta tiene varias respuestas verdaderas: medido, "¿qué porcentaje es el cliente
+  práctico?" devuelve 44%, 38.5%, 39.3%, 35.3% y 43.8% — una por sección. Elegir una es
+  acertar en una y fallar en cuatro. Ahora el contexto avisa de cuántas secciones lleva y
+  pide el dato **por sección**, y **no se enseña ninguna lámina** salvo que la respuesta cite
+  la página: una imagen que dice "de aquí sale el dato" cuando hay cinco datos distintos es
+  una afirmación falsa. Aun así, en el piso lo correcto es elegir sección.
 - **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
   casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
   rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
