@@ -501,6 +501,40 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .src-tag.memory{background:rgba(62,207,142,0.08);color:var(--green);border-color:rgba(62,207,142,0.2)}
 .src-tag.extra{background:rgba(245,166,35,0.08);color:var(--amber);border-color:rgba(245,166,35,0.2)}
 .src-tag.none{background:rgba(224,82,82,0.06);color:var(--text3);border-color:var(--border)}
+.src-tag.ampliada{background:rgba(74,158,255,0.06);color:var(--text2);border-color:rgba(74,158,255,0.18)}
+
+/* La certeza que el propio modelo declaró, junto a su nombre: es lo primero que
+   se ve, antes de leer la respuesta. */
+.certeza{font-size:9px;padding:1px 6px;border-radius:8px;letter-spacing:.4px;border:1px solid var(--border);text-transform:lowercase}
+.certeza.alta{background:rgba(62,207,142,0.09);color:var(--green);border-color:rgba(62,207,142,0.22)}
+.certeza.media{background:rgba(245,166,35,0.09);color:var(--amber);border-color:rgba(245,166,35,0.22)}
+.certeza.gap{background:rgba(224,82,82,0.08);color:var(--text2);border-color:rgba(224,82,82,0.22)}
+.certeza.ref{background:var(--gdim);color:var(--gold);border-color:rgba(200,164,74,0.22)}
+
+.ref-general{padding:4px 10px;background:var(--gdim);color:var(--gold);border:1px solid rgba(200,164,74,0.22);border-radius:var(--r);font-size:10.5px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s}
+.ref-general:hover:not(:disabled){background:rgba(200,164,74,0.18)}
+.ref-general:disabled{opacity:.55;cursor:default}
+
+/* Arnés de medición (?test=1) — no se carga en el uso normal. */
+#test-panel{position:fixed;inset:24px;z-index:9999;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:'DM Sans',sans-serif}
+.test-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.test-head button{margin-left:auto;background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer}
+.test-veredicto{font-size:10px;padding:2px 8px;border-radius:9px}
+.test-veredicto.bien{background:rgba(62,207,142,0.1);color:var(--green)}
+.test-veredicto.mal{background:rgba(224,82,82,0.1);color:var(--red,#e05252)}
+.test-resumen{display:flex;flex-wrap:wrap;gap:14px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2)}
+.test-resumen b{color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.05em;font-size:9px;margin-right:4px}
+.test-scroll{flex:1;overflow:auto}
+.test-tabla{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
+.test-tabla td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text2);word-break:break-word}
+.test-tabla td:first-child{width:26px;text-align:center}
+.test-tabla td:nth-child(2){width:96px}
+.test-tabla td:last-child{width:38%}
+.test-tabla tr.ok td:first-child{color:var(--green)}
+.test-tabla tr.no td:first-child{color:var(--amber)}
+.test-tipo{color:var(--text3);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.test-det{color:var(--text3)}
+.test-nota{color:var(--text4);font-size:10px;margin-top:2px}
 
 .restore-banner{display:none;align-items:center;gap:8px;padding:7px 11px;background:rgba(200,164,74,0.06);border:1px solid rgba(200,164,74,0.15);border-radius:var(--r);font-size:11px;color:var(--text2);margin-bottom:8px}
 .restore-banner.show{display:flex}
@@ -836,7 +870,16 @@ descanso visual · triangulación · slow mover
 [Respuesta directa en 2-4 oraciones. Sin introducción.
 Sin "recuerda que". Sin conclusiones vacías.
 Bullets solo para listas. Prosa para preguntas directas.
-Negritas solo para términos técnicos del manual.]</textarea>
+Negritas solo para términos técnicos del manual.]
+
+CERTEZA: ALTA | MEDIA | GAP
+
+La última línea de la respuesta es SIEMPRE esa marca, sola, sin nada más:
+- ALTA: el dato está literal en el contexto y lo citaste con su página.
+- MEDIA: lo dedujiste de lo que hay, o es una recomendación, no una regla.
+- GAP: el contexto no lo cubre y lo dijiste con "El manual no especifica [X]".
+Se lee automáticamente: si marcas ALTA sin dato en el contexto, la respuesta
+sale señalada al asesor.</textarea>
         <div id="system-prompt-counter" class="system-counter"><span id="system-prompt-chars">0</span> caracteres · ~<span id="system-prompt-tokens">0</span> tokens</div>
       </div>
 
@@ -1341,6 +1384,16 @@ const UNIDADES=new Set(['cm','mm','mt','mts','m2','kg','ml','lt','pz','pzs']);
 function tokenize(t){return normalizeText(t).split(/\s+/)
   .filter(w=>!STOPWORDS.has(w)&&(w.length>2||UNIDADES.has(w)||/^\d+$/.test(w)))}
 
+/* Las palabras de la pregunta se parten con la MISMA regla que el índice, no con
+   una más estricta. `extractKeywords` corta en >3 letras, y como `weightedTerms`
+   arrancaba de ahí, «POS», «cm», «SL» y las cifras nunca llegaban a buscarse: el
+   arreglo que ya tenía `tokenize` para el índice se quedaba a medias porque la
+   consulta entraba filtrada de antes. Medido: «¿qué va en el POS?» devolvía CERO
+   términos y por tanto cero fragmentos — la pregunta más común del piso.
+   `extractKeywords` se queda como está para la memoria de aprendizaje, que sí
+   quiere solo palabras largas. */
+function palabrasDeConsulta(q){return[...new Set(tokenize(q))]}
+
 function indexChunk(c){
   const toks=tokenize((c.heading?c.heading+' ':'')+c.text);
   const tf=Object.create(null);
@@ -1362,6 +1415,48 @@ function rebuildCorpus(){
   bm25.N=corpus.length||1;
   bm25.avgdl=corpus.length?total/corpus.length:1;
   bm25.df=df;
+  vocabTrigramas=null;
+}
+
+/* ── ERRATAS ──────────────────────────────────────
+   En el piso se escribe rápido y con el teclado del teléfono: «entayado»,
+   «corvatas», «colorisación». Hoy eso devuelve cero, y cero se lee como "el
+   manual no lo dice".
+
+   Se busca la palabra del manual más parecida por trigramas, y solo cuando la
+   escrita —y todas sus variantes de plural y género— no existe en el índice: si
+   el asesor escribió una palabra que el manual usa, no hay nada que corregir.
+   La candidata entra con el mismo descuento que un sinónimo, nunca sustituye a
+   lo que se escribió, y con el listón alto (0.6 de solapamiento y tres letras de
+   diferencia como mucho) para que «llanta» no se convierta en «plantilla». */
+let vocabTrigramas=null;
+function trigramas(w){
+  const s='  '+w+' ',out=[];
+  for(let i=0;i+3<=s.length;i++)out.push(s.slice(i,i+3));
+  return out
+}
+function indiceTrigramas(){
+  if(vocabTrigramas)return vocabTrigramas;
+  const m=new Map();
+  for(const t in bm25.df){
+    if(t.length<4)continue;
+    const gs=trigramas(t);
+    for(const g of gs){let a=m.get(g);if(!a)m.set(g,a=[]);a.push(t)}
+  }
+  return vocabTrigramas=m
+}
+const ERRATA_MIN=0.6;
+function masParecida(w){
+  if(w.length<5)return null;
+  const idx=indiceTrigramas(),gs=trigramas(w),cuenta=new Map();
+  for(const g of gs){const a=idx.get(g);if(!a)continue;for(const t of a)cuenta.set(t,(cuenta.get(t)||0)+1)}
+  let mejor=null,mejorP=0;
+  for(const[t,c]of cuenta){
+    if(Math.abs(t.length-w.length)>3)continue;
+    const p=c/Math.max(gs.length,trigramas(t).length);
+    if(p>mejorP){mejorP=p;mejor=t}
+  }
+  return mejorP>=ERRATA_MIN?mejor:null
 }
 
 function initManualSections(){
@@ -1400,6 +1495,11 @@ function variantes(w){
     }
   };
   plural(w);
+  /* Y al revés: el asesor escribe «maniquis» y el manual titula «MANIQUÍES».
+     Singularizar era la mitad del camino —la forma que el manual usa puede ser
+     la plural—, así que también se prueba añadiendo la terminación. Las que no
+     existen no coinciden con nada y no estorban. */
+  for(const x of[...v])if(x.length>3&&!x.endsWith('s')){v.push(x+'s');v.push(x+'es')}
   /* El asesor pregunta "¿dónde acomodo lo rebajado?" y el manual escribe "la
      mercancía rebajada": misma palabra, otro género, y el buscador devolvía
      CERO fragmentos. Se prueba el género contrario en cada forma, incluida la
@@ -1413,21 +1513,40 @@ function variantes(w){
    aciertos —que es el que decide si hay respuesta o no— quedaría inflado por
    una sola palabra. */
 function weightedTerms(query){
-  const palabras=extractKeywords(query);
+  const palabras=palabrasDeConsulta(query);
   const terms=new Map();
   const add=(t,w,g)=>{if(t&&!terms.has(t))terms.set(t,{w,g})};
+  /* Se prueban TODAS las formas que existan en el índice, no solo cuando la
+     escrita falta. La regla vieja —"si la palabra existe, el manual ya usa esa
+     forma"— era cierta mientras el acierto se medía por trozo de palabra;
+     midiendo palabras enteras es falsa: «pasillo» aparece en la sección de
+     Tallas Especiales y «Pasillos: 90 cm» en la de datos técnicos, y quedarse
+     con la primera forma dejaba fuera precisamente la lámina que contesta.
+     No infla el conteo: todas las formas comparten grupo (`k`) y `hits` cuenta
+     grupos, no términos. */
+  const conVariantes=(t,w,g)=>{
+    add(t,w,g);
+    let existe=!!bm25.df[t];
+    for(const v of variantes(t))if(bm25.df[v]){add(v,w,g);existe=true}
+    return existe
+  };
   for(const k of palabras){
     for(const t of tokenize(k)){
-      add(t,1,k);
-      /* La variante solo se prueba si la palabra tal cual no existe en el
-         corpus; si existe, el manual ya usa la forma que se escribió. */
-      if(!bm25.df[t])for(const v of variantes(t))add(v,1,k);
+      /* Ni la palabra ni ninguna de sus formas está en el manual: puede ser una
+         errata, y entonces se prueba la palabra más parecida con descuento. */
+      if(!conVariantes(t,1,k)){
+        const cerca=masParecida(t);
+        if(cerca)add(cerca,SYNONYM_WEIGHT,'~'+k);
+      }
     }
   }
   for(const k of palabras){
     for(const base of variantes(k))for(const phrase of expandKeywords([base])){
       if(phrase===base)continue;
-      for(const t of tokenize(phrase))add(t,SYNONYM_WEIGHT,'~'+k);
+      /* El diccionario está escrito en singular («pasillo») y el manual titula
+         en plural («Pasillos: 90 cm»): el sinónimo se quedaba a una letra de su
+         propia lámina. */
+      for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
     }
   }
   return[...terms].map(([t,{w,g}])=>({t,w,g}))
@@ -1472,9 +1591,19 @@ function retrieve(query,opts){
     if(source&&c.source!==source)continue;
     let score=bm25Score(c,terms);
     if(score<=0)continue;
-    const norm=normalizeText((c.heading?c.heading+' ':'')+c.text);
+    /* El acierto se cuenta por palabra entera, no por trozo. Con `includes` a
+       secas, «cambia» —variante de género de «cambio»— acertaba dentro de
+       «cambiar», y "¿cómo cambio la llanta del coche?" pasaba por pregunta
+       contestable: un acierto bastaba para que el modelo recibiera fragmentos
+       bajo la orden de responder con ellos. Las formas legítimas ya las genera
+       `variantes` de este lado; lo que se pierde aquí no es morfología, es
+       coincidencia parcial. Los espacios se normalizan porque `normalizeText`
+       conserva los saltos de línea y una palabra a principio de renglón no
+       quedaría rodeada de espacios. */
+    const norm=' '+normalizeText((c.heading?c.heading+' ':'')+c.text).replace(/\s+/g,' ')+' ';
+    const contiene=t=>norm.includes(' '+t+' ');
     const gAcierto=new Set();
-    for(const{t,g}of strong)if(norm.includes(t))gAcierto.add(g);
+    for(const{t,g}of strong)if(contiene(t))gAcierto.add(g);
     const hits=gAcierto.size;
     /* Los aciertos por sinónimo se cuentan aparte: valen menos que la palabra
        que el asesor escribió, pero un fragmento que solo se encontró por el
@@ -1483,7 +1612,7 @@ function retrieve(query,opts){
        diga «alineación», «circulación» y «80 cm» a la vez es evidencia, aunque
        las tres salgan de haber escrito «pasillo». */
     let hitsSyn=0;
-    for(const{t}of flojos)if(norm.includes(t))hitsSyn++;
+    for(const{t}of flojos)if(contiene(t))hitsSyn++;
     let phrase=0;
     for(const sh of shingles)if(norm.includes(sh))phrase++;
     score+=Math.min(phrase,3)*1.5;
@@ -1575,8 +1704,12 @@ function packChunks(results,maxChars,maxFrag){
     if(space<80)break;
     /* Antes el último fragmento entraba cortado a la mitad con «[...]». Media
        regla es peor que ninguna: el modelo la cita completa igual, y la
-       verificación numérica no encuentra la cifra que quedó fuera. */
-    if(r.c.text.length>space)break;
+       verificación numérica no encuentra la cifra que quedó fuera.
+       Pero cortar AQUÍ el empaquetado entero —que es lo que hacía un `break`—
+       tiraba también todos los fragmentos siguientes, más cortos y que sí
+       cabían: una lámina larga en tercer lugar dejaba fuera la que traía la
+       respuesta. El que no cabe se salta; los demás siguen entrando. */
+    if(r.c.text.length>space)continue;
     out+=header+r.c.text+'\n\n';
     chars+=header.length+r.c.text.length;
     n++;
@@ -1585,10 +1718,19 @@ function packChunks(results,maxChars,maxFrag){
   }
   return out.trim()
 }
+/* Un fragmento «sólido» es el que coincidió de verdad con la pregunta, con el
+   mismo criterio que usa el modo sin API para decidir si enseña algo o no.
+   Contarlos es lo que permite avisar al modelo de que no se encontró nada, en
+   vez de entregarle fragmentos sueltos bajo la orden de "responde solo con
+   esto" — que es la vía por la que entraban casi todas las invenciones. */
+const esSolido=r=>r.hits>0||r.hitsSyn>=2;
+const MUESTRA_SIN_COINCIDENCIAS=1200;
+
 function getManualContext(query,maxChars,maxFrag){
   const results=retrieve(query,{source:'manual'});
-  if(!results.length)return manualSections.slice(0,3).map(s=>s.text).join('\n\n').slice(0,maxChars);
-  return packChunks(results,maxChars,maxFrag)
+  const solidos=results.filter(esSolido).length;
+  if(!solidos)return{texto:manualSections.slice(0,2).map(s=>s.text).join('\n\n').slice(0,MUESTRA_SIN_COINCIDENCIAS),solidos:0};
+  return{texto:packChunks(results,maxChars,maxFrag),solidos}
 }
 
 /* ════════════════════════════════════════════════
@@ -1660,18 +1802,21 @@ function buildChunks(pages,docName){
    sobreviven más de 9, así que puntuar el doble solo alarga la lista. */
 const PDF_CANDIDATOS=20;
 function getPdfContext(query,maxChars){
-  if(!docChunks.length)return'';
+  if(!docChunks.length)return{texto:'',solidos:0};
   const results=retrieve(query,{source:'pdf',limit:PDF_CANDIDATOS});
-  if(results.length)return packChunks(results,maxChars);
-  /* Sin una sola coincidencia: en vez de callar, se entrega el arranque de
-     cada manual para que el modelo vea de qué trata y pueda decir que no
-     encontró la regla, no que el manual no existe. */
+  const solidos=results.filter(esSolido).length;
+  if(solidos)return{texto:packChunks(results,maxChars),solidos};
+  /* Sin una sola coincidencia sólida: en vez de callar, se entrega una muestra
+     corta de cada manual para que el modelo vea de qué trata y pueda decir que
+     no encontró la regla, no que el manual no existe. Corta a propósito: cuanto
+     más material se le pone delante bajo la orden de "responde solo con esto",
+     más fácil es que componga una respuesta plausible con lo que haya. */
   const byDoc=new Map();
   for(const c of docChunks)if(!byDoc.has(c.docName))byDoc.set(c.docName,[]);
-  for(const c of docChunks){const arr=byDoc.get(c.docName);if(arr.length<Math.max(1,Math.floor(12/byDoc.size)))arr.push(c)}
+  for(const c of docChunks){const arr=byDoc.get(c.docName);if(arr.length<Math.max(1,Math.floor(4/byDoc.size)))arr.push(c)}
   const sampled=[];
   for(const arr of byDoc.values())for(const c of arr)sampled.push({c,score:0,hits:0});
-  return packChunks(sampled,maxChars)
+  return{texto:packChunks(sampled,MUESTRA_SIN_COINCIDENCIAS),solidos:0}
 }
 
 /* ════════════════════════════════════════════════
@@ -1680,29 +1825,84 @@ function getPdfContext(query,maxChars){
 ════════════════════════════════════════════════ */
 const PDF_BUDGET=12000,MANUAL_BUDGET=6000,EXTRA_BUDGET=600;
 const PDF_BUDGET_GEMINI=20000;
-/* Con un manual real cargado, el conocimiento interno pasa a segundo plano: se
-   consulta para lo que el PDF no cubra —muebles POS, mundos, entallado— pero
-   deja de competir por el presupuesto. Sin PDF no cambia nada: ahí el interno
-   ES el asistente. */
-const MANUAL_BUDGET_CON_PDF=2500,MANUAL_MAX_FRAG_CON_PDF=4;
+
+/* ── PREGUNTAS DE SEGUIMIENTO ─────────────────────
+   Nadie repite la pregunta entera: se pregunta «¿y en juveniles?» y se espera
+   que el asistente siga el hilo. La búsqueda usaba solo la frase escrita, así
+   que esas tres palabras recuperaban lo que podían y la respuesta salía de
+   fragmentos que no venían al caso.
+
+   Solo se amplía la BÚSQUEDA: el turno que se le manda al modelo sigue siendo
+   lo que el asesor escribió, porque el hilo de la conversación ya viaja en el
+   historial. Y se avisa en la tira de fuentes, para que no parezca magia. */
+const SEGUIMIENTO=/^\s*(?:¿\s*)?(?:y|e|entonces|pero|ok|vale|ah|ahi|ah[ií])\b/i;
+let ultimaBusquedaAmpliada=false;
+function consultaDeBusqueda(q,hist){
+  ultimaBusquedaAmpliada=false;
+  const propias=tokenize(q||'');
+  if(propias.length>=4&&!SEGUIMIENTO.test(q||''))return q;
+  const previas=(hist||history).filter(m=>m.role==='user');
+  const previa=previas[previas.length-1];
+  if(!previa||!previa.content)return q;
+  ultimaBusquedaAmpliada=true;
+  return previa.content+' '+q
+}
+
+/* El aviso va DENTRO del contexto y en primera posición porque es donde el
+   modelo lo lee junto a la orden de "responde solo con esto". Sin él, ante una
+   pregunta que el manual no cubre recibía fragmentos sueltos y la instrucción
+   de responder con ellos: obedecía, y componía una regla que nadie escribió. */
+const AVISO_SIN_COINCIDENCIAS=`=== SIN COINCIDENCIAS EN EL MANUAL ===
+Ningún fragmento del manual responde a esta pregunta. Responde exactamente
+"El manual no especifica [X]" y nada más. NO completes con conocimiento general
+de visual merchandising, ni con reglas de otras secciones, ni con lo que parezca
+razonable. Lo que sigue es una muestra del manual para que sepas de qué trata:
+NO es la respuesta y no debes tomar datos de ahí.`;
+
 function buildContext(query){
   ultimosFragmentos=[];
+  const consulta=consultaDeBusqueda(query);
+  const ampliada=ultimaBusquedaAmpliada;
   const hasPdfs=docChunks.length>0;
   const parts=[];
   const isGemini=appState.provider==='gemini';
   const pdfBudget=isGemini?PDF_BUDGET_GEMINI:PDF_BUDGET;
+  let solidos=0;
   if(hasPdfs){
-    const pdfCtx=getPdfContext(query,pdfBudget);
-    if(pdfCtx)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (FUENTE QUE MANDA) ===\n${pdfCtx}`);
-    const manCtx=getManualContext(query,MANUAL_BUDGET_CON_PDF,MANUAL_MAX_FRAG_CON_PDF);
-    if(manCtx)parts.push(`=== REFERENCIA GENERAL — MANUAL INTERNO MERCADEP (SECUNDARIO) ===\n${manCtx}`);
+    /* Con un manual cargado, el interno NO entra. Traía cifras propias —90 cm de
+       pasillo, 40%, 50%— que el modelo citaba como si fueran del manual del
+       asesor, y la verificación las daba por buenas porque sí estaban en el
+       contexto. Para quien lee en el piso eso es exactamente un dato inventado:
+       no está en su manual y no lo puede ir a ver. Lo que el PDF no cubra se
+       consulta aparte y rotulado, desde el botón de referencia general. */
+    const pdf=getPdfContext(consulta,pdfBudget);
+    solidos=pdf.solidos;
+    if(pdf.texto)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n${pdf.texto}`);
   }else{
-    const manCtx=getManualContext(query,pdfBudget+MANUAL_BUDGET);
-    if(manCtx)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${manCtx}`);
+    const man=getManualContext(consulta,pdfBudget+MANUAL_BUDGET);
+    solidos=man.solidos;
+    if(man.texto)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${man.texto}`);
   }
   const extra=appState.extraEnabled?(appState.extra||'').trim().slice(0,EXTRA_BUDGET):'';
   if(extra)parts.push(`=== CONTEXTO DEL ASESOR ===\n${extra}`);
-  return parts.join('\n\n---\n\n')
+  let texto=parts.join('\n\n---\n\n');
+  const sinCoincidencias=!solidos&&!!texto;
+  if(sinCoincidencias){
+    texto=AVISO_SIN_COINCIDENCIAS+'\n\n'+texto;
+    /* Lo que se envió es una muestra, no evidencia de nada. Vaciar la lista es
+       la garantía dura de que no saldrá una lámina debajo de una respuesta que
+       el manual no sostiene, conteste lo que conteste el modelo. */
+    ultimosFragmentos=[];
+  }
+  return{texto,sinCoincidencias,ampliada,solidos}
+}
+
+/* Consulta explícita a la referencia general, desde el botón que aparece cuando
+   el manual del asesor no cubre algo. Va rotulada como lo que es: otro manual. */
+function contextoReferenciaGeneral(query){
+  const man=getManualContext(consultaDeBusqueda(query),MANUAL_BUDGET);
+  if(!man.solidos)return'';
+  return`=== REFERENCIA GENERAL MERCADEP — NO ES EL MANUAL DEL ASESOR ===\nEsto NO sale del PDF que el asesor tiene cargado. Es la referencia general de Mercadep. Dilo en la respuesta con esas palabras: "tu manual no lo trae; la referencia general de Mercadep indica…".\n\n${man.texto}`
 }
 
 /* ════════════════════════════════════════════════
@@ -1786,7 +1986,7 @@ function clearMemory(){
 ════════════════════════════════════════════════ */
 /* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
    viejo guardado en localStorage, sin pedirle que borre nada a mano. */
-const PROMPT_VERSION='9.0';   // 9.0: el PDF cargado manda sobre el manual interno
+const PROMPT_VERSION='10.0';  // 10.0: fuente única con PDF + certeza declarada
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
@@ -1802,9 +2002,11 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 8. CERO INVENCIÓN: no completes con conocimiento general de visual merchandising lo que el contexto no diga.
    Si la respuesta no está en el contexto, dilo con esas palabras: "el manual no lo especifica".
    Una regla plausible pero no escrita es peor que un "no está": el asesor la ejecuta en el piso.
-9. QUIÉN MANDA: si hay un PDF cargado, ese es el manual que se está ejecutando en ese piso y su valor es el
-   que se aplica. El manual interno solo cubre lo que el PDF no trae. Cuando los dos hablen del mismo dato,
-   responde con el del PDF y su página, y deja la diferencia como nota al final — no como empate.`;
+9. FUENTE ÚNICA: el contexto es todo lo que hay. Si hay un PDF cargado, ese es el manual que se está
+   ejecutando en ese piso y es la única fuente: no mezcles reglas generales de Mercadep que no estén
+   en el contexto, aunque las sepas. Lo que el PDF no cubra se responde como GAP.
+10. ÚLTIMA LÍNEA OBLIGATORIA: toda respuesta termina con "CERTEZA: ALTA", "CERTEZA: MEDIA" o
+   "CERTEZA: GAP", sola en su línea. Se lee automáticamente y decide lo que ve el asesor.`;
 
 const GREETING_PATTERNS=/^(?:\s*(?:hola|hey|hi|hello|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?|qu[eé]\s+tal|saludos?|buen\s+d[ií]a))[\s!.?]*$/i;
 
@@ -1818,7 +2020,11 @@ const VM_SCOPE_KEYWORDS=[
 const OFF_TOPIC_PATTERNS=[
   /\b(clima|pronostico|pronóstico|tiempo\s+atmosferico|tiempo\s+atmosférico)\b/,
   /\b(receta|cocinar|comida)\b/,
-  /\b(tarea|examen|universidad|escuela|matematicas|matemáticas)\b/,
+  /* «Tarea» salía de aquí: en el piso es una palabra de trabajo —"¿cuál es mi
+     tarea al abrir?"— y la pregunta se contestaba con la redirección de fuera
+     de tema. Si el manual no la cubre, ahora sale como GAP, que es la respuesta
+     honesta; antes salía un "solo puedo ayudarte con exhibición". */
+  /\b(examen|universidad|escuela|matematicas|matemáticas)\b/,
   /\b(amazon|walmart|palacio|sears|costco|coppel)\b/,
   /\b(quien\s+eres|quién\s+eres|que\s+eres|qué\s+eres)\b(?!.*(hombres|mercadep|visual|mercad|exhib))/
 ];
@@ -1838,8 +2044,23 @@ function assessQuestionScope(q){
   const isVmQuestion=hasVm&&!clearlyOff&&!isGreeting&&!isCreatorQuestion(q);
   return{hasVm,clearlyOff,otherStore,isGreeting,isVmQuestion};
 }
+/* ── CERTEZA DECLARADA ────────────────────────────
+   La ETAPA 5 del prompt clasifica la certeza desde siempre, pero moría dentro
+   del razonamiento: nada la comprobaba y el asesor no la veía. Ahora la
+   respuesta cierra con una línea que la máquina puede leer, y esa línea decide
+   dos cosas visibles: el distintivo del mensaje y si se enseña lámina o no.
+   Una respuesta que admite el hueco no puede venir acompañada de una foto. */
+const CERTEZA_RE=/(?:^|\n)\s*\**\s*CERTEZA\s*:?\s*\**\s*(ALTA|MEDIA|GAP)\s*\**\s*\.?\s*$/i;
+function certezaDe(texto){
+  const m=(texto||'').match(CERTEZA_RE);
+  return m?m[1].toUpperCase():null
+}
+function sinLineaDeCerteza(texto){
+  return(texto||'').replace(CERTEZA_RE,'').trim()
+}
+
 function sanitizeFinalAnswer(final,question){
-  let text=(final||'').trim();
+  let text=sinLineaDeCerteza(final);
   if(!text)return'';
   if(!isCreatorQuestion(question)){
     text=text
@@ -1911,9 +2132,9 @@ function parseAIResponse(text){
 }
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
-  if(parsed.parsed&&parsed.final)return parsed.final;
+  if(parsed.parsed&&parsed.final)return sinLineaDeCerteza(parsed.final);
   const partial=streamedText.match(/\[RESPUESTA\s+FINAL[^\]]*\]([\s\S]*)$/i);
-  if(partial)return partial[1].trim();
+  if(partial)return sinLineaDeCerteza(partial[1]);
   return null;
 }
 
@@ -3182,23 +3403,29 @@ function removeDoc(i){
 /* ════════════════════════════════════════════════
    SOURCE INDICATOR
 ════════════════════════════════════════════════ */
-function getSourceInfo(query,contextBuilt,memUsed,hasPdfs){
+function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
   const sources=[];
+  /* Que la búsqueda se haya apoyado en la pregunta anterior no puede ser magia
+     invisible: si el asesor no entiende por qué salió lo que salió, no puede
+     corregir el tiro con otra pregunta. */
+  if(ampliada)sources.push({type:'ampliada',label:'Búsqueda ampliada con tu pregunta anterior'});
   /* Con el contexto en la mano se puede decir QUÉ páginas se consultaron, no
      solo que "había un PDF": es la diferencia entre una etiqueta y una pista. */
   const paginas=typeof contextBuilt==='string'
     ?[...new Set([...contextBuilt.matchAll(/p[áa]g\.\s*(\d+)/gi)].map(m=>m[1]))]
     :[];
   if(hasPdfs&&contextBuilt)sources.push({type:'pdf',label:paginas.length?`PDF · pág. ${paginas.slice(0,6).join(', ')}${paginas.length>6?'…':''}`:'PDF cargado'});
-  if(contextBuilt)sources.push({type:'manual',label:'Manual interno'});
+  /* Con un PDF cargado el manual interno ya no entra al contexto: anunciarlo
+     como fuente era prometer una revisión que no ocurrió. */
+  if(contextBuilt&&!hasPdfs)sources.push({type:'manual',label:'Manual interno'});
   if(memUsed)sources.push({type:'memory',label:'Memoria'});
   if(appState.extraEnabled&&appState.extra.trim())sources.push({type:'extra',label:'Contexto asesor'});
   if(!sources.length)sources.push({type:'none',label:'Sin fuentes'});
   return sources
 }
 
-function renderSourceIndicator(container,query,contextBuilt,memUsed,hasPdfs){
-  const sources=getSourceInfo(query,contextBuilt,memUsed,hasPdfs);
+function renderSourceIndicator(container,query,contextBuilt,memUsed,hasPdfs,ampliada){
+  const sources=getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada);
   const wrap=document.createElement('div');wrap.className='msg-sources';
   wrap.innerHTML=sources.map(s=>`<span class="src-tag ${s.type}">${escapeHtml(s.label)}</span>`).join('');
   container.appendChild(wrap)
@@ -3384,6 +3611,45 @@ function stopGeneration() {
   if (currentAbort) { currentAbort.abort(); }
 }
 
+/* Segunda consulta, explícita y a otra fuente. No se mezcla con la anterior ni
+   se guarda en el historial como si fuera la respuesta del manual del asesor:
+   es otro manual, y el mensaje lo dice antes de decir nada más. */
+async function consultarReferenciaGeneral(pregunta,btn){
+  const contexto=contextoReferenciaGeneral(pregunta);
+  if(!contexto){
+    showToast('La referencia general de Mercadep tampoco cubre eso.','warn',4000);
+    btn.disabled=true;btn.textContent='🔎 La referencia general tampoco lo cubre';
+    return;
+  }
+  btn.disabled=true;btn.textContent='🔎 Consultando la referencia general…';
+  const loaderEl=appendMsg('assistant','',true);
+  try{
+    const provider=PROVIDERS[appState.provider];
+    const messages=[
+      {role:'system',content:'Eres el Especialista en Visual Merchandising de Hombres Mercadep. Responde SOLO con lo que diga el contexto, en 2-4 oraciones, sin formato de etapas. Empieza la respuesta con "Tu manual no lo trae; la referencia general de Mercadep indica…". Si el contexto no lo cubre, dilo y ya.'},
+      {role:'user',content:contexto},
+      {role:'user',content:pregunta}
+    ];
+    const{text,tokens}=await callWithRetry(provider,appState.apiKey,messages,appState.chatModel,900,appState.temperature);
+    const limpio=sanitizeFinalAnswer(text,pregunta);
+    loaderEl.classList.remove('loading');
+    loaderEl.querySelector('.msg-body').innerHTML=safeMarkdown(limpio);
+    loaderEl.querySelector('.msg-label').innerHTML='Asistente <span class="certeza ref">referencia general — no es tu manual</span>';
+    const verif=verificarContraContexto(limpio,contexto);
+    const alerta=renderAvisoVerificacion(verif);
+    if(alerta)loaderEl.insertBefore(alerta,loaderEl.querySelector('.msg-body'));
+    sessionTokens+=tokens||estimateTokens(text);updateTokenBar();
+    btn.textContent='🔎 Referencia general consultada';
+  }catch(err){
+    loaderEl.classList.remove('loading');
+    const body=loaderEl.querySelector('.msg-body');
+    body.style.color='var(--amber)';
+    body.innerHTML=safeMarkdown(formatError(err));
+    btn.disabled=false;btn.textContent='🔎 Buscar en la referencia general Mercadep';
+  }
+  scrollToBottom();
+}
+
 /* ════════════════════════════════════════════════
    SEND MESSAGE — Streaming v7.0
 ════════════════════════════════════════════════ */
@@ -3433,7 +3699,7 @@ const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
    y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
    contesta lo que preguntó. */
 function seccionesPorRelevancia(q){
-  return retrieve(q,{limit:12}).filter(r=>r.hits>0||r.hitsSyn>=2)
+  return retrieve(consultaDeBusqueda(q),{limit:12}).filter(esSolido)
 }
 function responderSinModelo(q){
   switchTab('chat');
@@ -3466,7 +3732,10 @@ function responderSinModelo(q){
     ?`${aviso}\n\n${comoFunciona} Coincidieron **${relevantes.length}** ${relevantes.length===1?'fragmento':'fragmentos'}.${donde}\n\n---\n\n\`\`\`\n${fragmentos}\n\`\`\`\n\n${invitacion}`
     :`${aviso}\n\n**Nada del manual coincide con esa pregunta.** ${comoFunciona}\n\nPrefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras. Prueba con otros términos o con un acceso rápido.\n\n${invitacion}`;
   const msgEl=appendMsg('assistant',cuerpo,false);
-  renderEvidencia(msgEl,figurasDeFragmentos(relevantes.map(r=>r.c)));
+  /* En modo manual los fragmentos se enseñan enteros en pantalla, así que su
+     página es literalmente de dónde sale lo que se está leyendo: el rótulo lo
+     dice con esas palabras y no habla de citas, porque aquí nadie citó nada. */
+  renderEvidencia(msgEl,figurasDeFragmentos(relevantes.map(r=>r.c),null,fragmentos?null:'GAP'),'manual');
   history.push({role:'user',content:q});
   history.push({role:'assistant',content:cuerpo});
   saveChatHistory();
@@ -3505,18 +3774,24 @@ async function sendMessage(){
   appendMsg('user',q,false);
   const loaderEl=appendMsg('assistant','',true);
 
-  const context=buildContext(q);
+  const ctx=buildContext(q);
+  const context=ctx.texto;
   const memCtx=appState.memoryEnabled?getMemoryContext(q):'';
   const system=(appState.system||document.getElementById('system-prompt').value.trim());
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
   const sourceNotice=hasPdfs
-    ?'\n\n⚠ FUENTES DISPONIBLES Y CUÁL MANDA: El PDF que el asesor cargó es el MANUAL OPERATIVO — es el que se está ejecutando hoy en ese piso de venta y MANDA sobre cualquier otra fuente. El manual interno Mercadep es REFERENCIA GENERAL: úsalo solo para lo que el PDF no cubra (muebles POS, mundos, reglas transversales). Si los dos dan un valor para lo mismo, el valor bueno es el del PDF: respóndelo como la regla a aplicar y menciona la diferencia en una línea al final ("el manual interno registra otro valor: X"). NUNCA los presentes como empate ni dejes al asesor eligiendo. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes del PDF.'
+    ?'\n\n⚠ FUENTE ÚNICA: El PDF que el asesor cargó es el manual que se está ejecutando hoy en ese piso, y es la ÚNICA fuente de esta respuesta. No hay otra en el contexto: no completes con reglas generales de Mercadep ni con conocimiento de visual merchandising. Si el PDF no lo trae, la respuesta es "El manual no especifica [X]" — el asesor tiene un botón para consultar aparte la referencia general. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes.'
     :'\n\n⚠ FUENTES DISPONIBLES: Solo hay manual interno Mercadep disponible. REVÍSALO para responder.';
   const fullSystem=system+GUARDRAIL_APPEND+(memCtx?'\n\n'+memCtx:'')+sourceNotice;
   const messages=[{role:'system',content:fullSystem}];
+  /* El historial va ANTES del contexto y se queda en tres intercambios. Con
+     catorce mensajes después del contexto, las cifras de respuestas anteriores
+     quedaban más cerca de la pregunta que la evidencia de esta, y volvían a
+     salir en una respuesta que el contexto actual ya no sostiene. Lo último que
+     el modelo lee antes de contestar es el manual y la pregunta. */
+  messages.push(...history.slice(-6));
   if(context)messages.push({role:'user',content:'[CONTEXTO — DOCUMENTACIÓN DISPONIBLE]\n\nRevisa este contexto antes de responder. Toda tu respuesta debe basarse ÚNICAMENTE en esta información:\n\n'+context});
-  messages.push(...history.slice(-14));
   let userContent=q;
   if(scope.isGreeting){
     userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre VM Hombres Mercadep. NO uses la redirección de fuera de tema.]';
@@ -3526,6 +3801,9 @@ async function sendMessage(){
     userContent+='\n\n[NOTA DEL SISTEMA: Menciona otra tienda. Aclara que solo conoces manuales Mercadep; si la pregunta incluye un producto VM (corbata, sensor, etc.), responde la regla de Mercadep del contexto.]';
   }else if(scope.isVmQuestion){
     userContent+='\n\n[NOTA DEL SISTEMA: Pregunta válida de VM Hombres. Usa el formato de 6 etapas y basa la respuesta en el contexto. Si hay conflicto documentado, cítalo — no digas "no especifica".]';
+  }
+  if(ctx.sinCoincidencias){
+    userContent+='\n\n[NOTA DEL SISTEMA: La búsqueda no encontró ni un fragmento que coincida con esta pregunta. Responde "El manual no especifica [X]" y cierra con CERTEZA: GAP. No improvises una regla.]';
   }
   messages.push({role:'user',content:userContent});
 
@@ -3574,7 +3852,7 @@ async function sendMessage(){
     history.push({role:'user',content:q});
     const{final}=parseAIResponse(streamedText);
     history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)});
-    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs);
+    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs,ctx.ampliada);
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
     if(err.name==='AbortError'){
@@ -3753,9 +4031,32 @@ const MAX_EVIDENCIA=3;
    `citas` son las páginas que citó el modelo. En modo sin API se pasa null: ahí
    los fragmentos se enseñan enteros en pantalla, así que su página es
    literalmente de dónde sale lo que se está leyendo. */
-function figurasDeFragmentos(chunks,citas,respuesta){
+/* Una respuesta que admite que no sabe no puede venir acompañada de una lámina:
+   la imagen afirma que el dato sale de ahí, y no sale de ningún lado. Es el bug
+   que destapó todo esto y vuelve por la puerta de atrás en cuanto se permite
+   enseñar lámina sin cita, así que se comprueba explícitamente. */
+const SIN_DATO=/no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura)\s+en\s+(?:el|los)\s+manual|no\s+hay\s+(?:regla|dato|informaci[óo]n)/i;
+function esRespuestaSinDato(respuesta,certeza){
+  if(certeza==='GAP')return true;
+  return SIN_DATO.test(respuesta||'')
+}
+
+function figurasDeFragmentos(chunks,citas,respuesta,certeza){
   if(!docFigures.length||!chunks||!chunks.length)return[];
-  if(citas&&!citas.size)return[];
+  if(esRespuestaSinDato(respuesta,certeza))return[];
+
+  /* Que el modelo no escribiera "(pág. N)" no significa que la respuesta no
+     tenga de dónde salir: significa que se saltó el formato. Antes eso dejaba
+     al asesor sin ninguna lámina —la falla más visible de esta función—, así
+     que se cae al fragmento mejor puntuado de los que SÍ se consultaron, y el
+     pie de la tira cambia para no prometer una cita que no existe. */
+  let porCita=true;
+  if(citas&&!citas.size){
+    const primero=chunks.find(c=>c.source==='pdf'&&c.page);
+    if(!primero)return[];
+    citas=new Set([String(primero.page)]);
+    porCita=false;
+  }
 
   /* Con dos manuales cargados «pág. 11» es ambiguo: los dos tienen una. El
      número se resuelve contra los fragmentos que de verdad se enviaron, que sí
@@ -3783,15 +4084,21 @@ function figurasDeFragmentos(chunks,citas,respuesta){
      (8.3%)», que no tiene nada que ver. Para buscar en el manual un número es
      un dato; para reconocer una lámina es una coincidencia. */
   const terminos=respuesta?new Set(tokenize(respuesta).filter(t=>!/^\d+$/.test(t))):null;
+  /* El rótulo y el pie los escribió el manual; la descripción la escribió un
+     modelo mirando el recorte. Pesaban igual, así que una descripción larga y
+     genérica de la IA le ganaba a un pie exacto del propio manual. Lo que dice
+     el documento vale el doble de lo que dice quien lo interpretó. */
+  const comunes=(txt)=>{
+    if(!terminos||!txt)return 0;
+    let n=0;
+    for(const t of new Set(tokenize(txt)))if(!/^\d+$/.test(t)&&terminos.has(t))n++;
+    return n
+  };
   const puntuar=f=>{
     const titulos=paginas.get(f.docName+'|'+f.page);
     let p=f.heading&&titulos.has(normalizeText(f.heading))?4:0;
-    if(terminos){
-      let comunes=0;
-      for(const t of new Set(tokenize((f.caption||'')+' '+(f.heading||'')+' '+(f.vlmDescription||''))))
-        if(!/^\d+$/.test(t)&&terminos.has(t))comunes++;
-      p+=Math.min(comunes,3);
-    }
+    p+=Math.min(comunes((f.caption||'')+' '+(f.heading||'')),2)*2;
+    p+=Math.min(comunes(f.vlmDescription),2);
     return p
   };
   let orden=docFigures.filter(f=>paginas.has(f.docName+'|'+f.page))
@@ -3813,23 +4120,36 @@ function figurasDeFragmentos(chunks,citas,respuesta){
      firmar nunca se descarta por parecido. */
   const salida=[];
   const mismoTitulo=(a,b)=>normalizeText(a.heading||'')===normalizeText(b.heading||'');
+  /* Si ninguna lámina de la página se pudo identificar, se enseña UNA y no tres.
+     Tres imágenes debajo de un dato se leen como tres pruebas del dato, y lo
+     único que se puede sostener es que son de esa página. */
+  const identificada=!!(orden.length&&orden[0].p>0);
+  const tope=identificada?MAX_EVIDENCIA:1;
   for(const{f}of orden){
-    if(salida.length>=MAX_EVIDENCIA)break;
+    if(salida.length>=tope)break;
     if(salida.some(g=>distanciaVisual(g.firma,f.firma)<=FIG_DIST_IGUAL&&mismoTitulo(g,f)))continue;
     salida.push(f);
   }
+  salida.origen=porCita?(identificada?'cita':'pagina'):'consultado';
   return salida
 }
 
-function renderEvidencia(container,figuras,citado){
-  if(!figuras.length)return;
+/* El rótulo promete exactamente lo que se puede sostener, ni una palabra más:
+   si la respuesta citó la página y la lámina se identificó, se dice; si solo se
+   sabe la página, se dice; y si el modelo no citó nada, se dice que la lámina
+   es del fragmento que se consultó — no que la respuesta la cite. */
+const ROTULO_EVIDENCIA={
+  cita:['Lámina de la página que cita la respuesta:','Láminas de las páginas que cita la respuesta:'],
+  pagina:['De la página que cita la respuesta — no pude distinguir cuál lámina sostiene el dato:','De las páginas que cita la respuesta — no pude distinguir cuáles sostienen el dato:'],
+  consultado:['Lámina del fragmento que se consultó (la respuesta no citó página):','Láminas de los fragmentos que se consultaron (la respuesta no citó página):'],
+  manual:['Del manual, la lámina de la que sale esto:','Del manual, las láminas de las que sale esto:'],
+};
+function renderEvidencia(container,figuras,origen){
+  if(!figuras||!figuras.length)return;
   const wrap=document.createElement('div');wrap.className='evidencia';
   const titulo=document.createElement('div');titulo.className='evidencia-titulo';
-  /* El rótulo promete exactamente lo que se puede sostener: con un modelo de
-     por medio, que la lámina es de la página que él citó. */
-  titulo.textContent=citado
-    ?(figuras.length===1?'Lámina de la página que cita la respuesta:':'Láminas de las páginas que cita la respuesta:')
-    :(figuras.length===1?'Del manual, la lámina de la que sale esto:':'Del manual, las láminas de las que sale esto:');
+  const rot=ROTULO_EVIDENCIA[origen||figuras.origen||'manual']||ROTULO_EVIDENCIA.manual;
+  titulo.textContent=rot[figuras.length===1?0:1];
   wrap.appendChild(titulo);
   const varios=docs.length>1;
   const tira=document.createElement('div');tira.className='evidencia-tira';
@@ -3861,6 +4181,36 @@ function renderEvidencia(container,figuras,citado){
    No detecta un razonamiento equivocado; detecta el dato traído de
    fuera del manual, que es la falla que llega al piso.
 ════════════════════════════════════════════════ */
+/* ── LA UNIDAD ES PARTE DEL DATO ──────────────────
+   Comprobar el número suelto no alcanza: «deja 80 cm de pasillo» pasaba la
+   verificación porque en el manual existe «Cruce 80/20» y «Formal 50%». El 80
+   está, pero no son centímetros — y lo que el asesor ejecuta en el piso es la
+   medida, no el dígito. Se cotejan los pares número+unidad como una sola cosa,
+   y solo las cifras que van sin unidad caen al cotejo del número desnudo. */
+const UNIDAD_RE=/(\d+(?:[.,]\d+)?)\s*(cm|mm|mts|mt|m|cent[ií]metros?|mil[ií]metros?|metros?|%|por\s*ciento|piezas?|pzs?|pz|d[ií]as?|semanas?|meses|mes|horas?|min|minutos?)\b/gi;
+function familiaUnidad(u){
+  const t=(u||'').toLowerCase().replace(/\s+/g,'');
+  if(/^(cm|cent)/.test(t))return'cm';
+  if(/^(mm|mil)/.test(t))return'mm';
+  if(/^(mts?|m|metro)/.test(t))return'm';
+  if(t==='%'||/^porciento/.test(t))return'%';
+  if(/^(pz|pieza)/.test(t))return'pieza';
+  if(/^d[ií]a/.test(t))return'dia';
+  if(/^seman/.test(t))return'semana';
+  if(/^mes/.test(t))return'mes';
+  if(/^hora/.test(t))return'hora';
+  if(/^min/.test(t))return'minuto';
+  return t
+}
+function paresConUnidad(texto){
+  const out=new Map();
+  for(const m of(texto||'').matchAll(UNIDAD_RE)){
+    const n=m[1].replace(',','.');
+    out.set(n+'|'+familiaUnidad(m[2]),m[1]+' '+m[2]);
+  }
+  return out
+}
+
 function verificarContraContexto(respuesta,contexto){
   const vacio={cifras:[],paginas:[],citadas:new Set()};
   if(!respuesta||!contexto)return vacio;
@@ -3869,13 +4219,27 @@ function verificarContraContexto(respuesta,contexto){
     .replace(/^\s*\d+[.)]\s/gm,'')                 // "1." de una lista no es un dato
     .replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?/gi,' '); // las páginas se revisan aparte
 
+  const ctx=contexto.replace(/\s+/g,' ');
+
+  /* Primero los pares. Lo que ya quedó verificado —o marcado— como par no se
+     vuelve a revisar como número suelto: «80 cm» se señala una vez, con su
+     unidad, que es como el asesor lo va a leer. */
+  const paresCtx=paresConUnidad(ctx);
+  const paresResp=paresConUnidad(texto);
+  const marcadosPorUnidad=[];
+  const yaVistos=new Set();
+  for(const[clave,legible]of paresResp){
+    yaVistos.add(clave.split('|')[0]);
+    if(!paresCtx.has(clave))marcadosPorUnidad.push(legible);
+  }
+
   const cifras=new Set();
   for(const m of texto.matchAll(/\d+(?:[.,]\d+)?/g)){
     const n=m[0];
     if(n.length===4&&/^(19|20)\d\d$/.test(n))continue;  // un año no es una medida
+    if(yaVistos.has(n.replace(',','.')))continue;       // ya se revisó con su unidad
     cifras.add(n);
   }
-  const ctx=contexto.replace(/\s+/g,' ');
   /* El separador decimal se acepta indistinto (20.8 y 20,8 son el mismo dato).
      Ojo con encadenar dos replace aquí: el primero introduce una coma dentro
      de la clase de caracteres y el segundo la vuelve a sustituir, produciendo
@@ -3898,7 +4262,7 @@ function verificarContraContexto(respuesta,contexto){
      sacar las láminas que acompañan a la respuesta. */
   const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
 
-  return{cifras:noVerificadas,paginas:paginasInventadas,citadas}
+  return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,citadas}
 }
 
 function renderAvisoVerificacion(res){
@@ -3912,14 +4276,17 @@ function renderAvisoVerificacion(res){
   return el
 }
 
+const CERTEZA_ROTULO={ALTA:{txt:'certeza alta',cls:'alta'},MEDIA:{txt:'certeza media',cls:'media'},GAP:{txt:'no está en el manual',cls:'gap'}};
 function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
   const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
+  const certeza=certezaDe(final);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
   const msgBody=loaderEl.querySelector('.msg-body');
   const msgLabel=loaderEl.querySelector('.msg-label');
   loaderEl.classList.remove('loading');
   msgBody.innerHTML=safeMarkdown(cleanFinal);
-  msgLabel.innerHTML=`Asistente <span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
+  const insignia=CERTEZA_ROTULO[certeza];
+  msgLabel.innerHTML=`Asistente ${insignia?`<span class="certeza ${insignia.cls}">${insignia.txt}</span> `:''}<span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
 
   /* El razonamiento a medias no es una respuesta. Se dice antes de que el
      asesor lea nada, porque un texto cortado a mitad de frase se parece
@@ -3933,10 +4300,24 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
 
   const verif=verificarContraContexto(cleanFinal,contextoEnviado);
   const alerta=renderAvisoVerificacion(verif);
-  if(alerta)loaderEl.appendChild(alerta);
-  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal),true);
+  /* El aviso va ARRIBA del cuerpo. Colgado debajo, el asesor ya había leído —y
+     en el piso, ejecutado— el dato que el aviso venía a poner en duda. */
+  if(alerta)loaderEl.insertBefore(alerta,msgBody);
+  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal,certeza));
 
   const footer=document.createElement('div');footer.className='msg-footer';
+
+  /* Con un PDF cargado, el manual interno ya no entra al contexto: lo que el
+     manual del asesor no cubra sale como GAP, y ahí es donde tiene sentido
+     ofrecer la referencia general — pedida a propósito y rotulada como lo que
+     es, en vez de mezclada de oficio en cada respuesta. */
+  if(docChunks.length&&esRespuestaSinDato(cleanFinal,certeza)){
+    const refBtn=document.createElement('button');
+    refBtn.className='ref-general';
+    refBtn.textContent='🔎 Buscar en la referencia general Mercadep';
+    refBtn.onclick=()=>consultarReferenciaGeneral(originalQuestion,refBtn);
+    footer.appendChild(refBtn);
+  }
 
   if(parsed&&thinking&&!assessQuestionScope(originalQuestion).clearlyOff){
     const block=document.createElement('div');block.className='reasoning-block';
@@ -4026,6 +4407,185 @@ function loadTheme() {
 loadTheme();
 initSystemPromptCounter();
 loadSaved();
+
+/* ════════════════════════════════════════════════
+   ARNÉS DE MEDICIÓN — abrir con ?test=1
+
+   Cada ajuste de sinónimos, de umbral o de puntuación mueve el
+   comportamiento de todo lo demás: el README ya avisa que α hay que
+   volver a medirlo cada vez que se toca el vocabulario. Esto lo mide.
+
+   Corre entero en el dispositivo, sin API y sin red: son las mismas
+   funciones que usa el chat, con preguntas de respuesta conocida sobre
+   el manual interno (que siempre está cargado). Si hay un PDF guardado
+   se mide también contra él.
+════════════════════════════════════════════════ */
+const TEST_CASOS=[
+  {q:'¿Cuántas piezas van en el entallado de Hombres y en qué orden?',debe:['4 piezas','5 piezas']},
+  {q:'¿cuánto espacio dejo para que pase la gente?',debe:['90 cm'],nota:'llega solo por sinónimo (paso→pasillo)'},
+  {q:'¿qué porcentaje ocupa el mundo formal en sacos y pantalones?',debe:['Formal 50%']},
+  {q:'¿hacia dónde va el gancho?',debe:['izquierda']},
+  {q:'¿a qué altura va el sensor en el pantalón?',debe:['12-18 cm']},
+  {q:'¿qué va en el POS?',debe:['Aguas en fondo'],nota:'«POS» tiene 3 letras: el filtro de longitud lo tiraba'},
+  {q:'¿en qué secciones están prohibidas las almas de papel?',debe:['ALMAS DE PAPEL']},
+  {q:'¿cada cuánto se actualizan los maniquíes?',debe:['21 días']},
+  {q:'¿dónde va la mesa de estilo de vida?',debe:['esquina superior derecha']},
+  {q:'¿qué hago con un producto que no se vende?',debe:['SLOW MOVERS']},
+  {q:'entayado de hombres',debe:['ENTALLADO'],nota:'errata del asesor'},
+  {q:'sensores en corvatas',debe:['sensor blando'],nota:'errata del asesor'},
+  {q:'coloriszacion por bloques',debe:['Blancos/crudos'],nota:'errata del asesor'},
+  {q:'maniquis',debe:['MANIQUÍES'],nota:'errata del asesor'},
+  {previa:'¿qué porcentaje ocupa cada mundo en sacos y pantalones?',q:'¿y en juveniles?',debe:['Corner 60%'],nota:'pregunta de seguimiento'},
+  {q:'¿a qué hora abre la tienda?',gap:true},
+  {q:'¿cómo cambio la llanta del coche?',gap:true},
+  {q:'¿qué receta me recomiendas para la cena?',gap:true},
+];
+
+/* La respuesta de la izquierda se comprueba contra el contexto que trae la
+   pregunta de la derecha. `marca` = cuántas cifras deberían quedar señaladas. */
+const TEST_VERIF=[
+  {resp:'Los pasillos son de 90 cm exactos (manual interno).',q:'¿cuánto mide el pasillo?',marca:0},
+  {resp:'El mundo Formal ocupa 50% del piso (manual interno).',q:'¿qué porcentaje ocupa el mundo formal en sacos y pantalones?',marca:0},
+  {resp:'El sensor va oculto a 12-18 cm de la bastilla.',q:'¿a qué altura va el sensor?',marca:0},
+  {resp:'Deja 120 cm de pasillo entre muebles.',q:'¿cuánto mide el pasillo?',marca:1,nota:'cifra inventada'},
+  {resp:'Deja 80 cm de pasillo entre muebles.',q:'¿cuánto mide el pasillo?',marca:1,nota:'el 80 existe en el contexto, pero como 80/20 — no son 80 cm'},
+];
+
+function testCtx(q,previa){
+  const guardaHist=history;
+  history=previa?[{role:'user',content:previa},{role:'assistant',content:'—'}]:[];
+  let r;
+  try{r=buildContext(q)}finally{history=guardaHist}
+  return typeof r==='string'?{texto:r,sinCoincidencias:false}:r;
+}
+
+/* Cuánto margen sobra sobre el corte relativo: la puntuación del fragmento que
+   trae la respuesta, dividida entre la del mejor de esa consulta. Si alguna vez
+   se acerca a CTX_ALPHA, el corte está a punto de tirar una respuesta buena. */
+function testMargen(q,previa,debe){
+  const guardaHist=history;
+  history=previa?[{role:'user',content:previa},{role:'assistant',content:'—'}]:[];
+  let res;
+  try{
+    const consulta=typeof consultaDeBusqueda==='function'?consultaDeBusqueda(q):q;
+    res=retrieve(consulta,{limit:40});
+  }finally{history=guardaHist}
+  if(!res.length)return null;
+  const top=res[0].score||1;
+  for(const r of res)if(debe.some(d=>r.c.text.includes(d)))return r.score/top;
+  return null;
+}
+
+function testLaminas(){
+  const gFig=docFigures,gDocs=docs,gUlt=ultimosFragmentos;
+  const fig=(page,heading,caption)=>({docName:'M.pdf',page,heading,caption,vlmDescription:null,firma:null,dataUrl:'data:,',box:{x0:0,y0:0,x1:100,y1:100}});
+  docFigures=[fig(3,'ALINEACIÓN','80 cm libres entre muebles'),fig(3,'COLORIZACIÓN','bloques de color')];
+  docs=[{name:'M.pdf'}];
+  const frag={source:'pdf',docName:'M.pdf',page:3,heading:'ALINEACIÓN',text:'Alineación: dejando 80 cm entre muebles.'};
+  ultimosFragmentos=[frag];
+  const casos=[];
+  const corre=(nombre,citas,resp,esperado)=>{
+    let n=-1;try{n=figurasDeFragmentos([frag],citas,resp).length}catch(e){n=-1}
+    casos.push({nombre,esperado,obtenido:n,ok:n===esperado});
+  };
+  corre('cita la página y la lámina se identifica',new Set(['3']),'Deja 80 cm de alineación entre muebles (pág. 3).',1);
+  corre('no cita ninguna página',new Set([]),'Deja 80 cm de alineación entre muebles.',1);
+  corre('la respuesta es un GAP por texto',new Set(['3']),'El manual no especifica la temperatura de la sección.',0);
+  docFigures=[fig(3,'',''),fig(3,'',''),fig(3,'','')];
+  corre('ninguna lámina identificable',new Set(['3']),'Deja 80 cm entre muebles (pág. 3).',1);
+  let n=-1;
+  try{n=figurasDeFragmentos([frag],new Set(['3']),'Deja 80 cm entre muebles (pág. 3).','GAP').length}catch(e){}
+  casos.push({nombre:'la respuesta declara CERTEZA: GAP',esperado:0,obtenido:n,ok:n===0});
+  docFigures=gFig;docs=gDocs;ultimosFragmentos=gUlt;
+  return casos;
+}
+
+function correrPruebas(){
+  const norm=t=>(t||'').toLowerCase();
+  const filas=[];
+  let recallOk=0,recallTot=0,ruidoOk=0,ruidoTot=0,margenMin=1;
+  for(const c of TEST_CASOS){
+    const{texto,sinCoincidencias}=testCtx(c.q,c.previa);
+    if(c.gap){
+      ruidoTot++;
+      const ok=!!sinCoincidencias;
+      if(ok)ruidoOk++;
+      filas.push({tipo:'ruido',q:c.q,ok,detalle:ok?'marcado como sin coincidencias':'NO se marcó: el modelo recibe fragmentos como si fueran respuesta',nota:c.nota});
+      continue;
+    }
+    recallTot++;
+    const ok=c.debe.some(d=>norm(texto).includes(norm(d)));
+    if(ok)recallOk++;
+    const m=ok?testMargen(c.q,c.previa,c.debe):null;
+    if(m!==null&&m<margenMin)margenMin=m;
+    filas.push({tipo:'recall',q:c.q,ok,detalle:ok?('margen sobre el corte: '+(m===null?'—':(m*100).toFixed(0)+'%')):('no está en el contexto: '+c.debe[0]),nota:c.nota});
+  }
+
+  let verifOk=0;
+  for(const v of TEST_VERIF){
+    const{texto}=testCtx(v.q);
+    const r=verificarContraContexto(v.resp,texto);
+    const ok=v.marca===0?r.cifras.length===0:r.cifras.length>=v.marca;
+    if(ok)verifOk++;
+    filas.push({tipo:'verificación',q:v.resp,ok,detalle:`marcadas ${r.cifras.length} (esperado ${v.marca===0?'0':'≥'+v.marca})${r.cifras.length?': '+r.cifras.join(', '):''}`,nota:v.nota});
+  }
+
+  const lam=testLaminas();
+  for(const l of lam)filas.push({tipo:'láminas',q:l.nombre,ok:l.ok,detalle:`${l.obtenido} lámina(s), esperado ${l.esperado}`});
+
+  /* La marca de certeza tiene que salir del texto visible y no llegar nunca a
+     la pantalla, al portapapeles ni al historial. */
+  const conMarca='Los pasillos son de 90 cm.\n\nCERTEZA: ALTA';
+  const pruebasCerteza=[
+    {nombre:'la certeza se lee',ok:certezaDe(conMarca)==='ALTA'},
+    {nombre:'la certeza no llega al texto visible',ok:!/CERTEZA/i.test(sanitizeFinalAnswer(conMarca,'¿pasillo?'))},
+    {nombre:'una respuesta sin marca no inventa certeza',ok:certezaDe('Los pasillos son de 90 cm.')===null},
+    {nombre:'la marca en negritas también se lee',ok:certezaDe('Texto.\n\n**CERTEZA: GAP**')==='GAP'},
+  ];
+  for(const p of pruebasCerteza)filas.push({tipo:'certeza',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+
+  const resumen={
+    recall:`${recallOk}/${recallTot}`,
+    ruido:`${ruidoOk}/${ruidoTot}`,
+    verificacion:`${verifOk}/${TEST_VERIF.length}`,
+    laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
+    certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
+    margenMinimo:(margenMin*100).toFixed(0)+'%',
+    alfa:(CTX_ALPHA*100).toFixed(0)+'%',
+    corpus:corpus.length+' fragmentos ('+docChunks.length+' de PDF)',
+  };
+  return{resumen,filas};
+}
+
+function renderPanelPruebas(){
+  const{resumen,filas}=correrPruebas();
+  window.__pruebas={resumen,filas};
+  const fallos=filas.filter(f=>!f.ok).length;
+  const wrap=document.createElement('div');
+  wrap.id='test-panel';
+  wrap.innerHTML=`
+    <div class="test-head">
+      <strong>Arnés de medición</strong>
+      <span class="test-veredicto ${fallos?'mal':'bien'}">${fallos?fallos+' fallo'+(fallos>1?'s':''):'todo en verde'}</span>
+      <button onclick="document.getElementById('test-panel').remove()">✕</button>
+    </div>
+    <div class="test-resumen">${Object.entries(resumen).map(([k,v])=>`<span><b>${k}</b> ${escapeHtml(String(v))}</span>`).join('')}</div>
+    <div class="test-scroll"><table class="test-tabla"><tbody>${filas.map(f=>`
+      <tr class="${f.ok?'ok':'no'}">
+        <td>${f.ok?'✓':'✕'}</td>
+        <td class="test-tipo">${f.tipo}</td>
+        <td>${escapeHtml(f.q)}${f.nota?`<div class="test-nota">${escapeHtml(f.nota)}</div>`:''}</td>
+        <td class="test-det">${escapeHtml(f.detalle)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  document.body.appendChild(wrap);
+}
+
+if(new URLSearchParams(location.search).has('test')){
+  /* Espera a que IndexedDB devuelva los manuales guardados, si los hay: medir
+     solo contra el manual interno cuando el asesor tiene un PDF cargado daría
+     un número que no es el suyo. */
+  setTimeout(renderPanelPruebas,1200);
+}
 </script>
 </body>
 </html>
