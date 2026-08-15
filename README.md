@@ -47,6 +47,29 @@ pregunta, lo dice — no rellena con la sección más cercana.
 - **Conflictos documentados como feature.** Cuando dos manuales se contradicen (el entallado
   lleva 4, 5 o 6 piezas según cuál leas), el sistema tiene prohibido responder "el manual no
   especifica": cita el conflicto y la regla general.
+- **Cuando la búsqueda no encuentra nada, se dice.** El contexto llega encabezado por un
+  aviso de que no hubo coincidencias y con la orden de contestar "el manual no especifica",
+  en vez de entregar fragmentos sueltos bajo la instrucción de "responde solo con esto" —
+  que es obedecer y componer una regla que nadie escribió. En ese caso tampoco se guarda
+  evidencia: no puede salir una lámina debajo de una respuesta que el manual no sostiene.
+- **Una sola fuente por respuesta.** Con un PDF cargado, el conocimiento interno no entra al
+  contexto. Traía cifras propias —90 cm de pasillo, 40%, 50%— que el modelo citaba como si
+  fueran del manual del asesor, y la verificación las daba por buenas porque estaban en el
+  contexto: para quien lee en el piso, eso es exactamente un dato inventado. Lo que el PDF
+  no cubra se consulta aparte, con un botón, y la respuesta viene rotulada como lo que es.
+- **Cada respuesta declara su certeza** —`ALTA`, `MEDIA` o `GAP`— en una última línea que se
+  lee automáticamente, no se muestra, y decide el distintivo del mensaje y si se enseña
+  lámina o no.
+
+### Cómo se mide
+
+Abrir `index.html?test=1` corre el arnés: preguntas de respuesta conocida sobre el manual
+interno —incluidas las que llegan por sinónimo, las escritas con errata, las de seguimiento
+y tres de ruido que deben quedar sin respuesta—, más las comprobaciones de verificación
+numérica, de láminas y de certeza. Reporta recall, cuánto ruido se atrapa y **el margen del
+caso más ajustado sobre el corte relativo `CTX_ALPHA`**, que es el número que hay que volver
+a mirar cada vez que se toca el vocabulario. Corre entero en el dispositivo, sin API y sin
+red, sobre las mismas funciones que usa el chat.
 
 ### El motor de lectura de manuales
 
@@ -120,18 +143,30 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 ## Límites conocidos
 
 - **El retrieval no lematiza de verdad.** Del lado de la pregunta prueba unas cuantas formas
-  —plural ("pasillos" → "pasillo") y género ("rebajado" → "rebajada")—, lo justo para que la
-  palabra del asesor encuentre la del manual, pero no entiende morfología: "exhibir" no
-  alcanza "exhibición" por sí solo, y ningún salto de significado ocurre sin el diccionario
-  de sinónimos, que se llena a mano y por lo tanto está incompleto. Lo que sí hay es dónde
-  arreglarlo: las variantes se generan solo del lado de la pregunta, así que ampliarlas no
-  obliga a reprocesar ningún manual ya guardado.
+  —plural en los dos sentidos ("pasillos" → "pasillo" y "maniquí" → "maniquíes") y género
+  ("rebajado" → "rebajada")—, lo justo para que la palabra del asesor encuentre la del
+  manual, pero no entiende morfología: "exhibir" no alcanza "exhibición" por sí solo, y
+  ningún salto de significado ocurre sin el diccionario de sinónimos, que se llena a mano y
+  por lo tanto está incompleto. Lo que sí hay es dónde arreglarlo: las variantes se generan
+  solo del lado de la pregunta, así que ampliarlas no obliga a reprocesar ningún manual ya
+  guardado.
+- **Las erratas se corrigen por parecido, no por diccionario.** Cuando ni la palabra escrita
+  ni ninguna de sus formas está en el índice, se busca la más parecida por trigramas y entra
+  con el mismo descuento que un sinónimo. Alcanza para "entayado", "corvatas" o "maniquis";
+  no para una palabra mal partida ni para una que el manual sencillamente no usa.
+- **La pregunta de seguimiento se resuelve por longitud, no por comprensión.** Si la
+  pregunta es corta o empieza por "y…", la búsqueda se apoya en la anterior y se avisa en la
+  tira de fuentes. Con dos temas seguidos muy distintos puede arrastrar el equivocado: se ve
+  en la etiqueta, y basta con volver a preguntar entero.
 - **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
   casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
   rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
   reales: ninguno funciona**, porque el ruido y las preguntas legítimas se solapan. Lo que
   el modo garantiza no es rechazar lo que no sabe, sino no fingir que lo sabe: entrega el
-  fragmento con su página y dice que nadie lo interpretó.
+  fragmento con su página y dice que nadie lo interpretó. Lo que sí se cerró es el ruido por
+  coincidencia parcial: el acierto se cuenta por palabra entera, así que «¿cómo **cambio** la
+  llanta del coche?» ya no acierta dentro de «cambiar cada 3-4 semanas». Las formas
+  legítimas las sigue generando el lado de la pregunta.
 - **Un PDF escaneado no se puede leer.** Si la lámina es una imagen sin capa de texto, el
   sistema lo dice y no lo carga, en vez de fingir que lo entendió. Haría falta OCR.
 - **La detección de figuras está calibrada sobre manuales tipo presentación.** El corte
@@ -139,22 +174,33 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   debajo de 0.11 de cobertura de texto y los paneles por encima de 0.27. Un documento con
   otra maquetación puede caer en el hueco, y entonces sobran o faltan recortes.
 - **La verificación de cifras no distingue entre inventar y razonar.** Comprueba que el
-  número esté en el contexto recuperado; si el modelo suma dos cantidades correctas, el
-  resultado saldrá marcado aunque esté bien. Prefiero ese falso positivo al silencio.
+  número —con su unidad, porque «80 cm» y «Cruce 80/20» no son el mismo dato aunque
+  compartan el 80— esté en el contexto recuperado; si el modelo suma dos cantidades
+  correctas, el resultado saldrá marcado aunque esté bien. Prefiero ese falso positivo al
+  silencio. Y el aviso va **encima** de la respuesta, no debajo: colgado abajo, el asesor ya
+  había leído —y en el piso, ejecutado— el dato que el aviso venía a poner en duda.
 - **La puntuación general premia `[MANDATORY]` aunque no haya coincidencia de palabras.**
   Sirve cuando el resultado lo va a leer un modelo, que sabe descartar lo que no viene al
   caso; mentiría en el modo manual. Por eso ahí se exige al menos un acierto real de
   término antes de mostrar cualquier sección.
 - **La lámina que se muestra puede ser la vecina.** Si en la página citada ninguna figura se
-  puede identificar por sección ni por las palabras de la respuesta, se muestran las de esa
-  página: son la página correcta, pero no necesariamente *la* imagen que sostiene el dato.
-  El pie dice siempre manual, página y sección para que se vea de dónde salió.
+  puede identificar por sección ni por las palabras de la respuesta, se muestra **una** —no
+  tres, que se leen como tres pruebas del mismo dato— y el rótulo dice que es de la página
+  citada, no que sea la lámina que sostiene el dato. El pie lleva siempre manual, página y
+  sección para que se vea de dónde salió.
+- **Si el modelo no cita página, la lámina sale igual, con otro rótulo.** Antes eso dejaba al
+  asesor sin ninguna imagen, que era la falla más visible: basta con que el modelo se salte
+  el formato para perder la evidencia. Ahora se cae al fragmento mejor puntuado de los que
+  se consultaron y el rótulo lo dice con esas palabras — no promete una cita que no existe.
+  Lo que nunca sale es una lámina bajo una respuesta que admite el hueco.
 - **El recorte de contexto se midió sobre 17 manuales de dos plantillas distintas** —51
   preguntas de respuesta conocida, ninguna perdida—, pero el margen del caso más ajustado
   bajó de 51% a 42% al ampliar el diccionario: cada sinónimo nuevo sube la puntuación del
   mejor fragmento y, con ella, el listón del corte relativo. Sigue habiendo holgura sobre
   α=0.25, pero es un número que hay que volver a medir cada vez que se toca el vocabulario,
-  no una constante. El arnés no vive en el repo; se reconstruye en una tarde.
+  no una constante. **El arnés ya vive en el repo** (`index.html?test=1`) precisamente por
+  esto: al ampliar variantes y erratas el margen del caso más ajustado se movió del 35% al
+  75%, y eso solo se ve midiendo.
 - **El nombre de la lámina se deduce de la maquetación.** Se toma la línea corta y sin
   puntuación de la franja superior de la página. Acierta en los 17 manuales, pero es una
   regla geométrica: en una lámina cuyo rótulo esté partido en dos líneas se queda con la
@@ -162,7 +208,8 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   Perímetro"). Es menos preciso, no falso.
 - **El conocimiento es sintético**, así que las respuestas son coherentes pero no son el
   estándar de nadie. Sirve para ver la mecánica, no para montar una tienda. Con un PDF real
-  cargado deja de competir: pasa a referencia secundaria y manda el manual del asesor.
+  cargado deja de entrar: el manual del asesor es la única fuente, y el interno solo se
+  consulta si se pide a propósito con el botón de referencia general.
 
 ## Lo que encontré al prepararlo para publicar
 
