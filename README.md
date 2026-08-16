@@ -107,6 +107,36 @@ creíble y falsa. La contraprueba de por qué importa: «¿cómo circula el clie
 sección?» la contestan diez secciones **con siete cifras distintas**, todas verdaderas en su
 manual.
 
+#### La batería con respuesta conocida
+
+El arnés de arriba comprueba que una pregunta **encuentre algo**. Eso no es lo mismo que
+encontrar **la lámina que contesta**, así que hay una segunda medida, hecha al revés: se
+vuelca el contenido de los once manuales, se escriben **88 preguntas en las palabras del
+asesor** —un quinto de ellas sin compartir ni una palabra con la lámina que las responde— y
+cada una lleva anotada su página y su rótulo. Más **14 preguntas cuya respuesta no está** en
+la sección activa, sin las cuales subir el recall es trivial y falso: basta con aflojar los
+cortes.
+
+| | antes | después |
+|---|---|---|
+| la página que contesta llega al contexto | 94% (82/88) | **100%** (88/88) |
+| escritas en palabras del asesor, no del manual | 87% | **100%** (16/16) |
+| se ofrece la lámina de esa página | 79% | **100%** (71/71) |
+| dos temas en una frase, los dos contestados | 5/6 | **6/6** |
+| preguntas sobre el propio manual | 0/12 | **12/12** |
+| negativas que no se entregan como evidencia sólida | 10/14 | **13/14** |
+| fragmentos de otro manual | 0 | 0 |
+
+Los cuatro fallos de recall que quedaban eran **una sola causa**: el asesor escribe el verbo
+y el manual titula el sustantivo. «Doblo» no llegaba a DOBLADO, «cuelgo» no llegaba a
+COLGADO —la raíz cambia al conjugar—, «colorizo» no llegaba a COLORIZACIÓN. No era
+vocabulario: la lámina estaba ahí y se llamaba casi igual.
+
+La batería vive en el repositorio del proyecto, no en la app: son 102 preguntas escritas a
+mano contra manuales concretos. Lo que sí queda dentro son las pruebas de las funciones que
+salieron de ella —morfología, preguntas de estado, palabra ausente, búsqueda en todas las
+secciones—, que corren en `?test=1` con y sin manuales.
+
 ### El motor de lectura de manuales
 
 Un manual de campaña no es un documento de texto corrido: es una presentación. En una misma
@@ -179,13 +209,24 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 ## Límites conocidos
 
 - **El retrieval no lematiza de verdad.** Del lado de la pregunta prueba unas cuantas formas
-  —plural en los dos sentidos ("pasillos" → "pasillo" y "maniquí" → "maniquíes") y género
-  ("rebajado" → "rebajada")—, lo justo para que la palabra del asesor encuentre la del
-  manual, pero no entiende morfología: "exhibir" no alcanza "exhibición" por sí solo, y
-  ningún salto de significado ocurre sin el diccionario de sinónimos, que se llena a mano y
+  —plural en los dos sentidos ("pasillos" → "pasillo" y "maniquí" → "maniquíes"), género
+  ("rebajado" → "rebajada") y, desde la batería, la derivación al sustantivo con la que estos
+  manuales titulan: "doblo" → DOBLADO, "colorizo" → COLORIZACIÓN, y "cuelgo" → COLGADO
+  cambiando la raíz, que es lo que hace el español al conjugar. Va **en un solo sentido a
+  propósito**: al probar también el infinitivo, "cambio" alcanzaba "cambiar" y "¿cómo cambio
+  la llanta del coche?" volvía a pasar por pregunta contestable. Sigue sin ser un lematizador
+  y ningún salto de significado ocurre sin el diccionario de sinónimos, que se llena a mano y
   por lo tanto está incompleto. Lo que sí hay es dónde arreglarlo: las variantes se generan
   solo del lado de la pregunta, así que ampliarlas no obliga a reprocesar ningún manual ya
   guardado.
+- **Una palabra que el manual no menciona no se puede detectar por semántica, solo por
+  ausencia.** Con once secciones cargadas, "¿cómo acomodo las sábanas?" estando en ZAPATOS
+  engancha con "acomodar" —que sí es de ese manual— y devuelve fragmentos correctos para una
+  pregunta que es de otra sección. Lo que se comprueba es literal: si una palabra de la
+  pregunta no tiene **ningún** camino hasta el manual activo (ni forma, ni raíz, ni sinónimo)
+  y sí es tema de otro cargado, se dice cuál. Funciona con sustantivos concretos —sábanas,
+  tequila, motos— y no distingue matices: dos manuales que usen las mismas palabras para
+  cosas distintas siguen siendo indistinguibles para esto.
 - **Las erratas se corrigen por parecido, no por diccionario.** Cuando ni la palabra escrita
   ni ninguna de sus formas está en el índice, se busca la más parecida por trigramas y entra
   con el mismo descuento que un sinónimo. Alcanza para "entayado", "corvatas" o "maniquis";
@@ -305,8 +346,13 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   Perímetro"). Es menos preciso, no falso.
 - **El conocimiento es sintético**, así que las respuestas son coherentes pero no son el
   estándar de nadie. Sirve para ver la mecánica, no para montar una tienda. Con un PDF real
-  cargado deja de entrar: el manual del asesor es la única fuente, y el interno solo se
-  consulta si se pide a propósito con el botón de referencia general.
+  cargado deja de entrar del todo: el manual del asesor es la única fuente. Hubo un botón que
+  lo consultaba a propósito como «referencia general», y llevaba roto desde que se escribió
+  —preguntaba por un campo que la función no devuelve, así que siempre contestaba que no lo
+  cubría sin haber buscado—. Arreglarlo habría sido peor que dejarlo: devolver reglas de un
+  manual de demostración rotuladas como política de la cadena es exactamente la clase de dato
+  plausible y falso que este proyecto persigue. Ahora ese botón busca donde sí hay verdad: en
+  **los otros manuales del asesor**, con cada dato citado a su sección y su página.
 
 ## Lo que encontré al prepararlo para publicar
 
