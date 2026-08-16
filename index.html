@@ -1495,15 +1495,47 @@ function masParecida(w){
 let vocabularioManual=new Set();
 function refrescarVocabularioManual(){
   vocabularioManual=new Set();
+  /* Solo el manual activo. Con los once cargados la unión daba 2.952 palabras
+     —«chocolate» de dulcería, «futbol» del manual de bicis— y «dame la receta
+     del pastel de chocolate» pasaba a contar como pregunta del dominio: el
+     patrón de fuera de tema exige que la palabra NO esté en el manual, y con
+     once secciones encima ya casi todo está en algún manual. Con la sección
+     activa el vocabulario vuelve a ser el de una sección, que es además lo
+     correcto: preguntar de bebés con Muebles activo no es del dominio activo. */
+  const solo=appState.manualActivo;
   /* Todo el índice del manual, no solo los títulos: medido, con los títulos
      «¿qué se debe limpiar?» seguía sin reconocerse porque la lámina se titula
      LIMPIEZA y el asesor escribe «limpiar». El cuerpo del manual sí trae la
      palabra tal cual («¿Qué se debe limpiar? Todo: mesas de exhibición…»). */
-  for(const c of docChunks)if(c.tf)for(const t in c.tf)vocabularioManual.add(t);
+  for(const c of docChunks){
+    if(solo&&c.docName!==solo)continue;
+    if(c.tf)for(const t in c.tf)vocabularioManual.add(t);
+  }
+}
+/* El nombre del archivo, cuando trae el código de sección delante: «237 ZAPATOS
+   HOMBRES», «388 VINOS Y LICORES». Así se descarga del portal y así la llama el
+   asesor. Se corta en «MANUAL», que es lo que siempre viene detrás. Se exige
+   una palabra de verdad después del código, para que «205_201_20BICI_N» —dos
+   códigos seguidos y una palabra rota— no cuente como nombre. */
+function seccionEnArchivo(docName){
+  const limpio=docName.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'')
+    .replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
+  const m=limpio.match(/^\d{2,4}\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]+)*/);
+  if(!m)return null;
+  const nombre=m[0].replace(/\s+manual\b.*$/i,'').trim();
+  return nombre.length>5?nombre.toUpperCase():null
+}
+function compartenPalabra(a,b){
+  /* Por prefijo: al descargar se pierde el acento y «DULCERÍA» llega partida
+     como «DULCER A». Sigue siendo la misma palabra. */
+  const pal=s=>tokenize(s).filter(t=>t.length>3&&!/^\d+$/.test(t));
+  const A=pal(a),B=pal(b);
+  return A.some(x=>B.some(y=>x.startsWith(y)||y.startsWith(x)))
 }
 function nombreDeSeccion(docName){
   const propios=docChunks.filter(c=>c.docName===docName);
   const util=h=>h&&h.trim().length>5&&!/:$/.test(h.trim());
+  const archivo=seccionEnArchivo(docName);
   /* Estos manuales numeran la sección en el rótulo: «271 CASUAL», «512 MUJER
      CLÁSICA», «101 MUEBLES». Es el nombre con el que el asesor la llama. */
   for(const c of propios){
@@ -1512,8 +1544,18 @@ function nombreDeSeccion(docName){
   }
   for(const c of propios){
     const m=(c.heading||'').match(/CHECK\s*LIST\s*:?\s*(.+)/i);
-    if(m&&util(m[1]))return m[1].trim();
+    if(m&&util(m[1])){
+      /* El check list rotula a veces con la familia de la tienda y no con la
+         sección: el manual de vinos y licores se llama ahí «388 DIVERSOS», y
+         por «diversos» no lo busca nadie. Si el archivo trae el código y no
+         comparte ni una palabra con ese rótulo, manda el archivo. */
+      if(archivo&&!compartenPalabra(m[1],archivo))return archivo;
+      return m[1].trim();
+    }
   }
+  /* Antes que el primer título de la página 2: ese título es de la lámina, no
+     de la sección. El manual de zapatos salía llamándose «ENTRADA PEATONAL». */
+  if(archivo)return archivo;
   const primera=propios.find(c=>util(c.heading)&&c.page<=2&&!/^(propuesta|planograma|marcas?|conjunto|exterior)\b/i.test(c.heading));
   if(primera)return primera.heading.trim();
   /* Último recurso: el nombre de archivo. Llega con hash, guiones bajos y a
@@ -1543,6 +1585,7 @@ function nombreDeSeccion(docName){
    exhibición— y no identifica nada. Se exige que la mayoría de los fragmentos
    que contienen el término sean de ese documento. */
 const DISCRIMINA_MIN=0.7;
+const DOMINANCIA_MIN=0.4;
 let identificadores=null;
 function identificadoresDeSeccion(){
   if(identificadores)return identificadores;
@@ -1577,6 +1620,30 @@ function identificadoresDeSeccion(){
       if(!m){if(/^\d{2,4}$/.test(t))terminos.push(t);continue}
       let total=0;for(const v of m.values())total+=v;
       if(total&&(m.get(d.name)||0)/total>=DISCRIMINA_MIN)terminos.push(t);
+    }
+    /* Si la sección se quedó sin una sola palabra —solo con su número— el
+       asesor no la puede nombrar: escribe «en blancos», no «en 365». Ahí se
+       baja el listón hasta la dominancia clara: más del doble que el segundo
+       manual y al menos el 40%. Medido, «blancos» tiene 10 de 15 fragmentos
+       —67%, tres puntos por debajo del corte— con el segundo en 4, y entra;
+       «muebles» (16 propios de 85, con dulcería en 15) y «casual» (15 propios
+       contra 26 en zapatos) siguen fuera, que es lo correcto: son ambiguos.
+
+       Solo cuando no hay ninguna, nunca como añadido. «512 MUJER CLÁSICA» ya
+       se identifica por «clásica»; sumarle «mujer» bloquearía preguntas
+       legítimas de vestidos de fiesta, que también son de mujer. */
+    if(!terminos.some(t=>!/^\d+$/.test(t))){
+      for(const t of delNombre){
+        if(t==='manual'||/^\d+$/.test(t))continue;
+        const m=porTermino.get(t);
+        if(!m)continue;
+        let total=0,mayorAjeno=0,mio=0;
+        for(const[dn,v]of m){
+          total+=v;
+          if(dn===d.name)mio=v;else if(v>mayorAjeno)mayorAjeno=v;
+        }
+        if(total&&mio/total>=DOMINANCIA_MIN&&mio>mayorAjeno*2)terminos.push(t);
+      }
     }
     if(terminos.length)identificadores.push({docName:d.name,nombre,terminos});
   }
@@ -3742,6 +3809,7 @@ async function handleFiles(fileList){
   if(docs.length===1&&!appState.manualActivo){
     appState.manualActivo=docs[0].name;
     try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
+    refrescarVocabularioManual();
   }else if(docs.length>1&&!appState.manualActivo){
     showToast('📕 Tienes varios manuales cargados. Elige arriba con cuál estás trabajando para que las citas y las láminas salgan de ese.','info',7000);
   }else if(appState.manualActivo&&docs.length>habia){
@@ -3801,6 +3869,7 @@ function renderSelectorSeccion(){
 function cambiarSeccion(valor){
   appState.manualActivo=valor||null;
   try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
+  refrescarVocabularioManual();
   renderSelectorSeccion();
   renderQuickBtns();
   showToast(appState.manualActivo
@@ -5149,6 +5218,28 @@ function correrPruebas(){
   ];
   for(const p of pruebasSeguimiento)filas.push({tipo:'seguimiento',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
 
+  /* El rótulo de la sección, con los nombres de archivo tal como bajan del
+     portal. Medido con once manuales: el de zapatos no trae ni código en los
+     títulos ni check list, y salía llamándose «ENTRADA PEATONAL» —el título de
+     una lámina de la página 2—, así que el asesor no lo encontraba en la lista.
+     Estas comprueban las dos direcciones: que el archivo se use cuando aporta,
+     y que NO se use cuando viene roto o cuando no es un nombre. */
+  const pruebasRotulo=[
+    {nombre:'«237_ZAPATOS_HOMBRES__MANUAL_DE_EXHIBICI_N_1» da la sección',
+      ok:seccionEnArchivo('72214fa7-237_ZAPATOS_HOMBRES__MANUAL_DE_EXHIBICI_N_1.pdf')==='237 ZAPATOS HOMBRES'},
+    {nombre:'se corta en «MANUAL»',
+      ok:seccionEnArchivo('cf671a65-388_VINOS_Y_LICORES__MANUAL_DE_EXHIBICI_N.pdf')==='388 VINOS Y LICORES'},
+    {nombre:'«205_201_20BICI_N» no es un nombre de sección',
+      ok:seccionEnArchivo('fd814035-205_201_20BICI_N.pdf')===null},
+    {nombre:'sin código delante no se usa el archivo',
+      ok:seccionEnArchivo('3065ff26-Manual_Mujer_Cl_sica.pdf')===null},
+    {nombre:'«DULCER A» y «DULCERÍA» son la misma palabra',
+      ok:compartenPalabra('391 DULCERÍA','391 DULCER A')===true},
+    {nombre:'«DIVERSOS» y «VINOS Y LICORES» no lo son',
+      ok:compartenPalabra('388 DIVERSOS','388 VINOS Y LICORES')===false},
+  ];
+  for(const p of pruebasRotulo)filas.push({tipo:'rótulo',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+
   /* La marca de certeza tiene que salir del texto visible y no llegar nunca a
      la pantalla, al portapapeles ni al historial. */
   const conMarca='Los pasillos son de 90 cm.\n\nCERTEZA: ALTA';
@@ -5170,6 +5261,7 @@ function correrPruebas(){
     laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
     certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
     seguimiento:`${pruebasSeguimiento.filter(p=>p.ok).length}/${pruebasSeguimiento.length}`,
+    rotulo:`${pruebasRotulo.filter(p=>p.ok).length}/${pruebasRotulo.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',
