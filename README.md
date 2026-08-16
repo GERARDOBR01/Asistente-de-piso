@@ -96,7 +96,16 @@ encuentren algo, que el ruido no, que con una sección activa **ni un fragmento 
 lámina** salgan de otro manual, y que preguntar por una sección teniendo otra activa avise
 en vez de contestar. Esa última prueba se arma sola con el identificador que cada manual da
 de sí mismo, así que corre igual con manuales que el sistema no ha visto nunca. Medido sobre
-los seis manuales reales: 20/20.
+**once manuales reales cargados a la vez** —1.150 fragmentos, 706 figuras, 82 MB, 3 minutos
+de carga—: 33/33.
+
+Lo que ese lote mide de verdad no es el acierto, es **de dónde sale el dato**. Con las once
+secciones cargadas y una activa, 88 preguntas de trabajo (ocho por sección) devolvieron
+**cero fragmentos de otro manual y cero avisos indebidos**; y nombrando otra sección, las
+once avisan con **cero fragmentos y cero láminas**, que es lo que hace imposible la cifra
+creíble y falsa. La contraprueba de por qué importa: «¿cómo circula el cliente en la
+sección?» la contestan diez secciones **con siete cifras distintas**, todas verdaderas en su
+manual.
 
 ### El motor de lectura de manuales
 
@@ -199,11 +208,31 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   es **cómo se llama la sección**, y eso el asesor lo escribe: "los perímetros **en
   juveniles**". Así que el nombre de la sección se busca dentro de la pregunta, y si señala a
   otro manual cargado, el asistente no responde con datos — avisa y ofrece cambiar. Un
-  término solo cuenta como identificador si de verdad señala a un manual: medido, "juveniles"
-  sí y "muebles" no, porque aparece en los seis (son muebles de exhibición). El límite es que
-  una sección cuyo nombre el asesor nunca escribe —las bicicletas viven en "206 APARATOS DE
-  EJERCICIO, 207 MOTOS Y 211 MOVILIDAD ELÉCTRICA"— solo se alcanza por la vía de evidencia,
-  que pide que ese manual destaque sobre los demás y por lo tanto puede callarse.
+  término solo cuenta como identificador si de verdad señala a un manual: medido sobre once,
+  "juveniles" sí (11 de 11 fragmentos son suyos) y "muebles" no (16 de 85, con dulcería
+  pisándole con 15, porque todas las secciones tienen muebles de exhibición).
+- **Hay secciones que solo se pueden nombrar por su número.** Cuando el nombre de una sección
+  es una palabra que todos los manuales usan, no queda identificador: **101 MUEBLES y 271
+  CASUAL solo se alcanzan escribiendo "101" o "271"** —y "casual" es peor que ambiguo, tiene
+  26 fragmentos en el manual de zapatos contra 15 en el suyo—. Para las que se quedarían sin
+  ninguna palabra se baja el listón a dominancia clara —más del doble que el segundo manual y
+  al menos el 40%—, que es lo que recupera "blancos" (10 de 15, con el segundo en 4). Ese
+  rescate **no se aplica cuando ya hay una palabra**: "512 MUJER CLÁSICA" se identifica por
+  "clásica", y sumarle "mujer" bloquearía preguntas legítimas en vestidos de fiesta.
+- **El rótulo de la sección se adivina, y a veces se adivinaba mal.** Sale del código de
+  sección en los títulos, del check list, o del nombre del archivo cuando trae el código
+  delante. Medido sobre once: el manual de zapatos no tiene ninguna de las dos marcas
+  internas y salía llamándose "ENTRADA PEATONAL" —el título de una lámina de la página 2—, y
+  el de vinos salía como "388 DIVERSOS" porque así lo rotula su propio check list. El nombre
+  del archivo se prefiere solo si no comparte ninguna palabra con el rótulo interno, y la
+  comparación es por prefijo porque al descargar se pierde el acento: "391 DULCER A" sigue
+  siendo DULCERÍA y conserva su nombre interno. Un manual sin código en ninguna de las tres
+  vías sigue cayendo al nombre de archivo limpio.
+- **Las palabras que el asesor usa y no son el nombre de nadie** —"sábanas", "sneakers",
+  "tequila", "comedor"— no identifican sección, y no hace falta que lo hagan: al no encontrar
+  nada en la sección activa entra la vía de evidencia y, medido, las seis dan con su manual
+  con cero fragmentos y cero láminas. El límite está en la otra dirección: si la sección
+  activa **sí** tiene algo parecido que decir, responde con lo suyo y no avisa.
 - **"Todos los manuales" sirve para comparar, no para trabajar.** Sin sección elegida la
   misma pregunta tiene varias respuestas verdaderas: medido, "¿qué porcentaje es el cliente
   práctico?" devuelve 44%, 38.5%, 39.3%, 35.3% y 43.8% — una por sección. Elegir una es
@@ -211,6 +240,13 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   pide el dato **por sección**, y **no se enseña ninguna lámina** salvo que la respuesta cite
   la página: una imagen que dice "de aquí sale el dato" cuando hay cinco datos distintos es
   una afirmación falsa. Aun así, en el piso lo correcto es elegir sección.
+- **El filtro de fuera de tema se agujerea al crecer, y por eso el vocabulario es el de la
+  sección activa.** Para decidir si una pregunta es del dominio se mira si alguna palabra
+  está en el manual. Con once cargados esa unión llega a 2.952 palabras y ya casi todo está
+  en algún manual: medido, "dame la receta del pastel de chocolate" pasaba a contar como
+  pregunta de trabajo por *chocolate*, de dulcería, y "¿cómo va el clima mañana?" por *clima*.
+  Con la sección activa el vocabulario vuelve a 972 palabras y las dos se atrapan otra vez.
+  Sin sección elegida el agujero sigue abierto, que es una razón más para elegirla.
 - **El modo manual puede devolver una coincidencia floja.** Si una lámina contiene por
   casualidad una palabra de la pregunta, la muestra. Probé dos filtros para cortarlo —por
   rareza del término y por puntuación mínima— y **medí los dos sobre los siete manuales
