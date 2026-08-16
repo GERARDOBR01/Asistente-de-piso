@@ -132,10 +132,23 @@ y el manual titula el sustantivo. «Doblo» no llegaba a DOBLADO, «cuelgo» no 
 COLGADO —la raíz cambia al conjugar—, «colorizo» no llegaba a COLORIZACIÓN. No era
 vocabulario: la lámina estaba ahí y se llamaba casi igual.
 
-La batería vive en el repositorio del proyecto, no en la app: son 102 preguntas escritas a
+La batería vive en el repositorio del proyecto, no en la app: son 104 preguntas escritas a
 mano contra manuales concretos. Lo que sí queda dentro son las pruebas de las funciones que
-salieron de ella —morfología, preguntas de estado, palabra ausente, búsqueda en todas las
-secciones—, que corren en `?test=1` con y sin manuales.
+salieron de ella —morfología, preguntas de estado, palabra ausente, nombres sin respaldo,
+búsqueda en todas las secciones—, que corren en `?test=1` con y sin manuales.
+
+Dos de esas preguntas no las escribí yo. Salieron del piso, con la API conectada y 101
+MUEBLES abierto, y sus respuestas venían marcadas con 👎:
+
+> «¿cuál es la marca propia?» → **«Haus es la marca propia de liverpool»**
+> «¿cuál es marca preferencial?» → **«Haus es la marca preferencial»**
+
+Comprobado contra los manuales: «preferencial» no aparece en ninguno de los once, «Haus»
+solo en 365 BLANCOS, y el texto crudo del PDF de MUEBLES —38 páginas— no contiene ninguna de
+las dos palabras. Ninguna de las dos respuestas salió de un fragmento: salieron de que **el
+modelo reconoce la cadena real de la que son estos manuales y completó con lo que sabe de
+ella**. Es la última vía de invención que quedaba abierta, y la que ninguna comprobación
+tocaba: se verificaban cifras y páginas, y un nombre de marca pasaba limpio.
 
 ### El motor de lectura de manuales
 
@@ -162,9 +175,17 @@ todo lo demás:
   las fotos, además, se le pregunta al PDF dónde coloca cada imagen. Cada figura hereda el
   texto que la rodea, así que **ya es buscable sin ninguna IA**.
 - **Verificación de lo verificable.** Con API key, cada cifra de la respuesta se comprueba
-  contra los fragmentos que realmente se enviaron, y cada página citada contra las que
-  existen. Lo que no cuadra sale marcado. No detecta un razonamiento equivocado; detecta el
-  dato traído de fuera del manual, que es el que llega al piso.
+  contra los fragmentos que realmente se enviaron, cada página citada contra las que existen,
+  y **cada nombre propio contra los que el manual usa**. Lo que no cuadra sale marcado. No
+  detecta un razonamiento equivocado; detecta el dato traído de fuera del manual, que es el
+  que llega al piso.
+- **Los nombres se reconocen por lo que sabe el corpus, no por las mayúsculas.** La respuesta
+  que falló decía «Haus» al principio de la frase y «liverpool» en minúscula, así que fiarse
+  de la capitalización de la respuesta no habría servido para ninguna de las dos. Lo que sí
+  sirve es cómo escribe el manual: un nombre propio aparece en mayúscula a mitad de frase —«la
+  marca Haus Kids», «el sistema de Mercaderías de Liverpool»— y no aparece nunca en minúscula.
+  Las palabras corrientes fallan la segunda condición, así que no entran. Con eso, un nombre
+  que está en otra sección —o en ninguna— y no en los fragmentos consultados sale marcado.
 - **La lámina que acompaña sale de lo que la respuesta citó**, no de lo que el buscador
   trajo: las páginas citadas se cruzan con los fragmentos enviados para saber de qué manual
   son, y si la respuesta no cita ninguna página no se muestra ninguna imagen. Los recortes
@@ -219,6 +240,19 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   por lo tanto está incompleto. Lo que sí hay es dónde arreglarlo: las variantes se generan
   solo del lado de la pregunta, así que ampliarlas no obliga a reprocesar ningún manual ya
   guardado.
+- **Los manuales son de una cadena que existe, y el modelo la reconoce.** Es la vía de
+  invención más difícil de tapar, porque lo que sale suena cierto y a veces lo es: «Haus es la
+  marca propia de Liverpool» es verdad en el mundo y es falso en ese manual, que no dice ni
+  una de las dos palabras. Hay tres defensas y ninguna es total: una regla del prompt que
+  prohíbe usar lo que sepa de la cadena, un aviso en el contexto cuando una palabra de la
+  pregunta no está en el manual activo, y la verificación de nombres, que es la única que no
+  depende de que el modelo obedezca. Un dato de la cadena que sí esté escrito en otra sección
+  del mismo manual sigue siendo indistinguible de uno recordado.
+- **«Preferencial» no se puede separar de «preferencia» sin entender.** El corrector de
+  erratas las da por iguales —0.85 de parecido por trigramas— y «de preferencia, coloca…» sí
+  está en el manual. Se le enseñó a no tratar como errata lo que comparte raíz, que es lo que
+  distingue una falta de ortografía de una palabra distinta; pero una derivación con otro
+  sentido sigue colándose. Ahí la red es la verificación de nombres, no la búsqueda.
 - **Una palabra que el manual no menciona no se puede detectar por semántica, solo por
   ausencia.** Con once secciones cargadas, "¿cómo acomodo las sábanas?" estando en ZAPATOS
   engancha con "acomodar" —que sí es de ese manual— y devuelve fragmentos correctos para una

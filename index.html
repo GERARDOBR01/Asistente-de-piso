@@ -1305,6 +1305,11 @@ const SYNONYMS={
      barra?» a SATURACIÓN, cuya lámina habla de capacidad y de producto
      apretado, y nunca escribe «llena». */
   'colgar':['enganchado','gancho','barra','tringla','colgado'],
+  /* El asesor pregunta «¿qué porcentaje…?» y estos manuales escriben «30% de
+     participación»: la palabra «porcentaje» no aparece ni una vez en ninguno de
+     los once. Era el único aviso falso de palabra ausente que quedaba en la
+     batería, y el hueco estaba aquí, no en la regla. */
+  'porcentaje':['participacion','porciento','proporcion'],
   'saturacion':['capacidad','llena','lleno','apretado','holgura'],
   'planchar':['planchado','vaporera','eliminar arrugas'],
   'cambiar':['rotar','actualizar','renovar'],
@@ -1445,6 +1450,7 @@ function rebuildCorpus(){
   vocabTrigramas=null;
   identificadores=null;
   vocabPorDoc=null;
+  entidadesCorpus=null;
   refrescarVocabularioManual();
 }
 
@@ -1478,7 +1484,12 @@ function indiceTrigramas(){
 /* Raíz de andar por casa: quita la terminación y deja el tronco. No pretende
    ser un lematizador; sirve para una sola pregunta, la de abajo. */
 function raizCorta(w){
-  return(w||'').replace(/(?:aciones|acion|ados|adas|ado|ada|ares|ar|er|ir|os|as|es|s|o|a|e)$/,'')
+  /* «-al» y «-il» están aquí por un caso del piso: «preferencial» es una
+     derivación legítima de «preferencia», no una errata suya, y el corrector
+     por trigramas las da por iguales (0.85 de parecido). Con la misma raíz, la
+     corrección deja de contar como errata y entra con peso de sinónimo, que es
+     lo que es: una apuesta, no la palabra que el asesor escribió bien. */
+  return(w||'').replace(/(?:aciones|acion|ados|adas|ado|ada|ares|ales|iles|ar|er|ir|al|il|os|as|es|s|o|a|e)$/,'')
 }
 const ERRATA_MIN=0.6;
 function masParecida(w){
@@ -1515,12 +1526,17 @@ function construirVocabPorDoc(){
   vocabPorDoc=new Map();
   for(const c of docChunks){
     let s=vocabPorDoc.get(c.docName);
-    if(!s)vocabPorDoc.set(c.docName,s={palabras:new Map(),raices:new Map()});
+    if(!s)vocabPorDoc.set(c.docName,s={palabras:new Map(),raices:new Map(),texto:''});
     if(c.tf)for(const t in c.tf){
       s.palabras.set(t,(s.palabras.get(t)||0)+1);
       const r=raizCorta(t);
       if(r.length>2)s.raices.set(r,(s.raices.get(r)||0)+1);
     }
+    /* El texto entero normalizado, para poder buscar FRASES y no solo palabras
+       sueltas. Es lo que distingue el caso que se vio en el piso: «propia» sí
+       está en el manual de MUEBLES —una vez, dentro de ESTILO INDUSTRIAL,
+       hablando de estética— y «marca propia» no está en absoluto. */
+    s.texto+=' '+normalizeText((c.heading?c.heading+' ':'')+(c.text||'')).replace(/\s+/g,' ');
   }
 }
 function vocabDeDoc(doc){
@@ -1536,6 +1552,10 @@ function vocabDeDoc(doc){
 function raicesDeDoc(doc){
   if(!vocabPorDoc)construirVocabPorDoc();
   return(vocabPorDoc.get(doc)||{palabras:new Map(),raices:new Map()}).raices
+}
+function textoDeDoc(doc){
+  if(!vocabPorDoc)construirVocabPorDoc();
+  return(vocabPorDoc.get(doc)||{texto:''}).texto
 }
 function refrescarVocabularioManual(){
   vocabularioManual=new Set();
@@ -2435,17 +2455,84 @@ function otraSeccionConEvidencia(consulta,activo){
    segunda se avisaría de cualquier palabra rara que no está en ningún manual,
    que es ruido y no una sección vecina. */
 const AUSENTE_MIN_FRAGS=3;
+const AUSENTE_MIN_LETRAS_SOLA=6;
+/* Avisar de que una palabra no está en NINGÚN manual solo tiene sentido si esa
+   palabra es un TEMA. Medido sobre las 88 preguntas buenas, la primera versión
+   saltaba en 17 de ellas y ni una era un tema: «cuánto» ×11, «llevan»,
+   «manejamos», «colgarla», «cuánta». Son la forma de preguntar, no lo que se
+   pregunta — y estos manuales no escriben «cuánto», escriben «30% de
+   participación».
+
+   Así que se descartan por lo que son: las interrogativas, y las palabras con
+   forma de verbo conjugado por el asesor. Descartar de más solo hace el aviso
+   más callado, que es el lado seguro: la palabra que sí es tema y sí es de otro
+   manual la sigue cogiendo la clase 1, que no pasa por aquí. */
+const INTERROGATIVAS=new Set(['cuanto','cuanta','cuantos','cuantas','cuando','cual','cuales',
+  'como','donde','adonde','quien','quienes','porque','acaso','tambien','tampoco','entonces','ademas']);
+const FORMA_DE_VERBO=/(?:amos|emos|imos|aron|eron|ando|iendo|arla|arlo|arle|arse|arlos|arlas|aria|eria|an|en|as|es|mos)$/;
+function esPalabraDeTema(w){
+  return !INTERROGATIVAS.has(w)&&!FORMA_DE_VERBO.test(w)
+}
+/* Los pares de palabras que el asesor escribió PEGADAS, sin nada en medio. Es
+   la unidad que hacía falta: «marca propia» es una cosa y «marca» y «propia»
+   por separado son otra. Se exige que las dos sean palabras de contenido, así
+   que «¿a qué altura va el sensor?» no produce el par «altura sensor» —que no
+   escribió nadie— porque entre las dos hay «va el». */
+function paresDeConsulta(query){
+  const secuencia=normalizeText(query||'').split(/\s+/).filter(Boolean);
+  const out=[];
+  for(let i=0;i+1<secuencia.length;i++){
+    const a=secuencia[i],b=secuencia[i+1];
+    if(a.length<4||b.length<4||STOPWORDS.has(a)||STOPWORDS.has(b))continue;
+    if(/^\d/.test(a)||/^\d/.test(b))continue;
+    out.push(a+' '+b);
+  }
+  return out
+}
 function terminosAusentes(query,activo){
-  if(!activo||docs.length<2)return[];
+  if(!activo||!docChunks.length)return[];
   const propio=vocabDeDoc(activo),propioRaiz=raicesDeDoc(activo);
   const fuera=[];
+  const enFrase=new Set();
+
+  /* 1 · La FRASE que este manual no usa. Es la unidad que hacía falta para el
+     caso del piso: «preferencial» sola no se puede juzgar —el corrector de
+     erratas la empareja con «preferencia», que sí está en MUEBLES dentro de
+     «de preferencia, coloca…», que no tiene nada que ver—. El par «marca
+     preferencial» no está en ningún manual, y eso sí es una respuesta. */
+  for(const par of paresDeConsulta(query)){
+    if(textoDeDoc(activo).includes(' '+par+' '))continue;
+    const duenos=[];
+    for(const d of docs){
+      if(d.name===activo)continue;
+      const t=textoDeDoc(d.name);
+      if(t.includes(' '+par+' '))duenos.push({docName:d.name,n:1});
+    }
+    if(duenos.length){
+      fuera.push({palabra:par,duenos,frase:true});
+      for(const w of par.split(' '))enFrase.add(w);
+    }
+    /* Se probó también avisar del par que no está en NINGÚN manual, para coger
+       «marca preferencial». Medido: saltaba en 15 de las 88 preguntas buenas
+       —«espacio dejo», «puedo cruzar», «participa outdoor», «altura pongo»—
+       porque un par de palabras adyacentes de una pregunta casi nunca está
+       literal en un manual. Quince falsos por un acierto no es un cambio, es
+       ruido con otra forma. Esa pregunta la cogen la regla 8b del prompt y la
+       verificación de nombres, que no dependen de acertar la búsqueda. */
+  }
+
+  /* 2 · La PALABRA sin ningún camino hasta este manual. */
   for(const k of palabrasDeConsulta(query)){
-    if(k.length<5||/^\d/.test(k))continue;
+    if(k.length<5||/^\d/.test(k)||enFrase.has(k))continue;
     const formas=new Set();
     for(const v of variantes(k).concat(infinitivos(k))){
       formas.add(v);
       for(const frase of expandKeywords([v]))for(const x of tokenize(frase))formas.add(x);
     }
+    /* Si lo que escribió es una errata de una palabra que el manual sí tiene, no
+       falta nada: falta una letra. El corrector ya la encontró antes que yo. */
+    const cerca=masParecida(k);
+    if(cerca)formas.add(cerca);
     const raices=new Set([...formas].map(raizCorta).filter(r=>r.length>2));
     let dentro=false;
     for(const f of formas)if(propio.has(f)){dentro=true;break}
@@ -2460,21 +2547,40 @@ function terminosAusentes(query,activo){
       if(n>=AUSENTE_MIN_FRAGS)duenos.push({docName:d.name,n});
     }
     if(duenos.length){duenos.sort((a,b)=>b.n-a.n);fuera.push({palabra:k,duenos})}
+    /* Y si no es de nadie, tampoco es del manual del asesor. Medido en el piso:
+       «marca preferencial» —una palabra que no aparece en ninguno de los once
+       manuales— se contestó con «Haus es la marca preferencial». El resto de la
+       pregunta («marca») encontraba láminas de sobra, así que el contexto salía
+       sin un solo aviso. Se pide una palabra larga para no señalar cualquier
+       cosa: las cortas son las de relleno. */
+    else if(k.length>=AUSENTE_MIN_LETRAS_SOLA&&esPalabraDeTema(k))fuera.push({palabra:k,duenos:[],enNinguno:true});
   }
   return fuera
 }
 /* No prohíbe responder —los fragmentos que llegaron son del manual del asesor y
    pueden venir al caso—; le quita al modelo la única excusa que tenía para
    estirar uno parecido: ahora sabe qué palabra falta y de quién es. */
-const avisoPalabraAusente=(activa,palabras,otra,hayFragmentos)=>`=== ${palabras.length===1?'UNA PALABRA DE LA PREGUNTA NO ESTÁ':'HAY PALABRAS DE LA PREGUNTA QUE NO ESTÁN'} EN ESTE MANUAL ===
-El asesor preguntó por ${palabras.map(p=>`"${p}"`).join(' y ')}, y el manual de
-"${activa}" no ${palabras.length===1?'la menciona':'las menciona'} ni una vez.${otra?`
-Eso sí aparece en "${otra}", que el asesor también tiene cargada.`:''}
+function avisoPalabraAusente(activa,items,otra,hayFragmentos){
+  const lista=a=>a.map(i=>`"${i.palabra}"`).join(' y ');
+  const deNadie=items.filter(i=>i.enNinguno);
+  const deOtra=items.filter(i=>!i.enNinguno);
+  const partes=[];
+  if(deOtra.length)partes.push(`El asesor preguntó por ${lista(deOtra)}, y el manual de "${activa}" no
+${deOtra.length===1?'lo dice':'los dice'} en ningún sitio.${otra?`
+Eso sí aparece en "${otra}", que el asesor también tiene cargada.`:''}`);
+  if(deNadie.length)partes.push(`${lista(deNadie)} no ${deNadie.length===1?'aparece':'aparecen'} en NINGUNO de los manuales
+cargados. No es que esté en otra sección: es un término que ninguno de estos
+manuales usa. Si lo conoces por fuera, aquí no cuenta.`);
+  return`=== ${items.length===1?'UNA PALABRA DE LA PREGUNTA NO ESTÁ':'HAY PALABRAS DE LA PREGUNTA QUE NO ESTÁN'} EN ESTE MANUAL ===
+${partes.join('\n')}
 ${hayFragmentos?`Los fragmentos de abajo salieron de las OTRAS palabras de la pregunta, así que
 pueden hablar de otra cosa. Léelos: si no responden exactamente lo que se
 preguntó, di`:`Dilo así:`} "El manual de ${activa} no especifica [X]"${otra?`, di que eso sí está
 en "${otra}" y que puede cambiar de sección con el botón de aquí abajo`:''} y cierra
-con CERTEZA: GAP. No traslades a ${activa} una regla que sea de otra sección.`;
+con CERTEZA: GAP. No traslades a ${activa} una regla que sea de otra sección, y no
+completes con nada que no esté en los fragmentos — ni marcas, ni nombres, ni
+reglas que te suenen de la cadena.`
+}
 
 /* ── PREGUNTAS SOBRE EL PROPIO MANUAL ─────────────
    «¿De qué trata este manual?», «¿qué manuales tengo cargados?», «¿en qué
@@ -2675,16 +2781,20 @@ function buildContext(query){
      ambigua, está fuerte en dos manuales, y ahí `otraSeccionConEvidencia` se
      calla a propósito— y se quedaba en un no rotundo sin explicación. */
   if(hasPdfs&&seccion.doc&&!otraSeccion){
-    ausentes=terminosAusentes(query,seccion.doc);
+    /* La palabra que no es de nadie solo se avisa cuando el resto de la pregunta
+       SÍ encontró algo: con nivel 0 ya hay un aviso diciendo que no se encontró
+       nada, y dos avisos dicen lo mismo dos veces. */
+    ausentes=terminosAusentes(query,seccion.doc).filter(a=>!a.enNinguno||nivel>=1);
     if(ausentes.length){
       const activa=nombreDeSeccion(seccion.doc);
-      /* Se nombra otra sección solo si TODAS las palabras que faltan apuntan al
+      /* Se nombra otra sección solo si TODAS las que tienen dueño apuntan al
          mismo manual. Con dos dueños distintos, mandar al asesor a uno es
          elegir por él. */
-      const primero=ausentes[0].duenos[0].docName;
-      const unSoloDueno=ausentes.every(a=>a.duenos[0].docName===primero)?primero:null;
+      const conDueno=ausentes.filter(a=>a.duenos.length);
+      const primero=conDueno.length?conDueno[0].duenos[0].docName:null;
+      const unSoloDueno=primero&&conDueno.every(a=>a.duenos[0].docName===primero)?primero:null;
       if(unSoloDueno)ultimaSeccionSugerida={docName:unSoloDueno,nombre:nombreDeSeccion(unSoloDueno)};
-      texto=avisoPalabraAusente(activa,ausentes.map(a=>a.palabra),unSoloDueno?nombreDeSeccion(unSoloDueno):null,ultimosFragmentos.length>0)+'\n\n'+texto;
+      texto=avisoPalabraAusente(activa,ausentes,unSoloDueno?nombreDeSeccion(unSoloDueno):null,ultimosFragmentos.length>0)+'\n\n'+texto;
     }
   }
   /* Va delante de todo lo demás: es el marco con el que hay que leer el resto. */
@@ -2811,7 +2921,7 @@ function clearMemory(){
 ════════════════════════════════════════════════ */
 /* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
    viejo guardado en localStorage, sin pedirle que borre nada a mano. */
-const PROMPT_VERSION='10.0';  // 10.0: fuente única con PDF + certeza declarada
+const PROMPT_VERSION='11.0';  // 11.0: la cadena real no es fuente (regla 8b)
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
@@ -2827,6 +2937,12 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 8. CERO INVENCIÓN: no completes con conocimiento general de visual merchandising lo que el contexto no diga.
    Si la respuesta no está en el contexto, dilo con esas palabras: "el manual no lo especifica".
    Una regla plausible pero no escrita es peor que un "no está": el asesor la ejecuta en el piso.
+8b. LA CADENA REAL NO CUENTA: estos manuales son de una empresa que existe y puede que la reconozcas por
+   el nombre, las marcas o el formato. Lo que sepas de ella por fuera —sus marcas propias, sus tiendas,
+   sus políticas, quién es dueño de qué— NO es fuente y no se usa NUNCA, ni para completar, ni para
+   confirmar, ni "porque es sabido". Si un nombre de marca no está escrito en los fragmentos, para esta
+   respuesta no existe. Medido en el piso: a "¿cuál es la marca propia?" se contestó con una marca y una
+   cadena que no aparecen ni una vez en ese manual, y sonó perfectamente cierto.
 9. FUENTE ÚNICA: el contexto es todo lo que hay. Si hay un PDF cargado, ese es el manual que se está
    ejecutando en ese piso y es la única fuente: no mezcles reglas generales de Mercadep que no estén
    en el contexto, aunque las sepas. Lo que el PDF no cubra se responde como GAP.
@@ -5226,8 +5342,77 @@ function paresConUnidad(texto){
   return out
 }
 
+/* ── LOS NOMBRES QUE EL MANUAL NO DICE ────────────
+   Medido en el piso, con 101 MUEBLES activo y la API conectada: a «¿cuál es la
+   marca propia?» contestó «Haus es la marca propia de liverpool». Ninguna de
+   las dos palabras está en ese manual —comprobado sobre el texto crudo del PDF,
+   38 páginas: cero «haus», cero «liverpool»—. «Haus» es la marca de 365
+   BLANCOS y Liverpool es la cadena de la que son estos manuales. El modelo la
+   reconoció y completó con lo que sabe de ella, que es la única vía de
+   invención que quedaba abierta: la verificación comprobaba cifras y páginas, y
+   un nombre pasaba limpio.
+
+   La capitalización de la RESPUESTA no sirve para detectarlo: «Haus» iba al
+   principio de la frase y «liverpool» en minúscula. Lo que sí sirve es lo que el
+   corpus sabe que es un nombre. Un nombre propio en estos manuales se reconoce
+   por dos cosas a la vez: aparece en mayúscula a mitad de frase —«la marca Haus
+   Kids», «sistema de Mercaderías de Liverpool», «la marca propia Damaia»— y no
+   aparece nunca en minúscula. Las palabras corrientes fallan la segunda: «coloca»
+   va en mayúscula al empezar renglón, pero también va en minúscula cien veces. */
+let entidadesCorpus=null;
+function entidadesDelCorpus(){
+  if(entidadesCorpus)return entidadesCorpus;
+  const mayus=new Map(),minus=new Set();
+  /* Lo que va detrás de un punto, un guion de viñeta o un salto de línea puede
+     ir en mayúscula por gramática, no por ser un nombre. */
+  const inicioDeFrase=/[.!?:;•·➔→\-–—(\[\n]/;
+  for(const c of docChunks){
+    const txt=(c.heading?c.heading+'. ':'')+(c.text||'');
+    for(const m of txt.matchAll(/[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/g)){
+      let i=m.index-1;
+      while(i>=0&&txt[i]===' ')i--;
+      if(i<0||inicioDeFrase.test(txt[i]))continue;
+      const t=normalizeText(m[0]).trim();
+      if(t)mayus.set(t,(mayus.get(t)||0)+1);
+    }
+    for(const m of txt.matchAll(/[a-záéíóúñ][a-záéíóúñ]{2,}/g)){
+      const t=normalizeText(m[0]).trim();
+      if(t)minus.add(t);
+    }
+  }
+  entidadesCorpus=new Set();
+  for(const[t]of mayus)if(!minus.has(t))entidadesCorpus.add(t);
+  return entidadesCorpus
+}
+function nombresSinRespaldo(respuesta,contexto){
+  if(!respuesta||!contexto)return[];
+  const ents=entidadesDelCorpus();
+  const ctx=' '+normalizeText(contexto).replace(/\s+/g,' ')+' ';
+  const enContexto=t=>ctx.includes(' '+t+' ');
+  /* Vienen del prompt, no del manual, así que no son invenciones. */
+  const propios=new Set(['mercadep','certeza','gap','alta','media'].concat(tokenize(seccionActiva()||'')));
+  const out=new Map();
+  const texto=respuesta;
+  const inicioDeFrase=/[.!?:;•·➔→\n]/;
+  for(const m of texto.matchAll(/[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/g)){
+    const t=normalizeText(m[0]).trim();
+    if(!t||propios.has(t)||enContexto(t))continue;
+    /* El corpus lo tiene fichado como nombre: da igual cómo lo escriba la
+       respuesta, no está en los fragmentos que se consultaron. */
+    if(ents.has(t)){out.set(t,m[0]);continue}
+    /* Y la red para un nombre de fuera del corpus —otra cadena, otra marca—:
+       va en mayúscula a mitad de frase y no está en el contexto. */
+    if(!/^[A-ZÁÉÍÓÚÑ]/.test(m[0]))continue;
+    let i=m.index-1;
+    while(i>=0&&texto[i]===' ')i--;
+    if(i<0||inicioDeFrase.test(texto[i]))continue;
+    out.set(t,m[0]);
+  }
+  return[...out.values()]
+}
+
 function verificarContraContexto(respuesta,contexto){
-  const vacio={cifras:[],paginas:[],citadas:new Set()};
+  const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set()};
   if(!respuesta||!contexto)return vacio;
 
   const texto=respuesta
@@ -5277,15 +5462,17 @@ function verificarContraContexto(respuesta,contexto){
      sacar las láminas que acompañan a la respuesta. */
   const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
 
-  return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,citadas}
+  return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,
+    nombres:nombresSinRespaldo(respuesta,contexto),citadas}
 }
 
 function renderAvisoVerificacion(res){
-  if(!res||(!res.cifras.length&&!res.paginas.length))return null;
+  if(!res||(!res.cifras.length&&!res.paginas.length&&!(res.nombres||[]).length))return null;
   const el=document.createElement('div');
   el.className='verify-warn';
   const partes=[];
   if(res.cifras.length)partes.push(`${res.cifras.length===1?'el dato':'los datos'} <strong>${res.cifras.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
+  if((res.nombres||[]).length)partes.push(`${res.nombres.length===1?'el nombre':'los nombres'} <strong>${res.nombres.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   if(res.paginas.length)partes.push(`${res.paginas.length===1?'la página citada':'las páginas citadas'} <strong>${res.paginas.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   el.innerHTML=`⚠ No pude verificar ${partes.join(' ni ')} en los fragmentos que se consultaron. Contrasta contra el manual antes de aplicarlo.`;
   return el
@@ -5560,6 +5747,41 @@ function testLaminas(){
   return casos;
 }
 
+/* Los nombres inventados, con el caso que ocurrió de verdad en el piso. Se
+   monta un corpus mínimo de dos manuales —como `testLaminas` monta figuras—
+   para que la prueba corra sin cargar nada y sin API key. */
+function pruebasNombres(){
+  const gChunks=docChunks,gDocs=docs,gEnt=entidadesCorpus,gCorpus=corpus;
+  docs=[{name:'MUEBLES.pdf'},{name:'BLANCOS.pdf'}];
+  docChunks=[
+    indexChunk({id:'n1',source:'pdf',docName:'MUEBLES.pdf',page:14,heading:'MUNDOS Y MARCAS',
+      text:'Verifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Mid Century.'}),
+    indexChunk({id:'n2',source:'pdf',docName:'BLANCOS.pdf',page:15,heading:'KIDS',
+      text:'Ofrece artículos para los más pequeños de la marca Haus Kids y Licencias.'}),
+    indexChunk({id:'n3',source:'pdf',docName:'BLANCOS.pdf',page:11,heading:'ETIQUETADO DE PRECIO',
+      text:'El tipo de etiqueta es asignado por el sistema de Mercaderías de Liverpool.'}),
+  ];
+  entidadesCorpus=null;
+  const ctx='[MUEBLES.pdf · pág. 14 · MUNDOS Y MARCAS]\nVerifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Mid Century.';
+  const nombres=r=>nombresSinRespaldo(r,ctx).map(x=>x.toLowerCase());
+  const casos=[
+    {nombre:'«Haus» y «Liverpool» no están en el contexto de MUEBLES',
+      ok:(()=>{const n=nombres('Haus es la marca propia de Liverpool.');return n.includes('haus')&&n.includes('liverpool')})()},
+    {nombre:'en minúscula se detecta igual (la respuesta real decía «liverpool»)',
+      ok:nombres('Haus es la marca propia de liverpool.').includes('liverpool')},
+    {nombre:'a principio de frase también (allí iba «Haus»)',
+      ok:nombres('Haus es la marca preferencial.').includes('haus')},
+    {nombre:'las marcas del PROPIO manual no se marcan',
+      ok:nombres('Los estilos son Nórdico, Industrial y Mid Century (pág. 14).').length===0},
+    {nombre:'una palabra corriente en mayúscula no es un nombre',
+      ok:!entidadesDelCorpus().has('verifica')&&!entidadesDelCorpus().has('ofrece')},
+    {nombre:'una marca de fuera del corpus también se marca',
+      ok:nombres('Puedes verlo en la tienda Zara.').includes('zara')},
+  ];
+  docChunks=gChunks;docs=gDocs;entidadesCorpus=gEnt;corpus=gCorpus;
+  return casos;
+}
+
 /* ── SEGUNDA TANDA: LOS MANUALES DEL ASESOR ───────
    Solo corre si hay PDF cargado. No puede comprobar respuestas concretas —cada
    manual dice lo suyo—, así que mide lo que sí es igual en cualquier manual de
@@ -5711,6 +5933,9 @@ function correrPruebas(){
   const lam=testLaminas();
   for(const l of lam)filas.push({tipo:'láminas',q:l.nombre,ok:l.ok,detalle:`${l.obtenido} lámina(s), esperado ${l.esperado}`});
 
+  const nom=pruebasNombres();
+  for(const n of nom)filas.push({tipo:'nombres',q:n.nombre,ok:n.ok,detalle:n.ok?'correcto':'falla'});
+
   /* Seguimiento. Lo que se rompió en el piso: el umbral viejo ampliaba con la
      pregunta anterior casi siempre —en español quedan dos o tres palabras tras
      quitar las vacías— y el asistente acabó contestando la pregunta del turno
@@ -5808,6 +6033,7 @@ function correrPruebas(){
     ruido:`${ruidoOk}/${ruidoTot}`,
     verificacion:`${verifOk}/${TEST_VERIF.length}`,
     laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
+    nombres:`${nom.filter(n=>n.ok).length}/${nom.length}`,
     certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
     seguimiento:`${pruebasSeguimiento.filter(p=>p.ok).length}/${pruebasSeguimiento.length}`,
     rotulo:`${pruebasRotulo.filter(p=>p.ok).length}/${pruebasRotulo.length}`,
