@@ -1,4 +1,26 @@
-# Asistente de piso — demo
+<p align="center">
+  <img src="docs/banner.png" alt="Asistente de Piso — IA aplicada a retail real" width="100%">
+</p>
+
+<h1 align="center">Asistente de Piso</h1>
+
+<p align="center">
+  <b>IA para el piso de venta que cita la página exacta del manual, declara su certeza y dice «no sé» cuando no hay evidencia.</b>
+</p>
+
+<p align="center">
+  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-E8C872?style=for-the-badge&labelColor=0B0B0D"></a>
+  <a href="docs/video-linkedin.mp4"><img alt="Video" src="https://img.shields.io/badge/video-37%20s-B8860B?style=for-the-badge&labelColor=0B0B0D"></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licencia-MIT-9A968E?style=for-the-badge&labelColor=0B0B0D"></a>
+</p>
+
+<p align="center">
+  <img alt="Un solo archivo HTML" src="https://img.shields.io/badge/1%20archivo-index.html-F5F1E8?labelColor=0B0B0D">
+  <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F5F1E8?labelColor=0B0B0D">
+  <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F5F1E8?labelColor=0B0B0D">
+  <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F5F1E8?labelColor=0B0B0D">
+  <img alt="Pruebas" src="https://img.shields.io/badge/pruebas-33%2F33-F5F1E8?labelColor=0B0B0D">
+</p>
 
 Asistente conversacional de una sola página para el personal de piso de una tienda:
 responde dudas de montaje y estándar de exhibición desde el celular, parado frente al
@@ -9,7 +31,16 @@ mueble, **sin instalar nada y sin cuenta**.
 > son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
 > este repositorio ni en su historial.
 
-**[▶ Abrir el demo](https://gerardobr01.github.io/Visual_Lv-/)**
+**[▶ Abrir el demo](https://gerardobr01.github.io/Asistente-de-piso/)** · sin API key funciona en modo manual; con tu propia key (Google AI Studio u OpenAI) activa el modo razonado.
+
+## En 37 segundos
+
+<p align="center">
+  <a href="docs/video-linkedin.mp4"><img src="docs/preview.gif" alt="Vista previa del video: problema → pregunta → evidencia → certeza → honestidad → números" width="420"></a>
+</p>
+
+Video conceptual (motion graphics, no una grabación de la interfaz): **[ver en MP4 con audio](docs/video-linkedin.mp4)**.
+Música: "Voltaic" de Kevin MacLeod (incompetech.com), [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
 
 ## Qué resuelve
 
