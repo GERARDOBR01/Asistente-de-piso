@@ -972,7 +972,7 @@ marked.setOptions({breaks:true,gfm:true});
 const PURIFY_CFG = {
   ALLOWED_TAGS: ['p','br','strong','em','b','i','u','code','pre','blockquote',
                  'h1','h2','h3','h4','ul','ol','li','hr','table','thead','tbody',
-                 'tr','th','td','span','a'],
+                 'tr','th','td','span','a','div','mark'],
   ALLOWED_ATTR: ['href','target','rel','class'],
   ALLOW_DATA_ATTR: false,
   FORBID_TAGS: ['script','style','iframe','object','embed','form','input','svg','math'],
@@ -1038,7 +1038,7 @@ const PROVIDERS={
       const res=await fetch('https://models.inference.ai.azure.com/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature||0.2})
+        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature??0.2})
       });
       const data=await res.json();
       if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
@@ -1062,7 +1062,7 @@ const PROVIDERS={
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature||0.2})
+        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature??0.2})
       });
       const data=await res.json();
       if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
@@ -1099,7 +1099,7 @@ const PROVIDERS={
        etapas visibles y auditables, que es precisamente lo contrario de un
        razonamiento que no se puede leer. */
     _genConfig(maxTokens,temperature){
-      return{maxOutputTokens:maxTokens,temperature:temperature||0.2,thinkingConfig:{thinkingBudget:0}};
+      return{maxOutputTokens:maxTokens,temperature:temperature??0.2,thinkingConfig:{thinkingBudget:0}};
     },
     async call(key,messages,model,maxTokens,temperature){
       const{systemInstruction,contents}=this._toGeminiMessages(messages);
@@ -2826,7 +2826,13 @@ function buildContext(query){
 function contextoTodosLosManuales(query){
   if(docs.length<2)return'';
   ultimosFragmentos=[];
-  const pdf=getPdfContext(consultaDeBusqueda(query),PDF_BUDGET,null);
+  /* Se pulsa después de contestar, con la pregunta ya en el historial: la
+     «anterior» era ella misma, y «¿y en juveniles?» se buscaba como «¿y en
+     juveniles? ¿y en juveniles?». La anterior es la de antes de esta. */
+  const hist=history.slice();
+  const ult=hist.map(m=>m.role).lastIndexOf('user');
+  if(ult>=0&&hist[ult].content===query)hist.length=ult;
+  const pdf=getPdfContext(consultaDeBusqueda(query,hist),PDF_BUDGET,null);
   if(!pdf.nivel)return'';
   const secciones=new Set(ultimosFragmentos.map(c=>c.docName));
   const activa=appState.manualActivo?nombreDeSeccion(appState.manualActivo):null;
@@ -3095,7 +3101,7 @@ const appState={
      cinco y el dato salía citado a la página de un manual que no era el suyo. */
   manualActivo:null
 };
-let docs=[],history=[],sessionTokens=0,quickBtns=[],editingQuick=false,isGenerating=false;
+let docs=[],history=[],sessionTokens=0,quickBtns=[],editingQuick=false,isGenerating=false,chatDescartado=false;
 function estimateTokens(t){return Math.ceil((t||'').length/3.5)}
 
 /* ════════════════════════════════════════════════
@@ -3133,7 +3139,12 @@ function selectProvider(id,btn){
   const chatSel=document.getElementById('chat-model-select');
   const p=PROVIDERS[id];
   chatSel.innerHTML=p.chatModels.map(m=>`<option value="${m}">${m}</option>`).join('');
-  if(p.chatModels.includes(appState.chatModel))chatSel.value=appState.chatModel;
+  /* Si el modelo no existe en este proveedor se queda el primero de la lista.
+     Antes appState seguía con el anterior: elegir Gemini y volver al chat sin
+     guardar mandaba «gpt-4o-mini» a Google, que contestaba «modelo no
+     encontrado». */
+  if(!p.chatModels.includes(appState.chatModel))appState.chatModel=p.chatModels[0];
+  chatSel.value=appState.chatModel;
   // v7.0 paso 3: cargar key del proveedor seleccionado
   try{
     const provKey='ap_api_key_'+id;
@@ -3153,7 +3164,7 @@ function loadSaved(){
     // v7.0: API key migrada a sessionStorage — carga por proveedor
     try {
       const provKey = 'ap_api_key_' + appState.provider;
-      appState.apiKey = sessionStorage.getItem(provKey) || sessionStorage.getItem('ap_api_key') || '';
+      appState.apiKey = sessionStorage.getItem(provKey) || '';
     } catch { appState.apiKey = ''; }
     // Limpieza defensiva: si quedó rastro en localStorage v6, eliminarlo
     if (!appState.apiKey) {
@@ -3179,8 +3190,11 @@ function loadSaved(){
     const chatSel=document.getElementById('chat-model-select');
     if([...chatSel.options].some(o=>o.value===appState.chatModel))chatSel.value=appState.chatModel;
     try{quickBtns=JSON.parse(localStorage.getItem('ap_quick'))||[...DEFAULT_QUICK]}catch{quickBtns=[...DEFAULT_QUICK]}
-    appState.memoryEnabled=localStorage.getItem('ap_memory_enabled')!=='false';
-    appState.extraEnabled=localStorage.getItem('ap_extra_enabled')!=='false';
+    /* Se guardan como '1'/'0'. Leerlos contra 'false' los volvía a encender en
+       cada recarga: apagar la memoria no duraba más que la pestaña. */
+    const apagado=v=>v==='0'||v==='false';
+    appState.memoryEnabled=!apagado(localStorage.getItem('ap_memory_enabled'));
+    appState.extraEnabled=!apagado(localStorage.getItem('ap_extra_enabled'));
     appState.temperature=parseFloat(localStorage.getItem('ap_temperature')||'0.2');
     document.getElementById('toggle-memory').checked=appState.memoryEnabled;
     document.getElementById('toggle-extra').checked=appState.extraEnabled;
@@ -3194,7 +3208,7 @@ function loadSaved(){
   if (warnEl && appState.apiKey) warnEl.classList.add('show');
   renderDocs();renderQuickBtns();updateTokenBar();renderMemoryPanel();
   // v7.0: banner de restore desde sessionStorage
-  if(sessionStorage.getItem('ap_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show');
+  try{if(sessionStorage.getItem('ap_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show')}catch{}
   // v7.0 paso 3: sincronizar selector API Experta
   syncExpertSelector();
 }
@@ -3288,7 +3302,14 @@ function loadChatHistory(){
 function restoreChatHistory(){loadChatHistory();}
 function dismissRestoreBanner(){
   document.getElementById('restore-banner').classList.remove('show');
-  sessionStorage.removeItem('ap_chat_history_exists');
+  try{sessionStorage.removeItem('ap_chat_history_exists')}catch{}
+}
+/* La primera pregunta nueva sobrescribe la conversación guardada, pero el
+   banner seguía ofreciendo «Restaurar»: pulsarlo después traía la conversación
+   nueva y la anterior ya no existía. Al preguntar, el banner se va. */
+function ocultarBannerRestaurar(){
+  const b=document.getElementById('restore-banner');
+  if(b&&b.classList.contains('show'))dismissRestoreBanner();
 }
 
 /* ════════════════════════════════════════════════
@@ -3310,7 +3331,7 @@ function saveConfig(evt){
     // v7.0 paso 3: API key por proveedor en sessionStorage
     const provKey = 'ap_api_key_' + activeProv;
     if (appState.apiKey) {
-      try { sessionStorage.setItem(provKey, appState.apiKey); sessionStorage.setItem('ap_api_key', appState.apiKey); } catch {}
+      try { sessionStorage.setItem(provKey, appState.apiKey); sessionStorage.removeItem('ap_api_key'); } catch {}
       try { localStorage.removeItem('ap_api_key'); } catch {}
     } else {
       try { sessionStorage.removeItem(provKey); sessionStorage.removeItem('ap_api_key'); } catch {}
@@ -3361,13 +3382,14 @@ const MAX_PDF_SIZE = 50 * 1024 * 1024;  // 50 MB
 const PDF_TIMEOUT_MS = 30000;            // 30 s
 
 function withTimeout(promise, ms, label='operación') {
+  let t;
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(
+    new Promise((_, reject) => { t = setTimeout(
       () => reject(new Error(`Timeout: ${label} excedió ${ms/1000}s. El PDF puede estar corrupto, protegido con contraseña o tener un formato no estándar.`)),
       ms
-    ))
-  ]);
+    ); })
+  ]).finally(() => clearTimeout(t));
 }
 
 /* ════════════════════════════════════════════════
@@ -3606,11 +3628,21 @@ const FIG_JPEG_QUALITY=0.72;
 const FIG_MAX_WIDTH=1000;
 const FIG_REPEAT_RATIO=0.1;        // la misma caja en el mismo sitio en varias láminas = plantilla
 
+/* Tope de píxeles del render. Una lámina de gran formato a escala 2 pasaba de
+   los ~16.7 M px que iOS permite por canvas: getContext devolvía null, el
+   render lanzaba y la página se quedaba sin figuras, sin avisar. Por encima del
+   tope se baja la escala, y el recorte usa la escala real (canvas.escala). */
+const FIG_MAX_PX=12e6;
 async function renderPageCanvas(page,scale){
+  const base=page.getViewport({scale:1});
+  const tope=Math.sqrt(FIG_MAX_PX/(base.width*base.height));
+  if(scale>tope)scale=tope;
   const vp=page.getViewport({scale});
   const canvas=document.createElement('canvas');
   canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
+  canvas.escala=scale;
   const ctx=canvas.getContext('2d');
+  if(!ctx){canvas.width=canvas.height=0;throw new Error('sin memoria para el render de la página')}
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
   await page.render({canvasContext:ctx,viewport:vp}).promise;
   return canvas
@@ -3626,6 +3658,7 @@ function inkGrid(canvas,cols){
   const sctx=small.getContext('2d',{willReadFrequently:true});
   sctx.drawImage(canvas,0,0,cols,rows);
   const data=sctx.getImageData(0,0,cols,rows).data;
+  small.width=small.height=0;
   const cuenta=new Map();
   for(let i=0;i<data.length;i+=4){
     const k=((data[i]>>4)<<8)|((data[i+1]>>4)<<4)|(data[i+2]>>4);
@@ -3751,6 +3784,7 @@ function firmaVisual(canvas){
   const ctx=s.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(canvas,0,0,8,8);
   const d=ctx.getImageData(0,0,8,8).data;
+  s.width=s.height=0;
   const gris=[];
   for(let i=0;i<64;i++)gris.push((d[i*4]*3+d[i*4+1]*6+d[i*4+2])/10);
   const media=gris.reduce((a,b)=>a+b,0)/64;
@@ -3808,7 +3842,12 @@ function recortar(canvas,box,scale){
   const out=document.createElement('canvas');
   out.width=Math.round(w);out.height=Math.round(h);
   out.getContext('2d').drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height);
-  return{dataUrl:out.toDataURL('image/jpeg',FIG_JPEG_QUALITY),firma:firmaVisual(out)}
+  /* Cada canvas que no se suelta sigue contando contra el límite total de
+     memoria de canvas del navegador del celular, y con varios manuales se
+     llegaba a él. */
+  const res={dataUrl:out.toDataURL('image/jpeg',FIG_JPEG_QUALITY),firma:firmaVisual(out)};
+  out.width=out.height=0;
+  return res
 }
 
 /* Un panel de color con texto encima deja, al borrar el texto, un rectángulo
@@ -3870,6 +3909,7 @@ async function detectarFiguras(page,pageInfo,docName){
     rectsImagen=await withTimeout(rectangulosDeImagen(page,vp),FIG_OPLIST_TIMEOUT_MS,'Imágenes de la página');
   }catch(e){console.warn('rectangulosDeImagen',e.message)}
   const canvas=await renderPageCanvas(page,FIG_SCALE);
+  try{
   const g=inkGrid(canvas,FIG_GRID_COLS);
   borrarTexto(g,pageInfo.textBoxes||pageInfo.blocks,vp.width,vp.height);
   const cw=vp.width/g.cols,ch=vp.height/g.rows;
@@ -3907,7 +3947,7 @@ async function detectarFiguras(page,pageInfo,docName){
   const figuras=[];
   for(const c of cajas){
     const txt=coberturaDeTexto(c,pageInfo.blocks);
-    const corte=recortar(canvas,c,FIG_SCALE);
+    const corte=recortar(canvas,c,canvas.escala);
     if(!corte)continue;
     figuras.push({
       id:docName+'#f'+pageInfo.page+'-'+figuras.length,
@@ -3921,8 +3961,10 @@ async function detectarFiguras(page,pageInfo,docName){
       vlmDescription:null
     });
   }
-  canvas.width=canvas.height=0;   // suelta el bitmap grande cuanto antes
   return figuras
+  }finally{
+    canvas.width=canvas.height=0;   // suelta el bitmap grande cuanto antes, también si algo falla
+  }
 }
 
 /* La banda de encabezado y el logo de esquina salen en TODAS las láminas. Son
@@ -3968,15 +4010,20 @@ async function extractPdf(file,onProgress){
     const reader=new FileReader();
     reader.onerror = () => resolve({error:'No se pudo leer el archivo'});
     reader.onload=async e=>{
+      /* pdf.js retiene fuentes y listas de operadores de cada documento hasta
+         que se le pide soltarlas. Sin destroy, cada manual cargado seguía
+         ocupando memoria del celular — también el que venció el tiempo. */
+      let tarea=null;
       try{
         const buf=e.target.result;
-        const pdf = await withTimeout(
-          pdfjsLib.getDocument({
+        tarea=pdfjsLib.getDocument({
             data: new Uint8Array(buf),
             isEvalSupported: false,
             disableAutoFetch: true,
             disableStream: true
-          }).promise,
+          });
+        const pdf = await withTimeout(
+          tarea.promise,
           PDF_TIMEOUT_MS,
           `Extracción de "${file.name}"`
         );
@@ -4007,6 +4054,7 @@ async function extractPdf(file,onProgress){
               `Figuras de la página ${i} de "${file.name}"`
             ));
           }catch(e){console.warn('detectarFiguras pág.',i,e)}
+          try{page.cleanup()}catch{}
         }
 
         const chars=pages.reduce((n,pg)=>n+pg.blocks.reduce((m,b)=>m+b.text.length,0),0);
@@ -4018,6 +4066,8 @@ async function extractPdf(file,onProgress){
           ? err.message
           : 'No se pudo leer el PDF. Verifica que no esté protegido con contraseña o corrupto.';
         resolve({error:msg});
+      }finally{
+        if(tarea)tarea.destroy().catch(()=>{});
       }
     };
     reader.readAsArrayBuffer(file)
@@ -4058,6 +4108,10 @@ function txDB(modo,fn){
     const req=fn(tx.objectStore(DB_STORE));
     tx.oncomplete=()=>{db.close();resolve(req&&req.result)};
     tx.onerror=()=>{db.close();reject(tx.error)};
+    /* Sin cuota, la transacción se aborta SIN disparar error: la promesa no
+       terminaba nunca y la carga del manual se quedaba colgada en la barra de
+       progreso, sin procesar los siguientes. */
+    tx.onabort=()=>{db.close();reject(tx.error||new Error('transacción abortada'))};
   }))
 }
 
@@ -4070,7 +4124,9 @@ async function hashArchivo(file){
 /* Los campos del índice invertido (tf, len) no se guardan: se recalculan al
    restaurar. Ocupan más que el texto del que salen y se derivan de él. */
 async function guardarManual(hash,doc,chunks,figuras){
-  const limpio=chunks.map(c=>({id:c.id,source:c.source,docName:c.docName,page:c.page,heading:c.heading,text:c.text,figureIds:c.figureIds}));
+  /* isFigure viaja también: sin él, al restaurar, la descripción que hizo la IA
+     de una lámina se citaba como si fuera texto del manual. */
+  const limpio=chunks.map(c=>({id:c.id,source:c.source,docName:c.docName,page:c.page,heading:c.heading,text:c.text,figureIds:c.figureIds,isFigure:c.isFigure}));
   await txDB('readwrite',st=>st.put({hash,doc,chunks:limpio,figuras,guardado:Date.now()}));
 }
 const leerManual=hash=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
@@ -4091,6 +4147,7 @@ async function firmarPendientes(figuras,hash,guardado){
   }
 }
 const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
+const borrarManual=hash=>txDB('readwrite',st=>st.delete(hash));
 
 async function borrarManualesGuardados(){
   try{
@@ -4247,7 +4304,7 @@ async function handleFiles(fileList){
       rejected.push({name: file.name, reason: 'too_large', size: file.size});
       continue;
     }
-    if (docs.find(d => d.name === file.name)) {
+    if (docs.find(d => d.name === file.name) || accepted.find(f => f.name === file.name)) {
       rejected.push({name: file.name, reason: 'duplicate'});
       continue;
     }
@@ -4283,13 +4340,22 @@ async function handleFiles(fileList){
       procMsg.textContent='⏳ Comprobando si este manual ya está indexado…';
       hash=await hashArchivo(file);
     }catch(e){console.warn('hashArchivo',e)}
+    /* El nombre no identifica un manual: la misma descarga llega como
+       «X (1).pdf», y al restaurarse entraba con el nombre guardado —«X.pdf»—
+       como un segundo documento idéntico. Fragmentos duplicados, y quitar uno
+       borraba los del otro. Lo que identifica al archivo es su contenido. */
+    const yaCargado=hash&&docs.find(d=>d.hash===hash);
+    if(yaCargado){
+      showToast(`⚠ "${file.name}" es el mismo archivo que "${yaCargado.name}", que ya está cargado.`,'warn',4500);
+      continue;
+    }
     const guardado=hash?await leerManual(hash):null;
     if(guardado&&guardado.chunks&&guardado.chunks.length){
       docChunks.push(...guardado.chunks.map(indexChunk));
       const restauradas=guardado.figuras||[];
       await firmarPendientes(restauradas,hash,guardado);
       docFigures.push(...restauradas);
-      docs.push(guardado.doc);
+      docs.push({...guardado.doc,hash});
       rebuildCorpus();
       showToast(`✓ "${file.name}" restaurado de este dispositivo — no hizo falta reprocesarlo`,'success',3500);
       continue;
@@ -4316,9 +4382,13 @@ async function handleFiles(fileList){
     showToast(`✓ "${file.name}" procesado — ${result.pages.length} páginas, ${chunks.length} fragmentos, ${figuras.length} figuras`, 'success', 3000);
     /* Guardar no debe poder tumbar la carga: si el dispositivo no tiene cuota
        o bloquea IndexedDB, el manual ya está usable en esta sesión. */
-    if(hash)guardarManual(hash,doc,chunks,figuras).catch(e=>console.warn('guardarManual',e));
+    if(hash)guardarManual(hash,doc,chunks,figuras).catch(e=>{
+      console.warn('guardarManual',e);
+      showToast(`"${file.name}" se puede usar ahora, pero no cupo en el almacenamiento del teléfono: la próxima vez habrá que volver a cargarlo.`,'warn',6000);
+    });
   }
   procWrap.style.display='none';
+  validarSeccionActiva();
   /* Con un solo manual no hay ambigüedad y se activa solo. Con varios NO se
      elige por el asesor —cuál de cinco es "el suyo" no lo sabe nadie más que
      él—, pero sí se le dice que puede elegir: si no, la respuesta se arma con
@@ -4383,6 +4453,16 @@ function renderSelectorSeccion(){
     sel.value=appState.manualActivo||'';
   }
 }
+/* La sección activa se recuerda entre visitas, y puede nombrar un manual que ya
+   no está cargado. Entonces la búsqueda filtraba por un documento fantasma y
+   daba cero resultados en TODAS las preguntas; con un solo manual el selector
+   ni se ve, así que no había forma de salir. */
+function validarSeccionActiva(){
+  if(!appState.manualActivo||docs.some(d=>d.name===appState.manualActivo))return;
+  appState.manualActivo=docs.length===1?docs[0].name:null;
+  try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
+  refrescarVocabularioManual();
+}
 function cambiarSeccion(valor){
   appState.manualActivo=valor||null;
   try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
@@ -4394,8 +4474,11 @@ function cambiarSeccion(valor){
     :'📚 Se consultarán todos los manuales cargados.','info',3500);
 }
 function removeDoc(i){
-  const name=docs[i].name;
+  const name=docs[i].name,hash=docs[i].hash;
   docs.splice(i,1);
+  /* Quitarlo de la lista y dejarlo guardado hacía que el contador siguiera
+     diciendo que estaba en el dispositivo. Quitar es quitar. */
+  if(hash)borrarManual(hash).catch(()=>{}).then(renderAccionesDocs);
   docChunks=docChunks.filter(c=>c.docName!==name);
   docFigures=docFigures.filter(f=>f.docName!==name);
   /* Si se quitó el manual que estaba activo, la sección activa deja de existir:
@@ -4500,7 +4583,7 @@ function formatError(err){
 let currentAbort = null;
 
 function buildOpenAIStreamBody(messages, model, maxTokens, temperature) {
-  return JSON.stringify({model, messages, max_tokens: maxTokens, temperature: temperature || 0.2, stream: true});
+  return JSON.stringify({model, messages, max_tokens: maxTokens, temperature: temperature ?? 0.2, stream: true});
 }
 
 function parseOpenAIChunk(line) {
@@ -4618,6 +4701,7 @@ async function callWithRetryStream(provider, params) {
       lastErr = err;
       if (err.name === 'AbortError') throw err;
       if (!isRetryable(err) || attempt === RETRY_DELAYS.length) throw err;
+      if (params.onRetry) params.onRetry();
       const delay = RETRY_DELAYS[attempt];
       const next = RETRY_DELAYS[attempt + 1] ? RETRY_DELAYS[attempt + 1] / 1000 + 's' : 'último';
       showToast(`⏳ Reintento ${attempt + 1}/${RETRY_DELAYS.length} en ${delay / 1000}s…`, 'warn', delay);
@@ -4758,6 +4842,7 @@ function seccionesPorRelevancia(q){
   return buscar(consulta)
 }
 function responderSinModelo(q){
+  ocultarBannerRestaurar();
   switchTab('chat');
   appendMsg('user',q,false);
   if(isGreetingQuestion(q)){
@@ -4824,12 +4909,10 @@ function responderSinModelo(q){
 
 async function sendMessage(){
   if(isGenerating)return;
-  // v7.0 paso 3: cargar key correcta por proveedor activo
-  try{
-    const provKey='ap_api_key_'+appState.provider;
-    const stored=sessionStorage.getItem(provKey)||sessionStorage.getItem('ap_api_key')||'';
-    if(stored)appState.apiKey=stored;
-  }catch{}
+  /* Solo la key de ESTE proveedor. Caer a la genérica `ap_api_key` —la última
+     guardada, fuera del proveedor que fuera— mandaba la key de OpenAI a Google:
+     la petición fallaba y el secreto ya había salido hacia otra empresa. */
+  try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
   if(!appState.apiKey||appState.apiKey.length<10){
     const inputSinKey=document.getElementById('user-input');
     const qSinKey=inputSinKey.value.trim();
@@ -4841,7 +4924,8 @@ async function sendMessage(){
   if(sessionTokens>=appState.tokenLimit){showToast('🔴 Límite de tokens alcanzado. Limpia el chat o reinicia el contador.','error',5000);return}
   const input=document.getElementById('user-input');
   const q=input.value.trim();if(!q)return;
-  input.value='';isGenerating=true;
+  input.value='';isGenerating=true;chatDescartado=false;
+  ocultarBannerRestaurar();
 
   const sendBtn=document.getElementById('send-btn');
   sendBtn.disabled=false;
@@ -4853,9 +4937,18 @@ async function sendMessage(){
   sessionTokens+=estimateTokens(q);updateTokenBar();
   appendMsg('user',q,false);
   const loaderEl=appendMsg('assistant','',true);
+  const msgBody=loaderEl.querySelector('.msg-body');
+  let streamedText='';
+  let pendingSanitize=null;
+  let context='';
 
+  /* Todo lo que viene después va dentro del try. Antes armar el contexto corría
+     fuera: si cualquier función de ahí fallaba, isGenerating se quedaba en true
+     y el botón en «■ Detener» —con currentAbort aún vacío, así que pulsarlo no
+     hacía nada— hasta recargar la página. */
+  try{
   const ctx=buildContext(q);
-  const context=ctx.texto;
+  context=ctx.texto;
   const memCtx=appState.memoryEnabled?getMemoryContext(q):'';
   const system=(appState.system||document.getElementById('system-prompt').value.trim());
   const hasPdfs=docChunks.length>0;
@@ -4898,9 +4991,6 @@ async function sendMessage(){
   messages.push({role:'user',content:userContent});
 
   currentAbort=new AbortController();
-  const msgBody=loaderEl.querySelector('.msg-body');
-  let streamedText='';
-  let pendingSanitize=null;
 
   const renderChunk=(chunk)=>{
     streamedText+=chunk;
@@ -4918,7 +5008,6 @@ async function sendMessage(){
     },180);
   };
 
-  try{
     const provider=PROVIDERS[appState.provider];
     const streamParams={
       key:appState.apiKey,
@@ -4930,9 +5019,14 @@ async function sendMessage(){
       maxTokens:6000,
       temperature:appState.temperature,
       onDelta:renderChunk,
+      /* Un corte a media respuesta se reintenta desde cero, pero el texto del
+         intento fallido seguía en streamedText: la respuesta salía con media
+         copia pegada delante. */
+      onRetry:()=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize)},
       signal:currentAbort.signal
     };
     const{tokens}=await callWithRetryStream(provider,streamParams);
+    if(chatDescartado)return;
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
@@ -4945,6 +5039,7 @@ async function sendMessage(){
     renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs,ctx.ampliada);
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
+    if(chatDescartado){loaderEl.remove();return}
     if(err.name==='AbortError'){
       if(streamedText.length>50){
         renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context);
@@ -4959,14 +5054,15 @@ async function sendMessage(){
       msgBody.style.color='var(--amber)';
       msgBody.innerHTML=safeMarkdown(formatError(err));
     }
+  }finally{
+    saveChatHistory();
+    isGenerating=false;chatDescartado=false;currentAbort=null;
+    sendBtn.disabled=false;
+    sendBtn.textContent='Enviar';
+    sendBtn.classList.remove('stop-mode');
+    sendBtn.onclick=sendMessage;
+    scrollToBottom();
   }
-  saveChatHistory();
-  isGenerating=false;
-  sendBtn.disabled=false;
-  sendBtn.textContent='Enviar';
-  sendBtn.classList.remove('stop-mode');
-  sendBtn.onclick=sendMessage;
-  scrollToBottom();
 }
 function renderQuickEditor(){
   const list=document.getElementById('quick-editor-list');
@@ -5031,7 +5127,15 @@ function addQuick(){
 ════════════════════════════════════════════════ */
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}}
 function scrollToBottom(){const b=document.getElementById('chat-messages');b.scrollTop=b.scrollHeight}
+/* Limpiar tenía tres agujeros. No detenía la respuesta en curso, que al terminar
+   volvía a meter la pregunta vieja en el historial «limpio» —y de ahí a la
+   siguiente consulta y a la exportación—. No reiniciaba el contador, aunque el
+   aviso de límite dice justamente «limpia el chat». Y borraba todo de un toque,
+   con el botón pegado al de exportar. */
 function clearChat(){
+  if(history.length&&!confirm('¿Borrar toda la conversación?'))return;
+  if(isGenerating&&currentAbort){chatDescartado=true;currentAbort.abort()}
+  sessionTokens=0;updateTokenBar();
   history=[];
   document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"><span class="chat-empty-icon">✦</span>Pregunta algo o usa un acceso rápido.<br/>Sin API key se responde con el manual tal cual; con key, razonado en 6 etapas.</div>`;
   saveChatHistory();
@@ -5048,11 +5152,18 @@ function exportChat(){
     lines.push(``);
   });
   const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`asistente-piso-${Date.now()}.md`;
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`asistente-piso-${Date.now()}.md`;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
   showToast('⬇ Conversación exportada a Markdown', 'success', 2500);
 }
-function ask(q){document.getElementById('user-input').value=q;switchTab('chat');sendMessage()}
+/* Mientras se genera, sendMessage se va sin hacer nada: el acceso rápido
+   pisaba lo que el asesor llevaba escrito y no pasaba nada, sin decir por qué. */
+function ask(q){
+  if(isGenerating){showToast('Espera a que termine la respuesta, o pulsa ■ Detener.','warn',2500);return}
+  document.getElementById('user-input').value=q;switchTab('chat');sendMessage()
+}
 
 function hasKey(prov){try{return!!(sessionStorage.getItem('ap_api_key_'+prov)||'').length}catch{return false}}
 
@@ -5084,6 +5195,12 @@ function switchExpert(btn){
   const chatSel=document.getElementById('chat-model-select');
   chatSel.innerHTML=PROVIDERS[provider].chatModels.map(m=>`<option value="${m}">${m}</option>`).join('');
   chatSel.value=model;
+  /* El campo de la key también cambia de proveedor. Si se quedaba la del
+     anterior, «Guardar cambios» la escribía encima de la buena del nuevo. */
+  try{
+    const k=sessionStorage.getItem('ap_api_key_'+provider)||'';
+    document.getElementById('api-key-input').value=k;appState.apiKey=k;updateKeyStatus(k);
+  }catch{}
 
   const names={github:'⚡ Normativo — GPT-4o mini',gemini:'🧠 Estratega — Gemini 3.5 Flash',openai:'🚀 Rápido — GPT-4o mini'};
   showToast(names[provider],'success',2000);
@@ -5318,11 +5435,21 @@ function renderEvidencia(container,figuras,origen){
    está, pero no son centímetros — y lo que el asesor ejecuta en el piso es la
    medida, no el dígito. Se cotejan los pares número+unidad como una sola cosa,
    y solo las cifras que van sin unidad caen al cotejo del número desnudo. */
-const UNIDAD_RE=/(\d+(?:[.,]\d+)?)\s*(cm|mm|mts|mt|m|cent[ií]metros?|mil[ií]metros?|metros?|%|por\s*ciento|piezas?|pzs?|pz|d[ií]as?|semanas?|meses|mes|horas?|min|minutos?)\b/gi;
+/* El cierre no puede ser \b: detrás de «%» viene un espacio o un punto, y entre
+   dos caracteres que no son de palabra no hay límite de palabra. Con \b ningún
+   porcentaje formaba par —«Formal 50% del piso» no daba nada— y todos caían al
+   cotejo del número suelto: un «40%» inventado pasaba por bueno con que hubiera
+   un «40 cm» en el contexto. En manuales que son porcentajes de participación
+   de punta a punta, era la unidad que más importaba. */
+const UNIDAD_RE=/(\d+(?:[.,]\d+)?)\s*(cm|mm|mts|mt|m|cent[ií]metros?|mil[ií]metros?|metros?|%|por\s*ciento|piezas?|pzs?|pz|d[ií]as?|semanas?|meses|mes|horas?|min|minutos?)(?![a-z0-9áéíóúñ])/gi;
 function familiaUnidad(u){
   const t=(u||'').toLowerCase().replace(/\s+/g,'');
   if(/^(cm|cent)/.test(t))return'cm';
   if(/^(mm|mil)/.test(t))return'mm';
+  /* «mes» y «min» empiezan por m: si se miran después de los metros, «3 meses»
+     inventado se daba por bueno contra un «3 m» del manual. */
+  if(/^mes/.test(t))return'mes';
+  if(/^min/.test(t))return'minuto';
   if(/^(mts?|m|metro)/.test(t))return'm';
   if(t==='%'||/^porciento/.test(t))return'%';
   if(/^(pz|pieza)/.test(t))return'pieza';
@@ -5393,7 +5520,10 @@ function nombresSinRespaldo(respuesta,contexto){
   const propios=new Set(['mercadep','certeza','gap','alta','media'].concat(tokenize(seccionActiva()||'')));
   const out=new Map();
   const texto=respuesta;
-  const inicioDeFrase=/[.!?:;•·➔→\n]/;
+  /* La respuesta llega en markdown: «**Recuerda:**», «- Coloca», «¿Dónde…?» o
+     «(Coloca…» empiezan frase igual que tras un punto, y sin contarlos salían
+     marcados como nombres que el manual no dice. */
+  const inicioDeFrase=/[.!?:;•·➔→\n\-–—(\[*_¿¡"“«>#]/;
   for(const m of texto.matchAll(/[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/g)){
     const t=normalizeText(m[0]).trim();
     if(!t||propios.has(t)||enContexto(t))continue;
@@ -5448,7 +5578,9 @@ function verificarContraContexto(respuesta,contexto){
      decimales por todas partes: 20.8%, 38.5%, 11.5%—. Una sola pasada. */
   const noVerificadas=[...cifras].filter(n=>{
     const esc=n.replace(/[.,]/g,'[.,]');
-    return!new RegExp('(?<![\\d.,])'+esc+'(?![\\d])').test(ctx)
+    /* Tampoco vale como coincidencia el principio de un decimal: «20» no es
+       «20.8%», y el modelo que redondea una participación cambia el dato. */
+    return!new RegExp('(?<![\\d.,])'+esc+'(?![\\d]|[.,]\\d)').test(ctx)
   });
 
   const paginasCitadas=new Set();
@@ -5583,20 +5715,26 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   const sendBtn=document.createElement('button');sendBtn.className='fb-send';sendBtn.textContent='Enviar feedback';
   noteWrap.appendChild(noteEl);noteWrap.appendChild(document.createElement('br'));noteWrap.appendChild(sendBtn);
 
+  /* Un voto por respuesta. «Enviar feedback» se podía pulsar varias veces y cada
+     pulsación sumaba otro fallo a la memoria; y un 👍 después de un 👎 ya
+     enviado dejaba registrados los dos. Enviado uno, los botones se cierran. */
+  const cerrarVoto=()=>{goodBtn.disabled=true;badBtn.disabled=true;sendBtn.disabled=true};
   goodBtn.onclick=()=>{
-    if(goodBtn.classList.contains('active'))return;
-    goodBtn.classList.add('active');badBtn.classList.remove('active');
+    if(goodBtn.disabled||goodBtn.classList.contains('active'))return;
+    goodBtn.classList.add('active');badBtn.classList.remove('active');cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
     addMemorySuccess(originalQuestion,cleanFinal);
     // v7.0: feedback visual inmediato
     showToast('✓ Respuesta marcada como correcta', 'success', 1800);
   };
   badBtn.onclick=()=>{
-    if(badBtn.classList.contains('active'))return;
+    if(badBtn.disabled||badBtn.classList.contains('active'))return;
     badBtn.classList.add('active');goodBtn.classList.remove('active');
     noteWrap.style.display='block';
   };
   sendBtn.onclick=()=>{
+    if(sendBtn.disabled)return;
+    cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
     addMemoryFail(originalQuestion,cleanFinal,noteEl.value.trim());
     showToast('✓ Feedback registrado en memoria', 'success', 1800);
@@ -5632,7 +5770,11 @@ function toggleTheme() {
 }
 
 function loadTheme() {
-  const saved = localStorage.getItem('ap_theme') ||
+  /* Es lo primero que corre al arrancar: si el navegador bloquea el
+     almacenamiento y esto lanza, no llega a ejecutarse nada de lo demás. */
+  let guardado = null;
+  try { guardado = localStorage.getItem('ap_theme'); } catch {}
+  const saved = guardado ||
     (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
   if (saved === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
@@ -5689,6 +5831,13 @@ const TEST_VERIF=[
   {resp:'El sensor va oculto a 12-18 cm de la bastilla.',q:'¿a qué altura va el sensor?',marca:0},
   {resp:'Deja 120 cm de pasillo entre muebles.',q:'¿cuánto mide el pasillo?',marca:1,nota:'cifra inventada'},
   {resp:'Deja 80 cm de pasillo entre muebles.',q:'¿cuánto mide el pasillo?',marca:1,nota:'el 80 existe en el contexto, pero como 80/20 — no son 80 cm'},
+  {resp:'El sensor cubre el 18% del pantalón.',q:'¿a qué altura va el sensor en el pantalón?',marca:1,nota:'el 18 existe como «12-18 cm»: un porcentaje no son centímetros'},
+  {resp:'El mundo Smart ocupa 12% del piso.',q:'¿qué porcentaje ocupa el mundo formal en sacos y pantalones?',marca:1,nota:'porcentaje inventado'},
+  /* Con contexto propio: el manual interno no trae el caso, y lo que se mide es
+     la regla, no el vocabulario. */
+  {resp:'El cliente práctico es el 20% de la sección.',ctx:'[Manual · pág. 3 · PRÁCTICO] Cliente práctico (20.8%): compra por necesidad.',marca:1,nota:'redondear 20.8% a 20% cambia el dato'},
+  {resp:'El cliente práctico es el 20.8% de la sección.',ctx:'[Manual · pág. 3 · PRÁCTICO] Cliente práctico (20.8%): compra por necesidad.',marca:0},
+  {resp:'Se rota cada 3 meses.',ctx:'[Manual · pág. 5 · ROTACIÓN] Deja 3 m entre mesas. Rotar cada 21 días.',marca:1,nota:'«3 meses» no es «3 m»'},
 ];
 
 /* Esta primera tanda mide el modo SIN manual cargado —el asistente con solo su
@@ -5777,6 +5926,8 @@ function pruebasNombres(){
       ok:!entidadesDelCorpus().has('verifica')&&!entidadesDelCorpus().has('ofrece')},
     {nombre:'una marca de fuera del corpus también se marca',
       ok:nombres('Puedes verlo en la tienda Zara.').includes('zara')},
+    {nombre:'lo que empieza viñeta, negrita o «¿» no es un nombre',
+      ok:nombres('**Recuerda:** revisa el espacio.\n- Coloca los estilos.\n¿Dónde van? (Coloca al frente).').length===0},
   ];
   docChunks=gChunks;docs=gDocs;entidadesCorpus=gEnt;corpus=gCorpus;
   return casos;
@@ -5923,7 +6074,7 @@ function correrPruebas(){
 
   let verifOk=0;
   for(const v of TEST_VERIF){
-    const{texto}=testCtx(v.q);
+    const texto=v.ctx||testCtx(v.q).texto;
     const r=verificarContraContexto(v.resp,texto);
     const ok=v.marca===0?r.cifras.length===0:r.cifras.length>=v.marca;
     if(ok)verifOk++;
@@ -6028,6 +6179,25 @@ function correrPruebas(){
   const conManuales=pruebasConManuales();
   filas.push(...conManuales);
 
+  /* La sección recordada que ya no está cargada: con un solo manual se pasa a
+     ese, con varios a «todos», y la que sí existe no se toca. */
+  const pruebasSeccion=[];
+  {
+    const gD=docs,gA=appState.manualActivo;
+    const caso=(nombre,lista,activo,espera)=>{
+      docs=lista.map(n=>({name:n}));appState.manualActivo=activo;
+      let got;try{validarSeccionActiva();got=appState.manualActivo}catch(e){got='error: '+e.message}
+      pruebasSeccion.push({nombre,ok:got===espera,got});
+    };
+    try{
+      caso('fantasma con un manual cargado → ese manual',['A.pdf'],'FANTASMA.pdf','A.pdf');
+      caso('fantasma con dos cargados → todos',['A.pdf','B.pdf'],'FANTASMA.pdf',null);
+      caso('la sección que sí está cargada se respeta',['A.pdf','B.pdf'],'B.pdf','B.pdf');
+    }finally{docs=gD;appState.manualActivo=gA}
+    try{localStorage.setItem('ap_manual_activo',gA||'')}catch{}
+    for(const p of pruebasSeccion)filas.push({tipo:'sección',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'quedó: '+p.got});
+  }
+
   const resumen={
     recall:`${recallOk}/${recallTot}`,
     ruido:`${ruidoOk}/${ruidoTot}`,
@@ -6039,6 +6209,7 @@ function correrPruebas(){
     rotulo:`${pruebasRotulo.filter(p=>p.ok).length}/${pruebasRotulo.length}`,
     morfologia:`${pruebasMorfologia.filter(p=>p.ok).length}/${pruebasMorfologia.length}`,
     estado:`${pruebasEstado.filter(p=>p.ok).length}/${pruebasEstado.length}`,
+    seccion:`${pruebasSeccion.filter(p=>p.ok).length}/${pruebasSeccion.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',
@@ -6047,8 +6218,25 @@ function correrPruebas(){
   return{resumen,filas};
 }
 
+/* Las pruebas cambian el estado real —docs, fragmentos, sección activa,
+   historial— para montar sus casos. Si una lanzaba a medias, la sesión del
+   asesor se quedaba con manuales de mentira. Y la tanda de manuales leía el
+   historial real, así que el resultado dependía de lo que se hubiera
+   preguntado antes. Aquí se aparta todo y se devuelve pase lo que pase. */
+function correrPruebasAisladas(){
+  const g={docs,docChunks,docFigures,history,activo:appState.manualActivo,ult:ultimosFragmentos,
+    otra:ultimaOtraSeccion,sug:ultimaSeccionSugerida,ent:entidadesCorpus};
+  history=[];
+  try{return correrPruebas()}
+  finally{
+    docs=g.docs;docChunks=g.docChunks;docFigures=g.docFigures;history=g.history;
+    appState.manualActivo=g.activo;ultimosFragmentos=g.ult;ultimaOtraSeccion=g.otra;
+    ultimaSeccionSugerida=g.sug;entidadesCorpus=g.ent;
+    rebuildCorpus();refrescarVocabularioManual();
+  }
+}
 function renderPanelPruebas(){
-  const{resumen,filas}=correrPruebas();
+  const{resumen,filas}=correrPruebasAisladas();
   window.__pruebas={resumen,filas};
   const fallos=filas.filter(f=>!f.ok).length;
   const wrap=document.createElement('div');
