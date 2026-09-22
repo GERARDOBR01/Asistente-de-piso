@@ -26,6 +26,12 @@ Asistente conversacional de una sola página para el personal de piso de una tie
 responde dudas de montaje y estándar de exhibición desde el celular, parado frente al
 mueble, **sin instalar nada y sin cuenta**.
 
+**De dónde salió:** soy promotor visual en Liverpool (Guadalajara) y llegué a tener seis
+secciones a mi cargo, cada una con su propio manual de campaña. Nadie abre un manual de 40
+páginas frente al mueble, así que las dudas se resuelven preguntando o adivinando. Este
+asistente nació de ese problema, visto todos los días desde el piso. Más contexto en
+[mi perfil](https://github.com/GERARDOBR01).
+
 > **Demo con conocimiento 100 % sintético.** El cliente (*Mercadep*), las marcas
 > (`MarcaDemoA`–`MarcaDemoL`), los mundos, los porcentajes de piso y los números de manual
 > son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
