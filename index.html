@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://models.inference.ai.azure.com https://api.openai.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests;"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://models.inference.ai.azure.com https://api.openai.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests;"/>
 <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
 <meta name="referrer" content="no-referrer"/>
 <title>Asistente de piso — Mercadep · Visual Merchandising</title>
@@ -637,6 +637,102 @@ footer span {
 }
 .system-counter.warn { color: var(--amber); }
 .system-counter.limit { color: var(--red); font-weight: 600; }
+
+/* ════════════════════════════════════════════════
+   MODO PISO — la app se usa de pie, con el celular en una mano
+
+   Todo lo de arriba se diseñó mirando un monitor: letra de 9-11 px, un chat
+   de 460 px fijos y la caja de texto a 12.5 px, que en iPhone hace zoom al
+   tocarla. En el celular, que es donde se usa, quedaban ~250 px para leer.
+════════════════════════════════════════════════ */
+.chat-wrap{height:min(680px,calc(100dvh - 250px));min-height:440px}
+.chat-input-area textarea{font-size:16px}
+.chat-tools{display:flex;justify-content:flex-end;gap:6px;padding:0 9px 8px;background:var(--s1)}
+.chat-tool{font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:999px;padding:5px 12px;cursor:pointer;transition:all .15s}
+.chat-tool:hover{color:var(--text2);border-color:var(--border2)}
+.chat-tool.clear:hover{color:var(--red);border-color:rgba(224,82,82,0.3)}
+.tab{font-size:13px}
+.tabs .tab:last-child{flex:0 0 auto;padding:11px 16px}
+
+/* Sin API key no hay tokens que contar ni modelo que elegir: enseñárselos al
+   asesor era hablarle de la máquina en vez de su manual. */
+.sin-api .token-bar-wrap,.sin-api .api-experta-row,.sin-api .msg-tokens{display:none}
+
+/* Estado vacío: lo primero que ve quien abre el link. */
+.chat-empty{max-width:420px;padding:8px 4px}
+.vacio-titulo{font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--text);line-height:1.2;margin-bottom:6px}
+.vacio-sub{font-size:13.5px;color:var(--text2);line-height:1.6;margin-bottom:14px}
+.vacio-ejemplos{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.vacio-ej{font-family:'DM Sans',sans-serif;font-size:14px;text-align:left;padding:11px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--s2);color:var(--text);cursor:pointer;transition:all .15s;line-height:1.4}
+.vacio-ej:hover{border-color:rgba(212,172,84,0.45);background:var(--gglow)}
+.vacio-ej small{display:block;font-size:11.5px;color:var(--text3);margin-top:2px}
+.vacio-nota{font-size:12px;color:var(--text3);margin-top:14px;line-height:1.6}
+.vacio-nota a,.vacio-link{color:var(--gold);cursor:pointer;text-decoration:underline;background:none;border:none;font:inherit;padding:0}
+
+/* Respuesta sin modelo: el manual tal cual, pero legible — una tarjeta por
+   lámina, con de dónde sale arriba y las palabras que coincidieron marcadas. */
+.frag-aviso{font-size:12.5px;color:var(--text3);margin-bottom:8px}
+.frag-card{background:var(--s1);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--r);padding:10px 12px;margin:8px 0}
+.frag-head{font-size:12px;font-weight:600;color:var(--gold2);letter-spacing:.2px;margin-bottom:4px}
+.frag-text{font-size:14px;line-height:1.65;color:var(--text);white-space:pre-line;overflow-wrap:anywhere}
+.frag-text mark{background:rgba(212,172,84,0.28);color:inherit;border-radius:3px;padding:0 2px}
+.frag-text mark.sin{background:rgba(212,172,84,0.12)}
+.frag-card.cortado .frag-text{max-height:9.5em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent)}
+.frag-mas{font-family:'DM Sans',sans-serif;font-size:12px;color:var(--gold);background:none;border:none;cursor:pointer;padding:6px 0 0}
+.frag-pie{font-size:12px;color:var(--text3);margin-top:8px;line-height:1.55}
+
+/* Configuración: lo que hay que tocar arriba, lo de desarrollador plegado. */
+.cfg-nota{font-size:12.5px;color:var(--text3);line-height:1.55;margin-bottom:10px}
+.avanzado{border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
+.avanzado summary{cursor:pointer;font-size:12.5px;color:var(--text2)}
+.avanzado[open] summary{margin-bottom:12px}
+.avanzado-body{display:flex;flex-direction:column;gap:1.2rem}
+
+/* Visor de lámina: a pantalla completa, con pellizco o doble toque. */
+.visor{position:fixed;inset:0;z-index:200;background:rgba(8,8,10,0.94);display:none;flex-direction:column}
+.visor.abierto{display:flex}
+.visor-scroll{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;touch-action:pinch-zoom pan-x pan-y;-webkit-overflow-scrolling:touch}
+.visor-scroll img{max-width:100%;max-height:100%;object-fit:contain;transition:transform .2s}
+.visor-scroll.zoom{display:block}
+.visor-scroll.zoom img{max-width:none;max-height:none;width:220%}
+.visor-cerrar{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.5);color:#fff;font-size:18px;cursor:pointer;z-index:1}
+.visor-pie{color:#ddd;font-size:13px;padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);text-align:center}
+.evidencia-fig{cursor:zoom-in}
+
+@media (max-width:600px){
+  body{padding:calc(env(safe-area-inset-top) + 14px) 10px 18px}
+  header{margin-bottom:12px;padding-bottom:10px;align-items:center}
+  .hdr-left h1{font-size:22px}
+  .hdr-left p{font-size:10.5px;letter-spacing:1.2px;margin-top:4px}
+  .theme-toggle{width:38px;height:38px}
+  .status-pill{padding:6px 10px;font-size:10px}
+  .tabs{margin-bottom:10px;gap:5px}
+  .tab{padding:10px 4px;font-size:13px}
+  .quick-row{display:none}
+  .quick-btns{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .quick-btns::-webkit-scrollbar{display:none}
+  .quick-btn{flex-shrink:0;font-size:13px;padding:8px 14px}
+  .chat-wrap{height:calc(100dvh - 175px);min-height:360px;border-radius:var(--rl)}
+  .chat-messages{padding:.8rem;gap:14px}
+  .msg{max-width:94%}
+  .msg.user .msg-body,.msg.assistant .msg-body{font-size:15px;line-height:1.65}
+  .msg-label{font-size:10.5px}
+  .fb-btn,.msg-copy,.chat-tool,.ref-general{min-height:36px;padding:6px 12px;font-size:13px}
+  .reasoning-toggle{font-size:12.5px;padding:8px 0}
+  .evidencia-fig{max-width:100%}
+  .evidencia-fig figcaption{font-size:12px}
+  .verify-warn{font-size:13px}
+  .send-btn{height:44px;padding:0 16px;min-width:0}
+  .api-btn{padding:7px 12px;font-size:12px}
+  .doc-item{font-size:13px;flex-wrap:wrap}
+  .doc-name{font-size:13px;white-space:normal}
+  .docs-nota,.rag-info{font-size:12px}
+  .docs-borrar,.docs-describir{font-size:12.5px;padding:8px 12px}
+  .fld-label{font-size:10.5px;letter-spacing:1.5px}
+  .prov-tab{font-size:12.5px;padding:10px 6px}
+  .cfg-textarea,.key-input,.model-select,.limit-input{font-size:16px}
+  footer{font-size:10px}
+}
 </style>
 </head>
 <body>
@@ -646,7 +742,6 @@ footer span {
   <div class="hdr-left">
     <h1>Asistente <em>de</em> <strong>piso</strong> — <em>Mercadep</em></h1>
     <p id="hdr-seccion">Visual Merchandising · Departamento Hombres</p>
-    <div class="hdr-version">v1.0.0 · demo con conocimiento sintético</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar entre modo oscuro y claro">
@@ -656,15 +751,15 @@ footer span {
   </div>
 </header>
 
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('docs')">📄 Manuales</button>
-  <button class="tab" onclick="switchTab('chat')">💬 Chat <span class="badge" id="badge" style="display:none">0</span></button>
+<div class="tabs" role="tablist">
+  <button class="tab active" onclick="switchTab('chat')">💬 Preguntar</button>
+  <button class="tab" onclick="switchTab('docs')">📄 Manuales <span class="badge" id="badge" style="display:none">0</span></button>
   <button class="tab" onclick="switchTab('memory')">🧠 Memoria</button>
-  <button class="tab" onclick="switchTab('config')">⚙️ Config</button>
+  <button class="tab" onclick="switchTab('config')" aria-label="Ajustes">⚙️</button>
 </div>
 
 <!-- MANUALES -->
-<div class="panel active" id="panel-docs">
+<div class="panel" id="panel-docs">
   <div class="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="ev(event)" ondrop="dropFile(event)">
     <span class="drop-icon">📂</span>
     Arrastra los manuales de temporada aquí, o haz clic para seleccionarlos
@@ -692,7 +787,7 @@ footer span {
 </div>
 
 <!-- CHAT -->
-<div class="panel" id="panel-chat">
+<div class="panel active" id="panel-chat">
   <div class="quick-row">
     <span class="quick-label">Accesos rápidos</span>
     <button class="quick-edit-btn" onclick="toggleQuickEdit()">✏ Editar</button>
@@ -711,7 +806,7 @@ footer span {
   <div class="restore-banner" id="restore-banner">
     <span>💬 Hay una conversación anterior guardada.</span>
     <button class="restore-btn" onclick="restoreChatHistory()">Restaurar</button>
-    <button class="restore-dismiss" onclick="dismissRestoreBanner()">✕</button>
+    <button class="restore-dismiss" onclick="dismissRestoreBanner()" aria-label="Descartar conversación anterior">✕</button>
   </div>
   <div class="chat-wrap">
     <div class="seccion-row chat" id="seccion-activa-chat-wrap" style="display:none">
@@ -719,19 +814,15 @@ footer span {
       <select class="seccion-select" id="seccion-activa-chat" onchange="cambiarSeccion(this.value)"></select>
     </div>
     <div class="api-experta-row">
-      <span class="api-experta-label">API Experta</span>
+      <span class="api-experta-label">Modelo</span>
       <div class="api-experta-btns">
-        <button class="api-btn active" data-provider="github" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="Reglas exactas, datos del manual">⚡ Normativo</button>
-        <button class="api-btn" data-provider="gemini" data-model="gemini-3.5-flash" onclick="switchExpert(this)" title="Mercadeo complejo, focales, campañas">🧠 Estratega</button>
-        <button class="api-btn" data-provider="openai" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="Respuestas rápidas, básicos">🚀 Rápido</button>
+        <button class="api-btn active" data-provider="github" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="GPT-4o mini vía GitHub Models">GitHub</button>
+        <button class="api-btn" data-provider="gemini" data-model="gemini-3.5-flash" onclick="switchExpert(this)" title="Gemini 3.5 Flash vía Google AI Studio">Gemini</button>
+        <button class="api-btn" data-provider="openai" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="GPT-4o mini vía OpenAI">OpenAI</button>
       </div>
     </div>
     <div class="chat-messages" id="chat-messages">
-      <div class="chat-empty" id="chat-empty">
-        <span class="chat-empty-icon">✦</span>
-        Pregunta algo o usa un acceso rápido.<br/>
-        Sin API key se responde con el manual tal cual; con key, razonado en 6 etapas.
-      </div>
+      <div class="chat-empty" id="chat-empty"></div>
     </div>
     <div class="token-bar-wrap">
       <div class="token-bar-top">
@@ -742,10 +833,12 @@ footer span {
       <div class="token-warning" id="token-warning"></div>
     </div>
     <div class="chat-input-area">
-      <textarea id="user-input" placeholder="Escribe tu consulta… (Enter para enviar)" onkeydown="handleKey(event)" rows="1"></textarea>
-      <button class="icon-btn export" onclick="exportChat()" title="Exportar conversación" aria-label="Exportar conversación a archivo de texto">⬇</button>
-      <button class="icon-btn clear" onclick="clearChat()" title="Limpiar conversación" aria-label="Limpiar toda la conversación actual">🗑️</button>
+      <textarea id="user-input" placeholder="Escribe tu pregunta…" onkeydown="handleKey(event)" oninput="ajustarAltura(this)" rows="1" aria-label="Tu pregunta"></textarea>
       <button class="send-btn" id="send-btn" onclick="sendMessage()">Enviar</button>
+    </div>
+    <div class="chat-tools">
+      <button class="chat-tool" onclick="exportChat()" aria-label="Exportar conversación a archivo de texto">⬇ Exportar</button>
+      <button class="chat-tool clear" onclick="clearChat()" aria-label="Limpiar toda la conversación actual">🗑️ Limpiar</button>
     </div>
   </div>
 </div>
@@ -774,7 +867,8 @@ footer span {
     <div class="config-fields">
 
       <div>
-        <div class="fld-label">Proveedor de IA <span class="fld-req">REQUERIDO</span></div>
+        <div class="fld-label">Proveedor de IA <span class="fld-req">OPCIONAL</span></div>
+        <div class="cfg-nota">Sin clave la app funciona igual: te enseña el manual tal cual, con su página y su lámina. Con clave, además te contesta en una frase.</div>
         <div class="provider-tabs">
           <button class="prov-tab active" onclick="selectProvider('github',this)">GitHub Models</button>
           <button class="prov-tab" onclick="selectProvider('openai',this)">OpenAI</button>
@@ -783,7 +877,7 @@ footer span {
         <div class="provider-info" id="prov-info"></div>
         <div class="key-wrap">
           <input type="password" class="key-input" id="api-key-input" placeholder="" autocomplete="off" spellcheck="false"/>
-          <button class="key-toggle" onclick="toggleKey()">👁</button>
+          <button class="key-toggle" onclick="toggleKey()" aria-label="Mostrar u ocultar la clave">👁</button>
         </div>
         <div class="key-status" id="key-status">⚪ Ingresa tu clave y guarda para activar</div>
         <div class="key-warning" id="key-warning">⚠ Tu clave se guarda solo en esta pestaña. Se borrará al cerrar el navegador.</div>
@@ -794,7 +888,9 @@ footer span {
         <select class="model-select" id="chat-model-select"></select>
       </div>
 
-      <div class="sdiv"></div>
+      <details class="avanzado">
+      <summary>Avanzado · rol del asistente, temperatura, límites</summary>
+      <div class="avanzado-body">
 
       <div>
         <div class="fld-label">Límite de tokens por sesión</div>
@@ -951,13 +1047,22 @@ sale señalada al asesor.</textarea>
         </div>
       </div>
 
+      </div>
+      </details>
+
       <button class="save-btn" onclick="saveConfig(event)">Guardar cambios</button>
     </div>
   </div>
 </div>
 
 </div>
-<footer>Creado por <span>Gerardo Barrera</span> &nbsp;·&nbsp; v1.0.0 · demo público · conocimiento sintético</footer>
+<footer>Creado por <span>Gerardo Barrera</span> &nbsp;·&nbsp; v1.1 · demo público · conocimiento sintético</footer>
+
+<div class="visor" id="visor" role="dialog" aria-modal="true" aria-label="Lámina ampliada" onclick="if(event.target===this)cerrarVisor()">
+  <button class="visor-cerrar" onclick="cerrarVisor()" aria-label="Cerrar">✕</button>
+  <div class="visor-scroll" id="visor-scroll"><img id="visor-img" alt=""/></div>
+  <div class="visor-pie" id="visor-pie"></div>
+</div>
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
@@ -1031,7 +1136,7 @@ function showToast(message, type='info', duration=4500) {
 const PROVIDERS={
   github:{
     name:'GitHub Models',
-    placeholder:'REDACTADO••••••••••••••••••••',
+    placeholder:'github_pat_••••••••••••••••••••',
     hint:'Token de GitHub con acceso a GitHub Models. <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>',
     chatModels:['gpt-4o-mini','gpt-4o'],
     async call(key,messages,model,maxTokens,temperature){
@@ -3242,6 +3347,7 @@ function initSystemPromptCounter(){
 function updateKeyStatus(key){
   const badge=document.getElementById('status-badge'),status=document.getElementById('key-status');
   const pName=PROVIDERS[appState.provider]?.name||'API';
+  document.body.classList.toggle('sin-api',!(key&&key.length>10));
   if(key&&key.length>10){
     badge.className='status-pill ok';badge.textContent='API conectada';
     status.className='key-status ok';status.textContent=`✓ ${pName} activa`;
@@ -3361,16 +3467,25 @@ function saveConfig(evt){
    TABS
 ════════════════════════════════════════════════ */
 function switchTab(name){
-  ['docs','chat','memory','config'].forEach((t,i)=>{
+  ['chat','docs','memory','config'].forEach((t,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);
     document.getElementById('panel-'+t).classList.toggle('active',t===name);
   });
-  if(name==='chat'){
+  /* En el celular, enfocar la caja abre el teclado, y el teclado tapa justo la
+     respuesta que se acaba de pedir: pasaba en cada envío y en cada acceso
+     rápido. El foco automático queda para quien tiene ratón. */
+  if(name==='chat'&&window.matchMedia('(pointer:fine)').matches){
     setTimeout(()=>{
       const inp=document.getElementById('user-input');
       if(inp)inp.focus();
     },50);
   }
+}
+/* La caja crece con lo que se escribe, hasta su tope; con rows=1 fija, una
+   pregunta de dos renglones se leía cortada. */
+function ajustarAltura(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,110)+'px';
 }
 function ev(e){e.preventDefault()}
 function dropFile(e){e.preventDefault();handleFiles(e.dataTransfer.files)}
@@ -4149,7 +4264,41 @@ async function firmarPendientes(figuras,hash,guardado){
 const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
 const borrarManual=hash=>txDB('readwrite',st=>st.delete(hash));
 
+/* Los manuales se guardaban en el dispositivo, pero al abrir la app no se
+   restauraba ninguno: el asesor tenía que volver a elegir sus PDFs cada vez, y
+   solo entonces se reconocía el hash y se ahorraba el procesado. Guardado sin
+   restaurar es media función. Ahora se abre la app y sus secciones ya están,
+   sin necesidad de tener el archivo a mano. Si hay dos versiones con el mismo
+   nombre, manda la más reciente. */
+async function restaurarManualesGuardados(){
+  let guardados=[];
+  try{guardados=await listarManuales()||[]}catch{}
+  if(!guardados.length)return;
+  guardados.sort((a,b)=>(b.guardado||0)-(a.guardado||0));
+  const entraron=[];
+  for(const g of guardados){
+    if(!g||!g.doc||!g.chunks||!g.chunks.length)continue;
+    if(docs.some(d=>d.hash===g.hash||d.name===g.doc.name))continue;
+    docChunks.push(...g.chunks.map(indexChunk));
+    docFigures.push(...(g.figuras||[]));
+    docs.push({...g.doc,hash:g.hash});
+    entraron.push(g);
+  }
+  if(!entraron.length)return;
+  rebuildCorpus();
+  validarSeccionActiva();
+  if(docs.length===1&&!appState.manualActivo){
+    appState.manualActivo=docs[0].name;
+    try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
+  }
+  refrescarVocabularioManual();
+  renderDocs();
+  /* Las firmas visuales que falten se calculan después, sin hacer esperar. */
+  for(const g of entraron)firmarPendientes(g.figuras||[],g.hash,g).catch(()=>{});
+}
+
 async function borrarManualesGuardados(){
+  if(!confirm('¿Borrar de este teléfono todos los manuales guardados?'))return;
   try{
     await txDB('readwrite',st=>st.clear());
     showToast('🗑️ Manuales guardados borrados de este dispositivo. Los que ya están cargados siguen en esta sesión.','warn',4000);
@@ -4331,6 +4480,10 @@ async function handleFiles(fileList){
   const procBar=document.getElementById('proc-bar');
   procWrap.style.display='block';
   const habia=docs.length;
+  /* La sección activa ANTES de cargar, si era real. Si era un fantasma que la
+     carga acaba de corregir, avisar de que «sigue siendo» la de antes decía
+     que la sección activa seguía siendo el manual recién cargado. */
+  const activoPrevio=docs.some(d=>d.name===appState.manualActivo)?appState.manualActivo:null;
 
   for(const file of accepted){
     procBar.style.width='0%';
@@ -4399,7 +4552,7 @@ async function handleFiles(fileList){
     refrescarVocabularioManual();
   }else if(docs.length>1&&!appState.manualActivo){
     showToast('📕 Tienes varios manuales cargados. Elige arriba con cuál estás trabajando para que las citas y las láminas salgan de ese.','info',7000);
-  }else if(appState.manualActivo&&docs.length>habia){
+  }else if(activoPrevio&&appState.manualActivo===activoPrevio&&docs.length>habia){
     /* Cargar un manual nuevo y que la sección activa siga siendo la de antes es
        silencioso y caro: todo lo que se pregunte del manual recién cargado se
        busca dentro del viejo, y sale "el manual no lo especifica" con el manual
@@ -4422,7 +4575,9 @@ function renderDocs(){
       <button class="doc-remove" onclick="removeDoc(${i})">✕</button>
     </div>`).join('');
   list.innerHTML=builtinHTML+userHTML;
-  const b=document.getElementById('badge');b.style.display='';b.textContent=docs.length+1;
+  /* El contador vive en la pestaña de manuales y cuenta los del asesor. En la
+     del chat, «1» con cero manuales cargados parecía un mensaje sin leer. */
+  const b=document.getElementById('badge');b.style.display=docs.length?'':'none';b.textContent=docs.length;
   if(docs.length>0){
     ragInfo.style.display='block';
     ragInfo.textContent=`✦ RAG activo — ${docChunks.length} fragmentos y ${docFigures.length} figuras en ${docs.length} manual${docs.length>1?'es':''}.`;
@@ -4841,6 +4996,91 @@ function seccionesPorRelevancia(q){
   }
   return buscar(consulta)
 }
+/* Una tarjeta por fragmento del manual. Todo por DOM y textContent: el texto
+   viene de un PDF ajeno y no pasa por innerHTML. */
+let invitoApi=false;
+function rotuloDeFragmento(c){
+  const partes=[c.source==='pdf'?nombreDeSeccion(c.docName):c.docName];
+  if(c.page)partes.push('pág. '+c.page);
+  if(c.heading)partes.push(c.heading);
+  return partes.join(' · ')
+}
+function resaltar(texto,terminos){
+  const out=document.createDocumentFragment();
+  let ultimo=0;
+  for(const m of texto.matchAll(/[\p{L}\p{N}]+/gu)){
+    const w=terminos.get(normalizeText(m[0]).trim());
+    if(w===undefined)continue;
+    out.append(texto.slice(ultimo,m.index));
+    const mk=document.createElement('mark');
+    if(w<1)mk.className='sin';   // llegó por sinónimo o variante, no por la palabra escrita
+    mk.textContent=m[0];out.append(mk);
+    ultimo=m.index+m[0].length;
+  }
+  out.append(texto.slice(ultimo));
+  return out
+}
+/* Un fragmento largo se corta a la vista, y el dato podía quedar debajo del
+   corte: «¿a qué altura va el sensor?» enseñaba el principio de REGLAS
+   GLOBALES —el gancho, los pantalones colgados— y el «12-18 cm» había que ir a
+   buscarlo con «Ver todo». Se enseñan primero los renglones que coinciden con
+   la pregunta, en su orden, y el texto entero queda a un toque. */
+function renglonesClave(lineas,terminos,max){
+  const pun=lineas.map((l,i)=>{
+    let s=0;
+    for(const m of l.matchAll(/[\p{L}\p{N}]+/gu)){const w=terminos.get(normalizeText(m[0]).trim());if(w!==undefined)s+=w}
+    return{i,s}
+  });
+  return pun.filter(p=>p.s>0).sort((a,b)=>b.s-a.s||a.i-b.i).slice(0,max).map(p=>p.i).sort((a,b)=>a-b)
+}
+function tarjetaDeFragmento(c,texto,terminos){
+  const card=document.createElement('div');card.className='frag-card';
+  const head=document.createElement('div');head.className='frag-head';
+  head.textContent='📄 '+rotuloDeFragmento(c);
+  /* El título ya va en la cabecera de la tarjeta: repetido como «## …» en la
+     primera línea solo empujaba el texto hacia abajo. */
+  const titulo=normalizeText(c.heading||'').trim();
+  /* El PDF corta el renglón donde lo cortó la maqueta de la lámina, no donde
+     termina la frase: «a 15 / cm de la bastilla, por / dentro». Se unen los
+     renglones que siguen a una frase sin terminar. */
+  const corrido=texto.replace(/([^.:;!?\n])\n(?=[a-záéíóúñ0-9(])/g,'$1 ');
+  const lineas=corrido.split('\n').map(l=>l.replace(/^#+\s*/,'').trim())
+    .filter((l,i)=>l&&!(i<2&&titulo&&normalizeText(l).trim()===titulo));
+  const completo=lineas.join('\n');
+  const body=document.createElement('div');body.className='frag-text';
+  card.append(head,body);
+  const clave=completo.length>420?renglonesClave(lineas,terminos,3):[];
+  if(clave.length){
+    const extracto=document.createDocumentFragment();
+    let prev=-1;
+    for(const i of clave){
+      if(i>prev+1)extracto.append(prev<0?'… ':'\n… ');
+      else if(prev>=0)extracto.append('\n');
+      extracto.append(resaltar(lineas[i],terminos));
+      prev=i;
+    }
+    if(prev<lineas.length-1)extracto.append(' …');
+    body.appendChild(extracto);
+    const mas=document.createElement('button');mas.className='frag-mas';mas.type='button';mas.textContent='Ver la sección completa ▾';
+    let abierto=false;
+    mas.onclick=()=>{
+      abierto=!abierto;body.textContent='';
+      if(abierto)body.appendChild(resaltar(completo,terminos));
+      else{let p=-1;for(const i of clave){if(i>p+1)body.append(p<0?'… ':'\n… ');else if(p>=0)body.append('\n');body.append(resaltar(lineas[i],terminos));p=i}if(p<lineas.length-1)body.append(' …')}
+      mas.textContent=abierto?'Ver menos ▴':'Ver la sección completa ▾';
+    };
+    card.appendChild(mas);
+  }else{
+    body.appendChild(resaltar(completo,terminos));
+    if(completo.length>420){
+      card.classList.add('cortado');
+      const mas=document.createElement('button');mas.className='frag-mas';mas.type='button';mas.textContent='Ver todo ▾';
+      mas.onclick=()=>{const c2=card.classList.toggle('cortado');mas.textContent=c2?'Ver todo ▾':'Ver menos ▴'};
+      card.appendChild(mas);
+    }
+  }
+  return card
+}
 function responderSinModelo(q){
   ocultarBannerRestaurar();
   switchTab('chat');
@@ -4866,6 +5106,7 @@ function responderSinModelo(q){
   }
   const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
   let fragmentos='',chars=0;
+  const tarjetas=[];
   for(const r of relevantes){
     if(chars>=FALLBACK_BUDGET)break;
     const etiqueta=chunkLabel(r.c)+'\n';
@@ -4873,6 +5114,11 @@ function responderSinModelo(q){
     if(espacio<80)break;
     const trozo=r.c.text.length>espacio?r.c.text.slice(0,espacio)+'\n[...]':r.c.text;
     fragmentos+=etiqueta+trozo+'\n\n';chars+=etiqueta.length+trozo.length;
+    /* Dos fragmentos de la misma lámina y la misma sección son una sola cosa
+       para quien lee: van en la misma tarjeta, no en dos con el mismo rótulo. */
+    const misma=tarjetas.find(t=>t.c.docName===r.c.docName&&t.c.page===r.c.page&&t.c.heading===r.c.heading);
+    if(misma)misma.texto+='\n'+trozo;
+    else tarjetas.push({c:r.c,texto:trozo});
   }
   fragmentos=fragmentos.trim();
   /* Sin modelo también hay que decirle dónde está lo que busca. Se veía en
@@ -4888,19 +5134,35 @@ function responderSinModelo(q){
       if(falta.length&&falta[0].duenos.length)enOtra=nombreDeSeccion(falta[0].duenos[0].docName);
     }
   }
-  const paginas=[...new Set(relevantes.filter(r=>r.c.page).map(r=>r.c.page))];
-  const donde=paginas.length?` En el PDF cargado, ${paginas.length===1?'página':'páginas'} **${paginas.join(', ')}**.`:'';
-  const aviso='> ⚪ **Sin modelo conectado.** Esto es lo que dice el manual, tal cual: nadie lo interpretó.';
-  const comoFunciona='La búsqueda corrió aquí mismo, en tu dispositivo, sin salir a internet: se expandieron los sinónimos de lo que escribiste y se quedaron solo los fragmentos que de verdad coinciden.';
-  const invitacion='_Para la respuesta razonada en 6 etapas —intención, expansión, retrieval, razonamiento, certeza y respuesta— conecta una API key en la pestaña **⚙️ Config**._';
+  /* Antes esto se enseñaba como un bloque de código: letra monoespaciada, los
+     rótulos entre corchetes y, en cada respuesta, dos párrafos sobre sinónimos,
+     retrieval y «razonado en 6 etapas». En el piso eso se lee como un error.
+     Ahora es una tarjeta por lámina —de dónde sale arriba, el texto normal, las
+     palabras que coincidieron marcadas— y el aviso de que nadie lo interpretó
+     cabe en una línea. Lo que se guarda en el historial sigue siendo el texto. */
+  const aviso='⚪ Así lo dice el manual, tal cual: sin modelo conectado, nadie lo interpretó.';
+  const invitacion=!invitoApi
+    ?'Con una API key (en ⚙️) además te contesta en una frase, citando la página.':'';
   const cuerpo=fragmentos
-    ?`${aviso}\n\n${comoFunciona} Coincidieron **${relevantes.length}** ${relevantes.length===1?'fragmento':'fragmentos'}.${donde}\n\n---\n\n\`\`\`\n${fragmentos}\n\`\`\`\n\n${invitacion}`
-    :`${aviso}\n\n**Nada${enOtra?' de esta sección':' del manual'} coincide con esa pregunta.** ${comoFunciona}\n\nPrefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras.${enOtra?` **Pero eso sí aparece en ${enOtra}**, que también tienes cargada: cámbiala arriba y vuelve a preguntar.`:' Prueba con otros términos o con un acceso rápido.'}\n\n${invitacion}`;
-  const msgEl=appendMsg('assistant',cuerpo,false);
+    ?`> ${aviso}\n\n${fragmentos}`
+    :`**Nada${enOtra?' de esta sección':' del manual'} coincide con esa pregunta.** Prefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras.${enOtra?` **Pero eso sí aparece en ${enOtra}**, que también tienes cargada: cámbiala arriba y vuelve a preguntar.`:' Prueba con otras palabras o con un acceso rápido.'}`;
+  const msgEl=appendMsg('assistant',fragmentos?'':cuerpo,false);
+  const cuerpoEl=msgEl.querySelector('.msg-body');
+  if(fragmentos){
+    const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
+    cuerpoEl.appendChild(av);
+    for(const t of tarjetas)cuerpoEl.appendChild(tarjetaDeFragmento(t.c,t.texto,terminos));
+  }
+  if(invitacion){
+    invitoApi=true;
+    const pie=document.createElement('div');pie.className='frag-pie';pie.textContent=invitacion;
+    cuerpoEl.appendChild(pie);
+  }
   /* En modo manual los fragmentos se enseñan enteros en pantalla, así que su
      página es literalmente de dónde sale lo que se está leyendo: el rótulo lo
      dice con esas palabras y no habla de citas, porque aquí nadie citó nada. */
-  renderEvidencia(msgEl,figurasDeFragmentos(relevantes.map(r=>r.c),null,fragmentos?null:'GAP'),'manual');
+  renderEvidencia(msgEl,figurasDeFragmentos(tarjetas.map(t=>t.c),null,fragmentos?null:'GAP'),'manual');
   history.push({role:'user',content:q});
   history.push({role:'assistant',content:cuerpo});
   saveChatHistory();
@@ -4917,14 +5179,14 @@ async function sendMessage(){
     const inputSinKey=document.getElementById('user-input');
     const qSinKey=inputSinKey.value.trim();
     if(!qSinKey)return;
-    inputSinKey.value='';
+    inputSinKey.value='';ajustarAltura(inputSinKey);
     responderSinModelo(qSinKey);
     return;
   }
   if(sessionTokens>=appState.tokenLimit){showToast('🔴 Límite de tokens alcanzado. Limpia el chat o reinicia el contador.','error',5000);return}
   const input=document.getElementById('user-input');
   const q=input.value.trim();if(!q)return;
-  input.value='';isGenerating=true;chatDescartado=false;
+  input.value='';ajustarAltura(input);isGenerating=true;chatDescartado=false;
   ocultarBannerRestaurar();
 
   const sendBtn=document.getElementById('send-btn');
@@ -5102,8 +5364,61 @@ function renderQuickBtns(){
     btn.addEventListener('click',()=>ask(b.q));
     c.appendChild(btn);
   };
-  for(const b of accesosDelManual())pinta(b,'del-manual');
-  quickBtns.forEach(b=>pinta(b));
+  const delManual=accesosDelManual();
+  for(const b of delManual)pinta(b,'del-manual');
+  /* Con un manual cargado, los accesos de fábrica —«MarcaDemoB en POS»,
+     «Entallado Hombres»— son del manual de demostración, no del suyo: se
+     quedan solo si el asesor los personalizó. */
+  const deFabrica=JSON.stringify(quickBtns)===JSON.stringify(DEFAULT_QUICK);
+  if(!(delManual.length&&deFabrica))quickBtns.forEach(b=>pinta(b));
+  renderChatVacio();
+}
+
+/* ── ESTADO VACÍO ─────────────────────────────────
+   Es lo primero que ve quien abre el link: antes era «Arrastra los manuales
+   aquí», una zona para soltar PDFs que en el celular ni se puede usar así. Ahora
+   son preguntas que se tocan, y cada una enseña algo que el asistente hace
+   distinto: cita, entiende la forma de hablar del piso, aguanta la errata y
+   dice «no sé». */
+const EJEMPLOS_DEMO=[
+  {q:'¿a qué altura va el sensor en el pantalón?',nota:'Te dice la regla y de qué manual sale'},
+  {q:'¿cuánto espacio dejo para que pase la gente?',nota:'Aunque no uses la palabra del manual («pasillo»)'},
+  {q:'entayado de hombres',nota:'Con falta de ortografía, también'},
+  {q:'¿a qué hora abre la tienda?',nota:'Y si el manual no lo dice, te lo dice'},
+];
+function renderChatVacio(){
+  const el=document.getElementById('chat-empty');if(!el)return;
+  const seccion=seccionActiva();
+  const conPdf=docChunks.length>0;
+  const paginas=conPdf?new Set(docChunks.filter(c=>!appState.manualActivo||c.docName===appState.manualActivo).map(c=>c.docName+'#'+c.page)).size:0;
+  const ejemplos=conPdf
+    ?accesosDelManual().slice(0,3).map(a=>({q:a.q,nota:'Una lámina de tu manual'})).concat([{q:'¿a qué hora abre la tienda?',nota:'Si el manual no lo dice, te lo dice'}])
+    :EJEMPLOS_DEMO;
+  el.innerHTML='';
+  const t=document.createElement('div');t.className='vacio-titulo';
+  t.textContent=conPdf?(seccion?`Estás en ${seccion}`:`${docs.length} manuales cargados`):'Pregunta como lo dirías en piso';
+  const s=document.createElement('div');s.className='vacio-sub';
+  s.textContent=conPdf
+    ?`${paginas} páginas de tu manual, en tu teléfono. Cada respuesta dice de qué página sale.`
+    :'Te contesta con el manual y te dice de dónde sale el dato. Si el manual no lo dice, no inventa.';
+  const lista=document.createElement('div');lista.className='vacio-ejemplos';
+  for(const e of ejemplos){
+    const b=document.createElement('button');b.className='vacio-ej';b.type='button';
+    b.textContent=e.q;
+    const n=document.createElement('small');n.textContent=e.nota;b.appendChild(n);
+    b.onclick=()=>ask(e.q);
+    lista.appendChild(b);
+  }
+  const nota=document.createElement('div');nota.className='vacio-nota';
+  if(!conPdf){
+    nota.append('Esta demo usa un manual inventado. ');
+    const a=document.createElement('button');a.className='vacio-link';a.type='button';
+    a.textContent='Carga el tuyo en PDF';a.onclick=()=>switchTab('docs');
+    nota.append(a,': se lee aquí mismo, sin subirlo a ningún lado.');
+  }else{
+    nota.textContent='Nada de esto sale de tu teléfono.';
+  }
+  el.append(t,s,lista,nota);
 }
 function toggleQuickEdit(){
   editingQuick=!editingQuick;
@@ -5137,14 +5452,16 @@ function clearChat(){
   if(isGenerating&&currentAbort){chatDescartado=true;currentAbort.abort()}
   sessionTokens=0;updateTokenBar();
   history=[];
-  document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"><span class="chat-empty-icon">✦</span>Pregunta algo o usa un acceso rápido.<br/>Sin API key se responde con el manual tal cual; con key, razonado en 6 etapas.</div>`;
+  document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"></div>`;
+  renderChatVacio();
   saveChatHistory();
   showToast('🗑️ Chat limpiado', 'success', 2000);
 }
 function exportChat(){
   if(!history.length){showToast('No hay conversación para exportar.','warn',3000);return}
-  const date=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const lines=[`# Asistente de piso — Mercadep v1.0.0`,``,`**Fecha:** ${date}`,`**Autor:** Gerardo Barrera · demo con conocimiento sintético`,``,`---`,``];
+  const date=new Date().toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const seccion=seccionActiva();
+  const lines=[`# Asistente de piso`,``,`**Fecha:** ${date}`,...(seccion?[`**Sección:** ${seccion}`]:[]),``,`---`,``];
   history.forEach(m=>{
     lines.push(`## ${m.role==='user'?'Tú':'Asistente'}`);
     lines.push(``);
@@ -5272,6 +5589,18 @@ function esRespuestaSinDato(respuesta,certeza){
 function figurasDeFragmentos(chunks,citas,respuesta,certeza){
   if(!docFigures.length||!chunks||!chunks.length)return[];
   if(esRespuestaSinDato(respuesta,certeza))return[];
+
+  /* Sin modelo no hay cita, y la lámina se sacaba de TODAS las tarjetas: a
+     «¿a qué altura va el sensor?» la acompañaba el planograma de la mesa de
+     entrada, que venía en la tercera tarjeta por un «altura máxima de pila», y
+     no la del pantalón de la primera. Manda la tarjeta mejor puntuada, que es
+     la que el asesor lee primero; si su página no trae lámina, no se enseña
+     ninguna en vez de la de una coincidencia floja. */
+  if(citas===null){
+    const primera=chunks.find(c=>c.source==='pdf'&&c.page);
+    if(!primera)return[];
+    chunks=[primera];
+  }
 
   /* Que el modelo no escribiera "(pág. N)" no significa que la respuesta no
      tenga de dónde salir: significa que se saltó el formato. Antes eso dejaba
@@ -5410,12 +5739,51 @@ function renderEvidencia(container,figuras,origen){
     const deQuien=varios||!f.heading?nombreDeSeccion(f.docName)+' · ':'';
     pie.textContent=deQuien+'pág. '+f.page+(f.heading?' · '+f.heading:'');
     fig.appendChild(img);fig.appendChild(pie);
-    fig.onclick=()=>fig.classList.toggle('ampliada');
+    /* Ampliar dentro del globo no alcanzaba: en el celular la lámina seguía del
+       ancho del mensaje y las cotas del planograma no se leían. */
+    fig.onclick=()=>abrirVisor(f.dataUrl,pie.textContent,img.alt);
     tira.appendChild(fig);
   }
   wrap.appendChild(tira);
   container.appendChild(wrap);
 }
+
+/* Visor a pantalla completa. Doble toque (o doble clic) acerca al doble y se
+   recorre arrastrando; el pellizco nativo también funciona. */
+function abrirVisor(src,pie,alt){
+  const v=document.getElementById('visor'),img=document.getElementById('visor-img'),sc=document.getElementById('visor-scroll');
+  img.src=src;img.alt=alt||'';
+  document.getElementById('visor-pie').textContent=pie||'';
+  sc.classList.remove('zoom');
+  v.classList.add('abierto');
+  document.body.style.overflow='hidden';
+}
+function cerrarVisor(){
+  document.getElementById('visor').classList.remove('abierto');
+  document.getElementById('visor-img').removeAttribute('src');
+  document.body.style.overflow='';
+}
+(function(){
+  const sc=document.getElementById('visor-scroll');
+  let ultimoToque=0;
+  const alternar=(x,y)=>{
+    const img=document.getElementById('visor-img');
+    const r=img.getBoundingClientRect();
+    const fx=(x-r.left)/r.width,fy=(y-r.top)/r.height;
+    const zoom=sc.classList.toggle('zoom');
+    if(zoom)requestAnimationFrame(()=>{
+      sc.scrollLeft=fx*img.clientWidth-sc.clientWidth/2;
+      sc.scrollTop=fy*img.clientHeight-sc.clientHeight/2;
+    });
+  };
+  sc.addEventListener('dblclick',e=>alternar(e.clientX,e.clientY));
+  sc.addEventListener('touchend',e=>{
+    const ahora=Date.now();
+    if(ahora-ultimoToque<300&&e.changedTouches[0]){e.preventDefault();alternar(e.changedTouches[0].clientX,e.changedTouches[0].clientY)}
+    ultimoToque=ahora;
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarVisor()});
+})();
 
 /* ════════════════════════════════════════════════
    VERIFICACIÓN CONTRA EL CONTEXTO
@@ -5789,6 +6157,7 @@ function loadTheme() {
 loadTheme();
 initSystemPromptCounter();
 loadSaved();
+const restauracion=restaurarManualesGuardados().catch(e=>console.warn('restaurar',e));
 
 /* ════════════════════════════════════════════════
    ARNÉS DE MEDICIÓN — abrir con ?test=1
@@ -6259,10 +6628,10 @@ function renderPanelPruebas(){
 }
 
 if(new URLSearchParams(location.search).has('test')){
-  /* Espera a que IndexedDB devuelva los manuales guardados, si los hay: medir
-     solo contra el manual interno cuando el asesor tiene un PDF cargado daría
-     un número que no es el suyo. */
-  setTimeout(renderPanelPruebas,1200);
+  /* Espera a que se restauren los manuales guardados, si los hay: medir solo
+     contra el manual interno cuando el asesor tiene un PDF cargado daría un
+     número que no es el suyo. */
+  restauracion.then(()=>setTimeout(renderPanelPruebas,50));
 }
 </script>
 </body>
