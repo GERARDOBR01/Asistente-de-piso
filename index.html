@@ -1636,6 +1636,7 @@ function rebuildCorpus(){
   bm25.df=df;
   vocabTrigramas=null;
   vocabFonetico=null;
+  verbosVistos=new Map();
   nombresEnTexto=null;
   identificadores=null;
   vocabPorDoc=null;
@@ -1729,8 +1730,22 @@ function masParecida(w){
     if(p>mejorP&&distanciaEdicion(w,t)<=topeErrata(w)){mejorP=p;mejor=t}
   }
   if(mejorP>=ERRATA_MIN)return mejor;
-  const oido=indiceFonetico().get(fonetica(w));
-  return oido&&oido!==w?oido:null
+  const fw=fonetica(w);
+  const oido=indiceFonetico().get(fw);
+  if(oido&&oido!==w)return oido;
+  /* Cómo suena Y una letra comida, que es la errata del pulgar: «likidcion»,
+     «mankies», «serveas». Ni los trigramas (demasiados rotos en una palabra
+     corta) ni el sonido exacto las alcanzaban, y eran la palabra clave de la
+     pregunta. Misma primera letra, a una edición de sonido, y entre varias la
+     que más usa el manual. Solo en palabras de seis o más: en una de cinco,
+     una letra ya es otra palabra, y «motos» salía como «moños». */
+  if(fw.length<6)return null;
+  let cerca=null,df=0;
+  for(const[k,t]of indiceFonetico()){
+    if(k[0]!==fw[0]||Math.abs(k.length-fw.length)>1||t===w)continue;
+    if(bm25.df[t]>df&&distanciaEdicion(fw,k)<=1){df=bm25.df[t];cerca=t}
+  }
+  return cerca
 }
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
@@ -2147,7 +2162,7 @@ function weightedTerms(query){
     for(const t of tokenize(k)){
       /* Ni la palabra ni ninguna de sus formas está en el manual: puede ser una
          errata, y entonces se prueba la palabra más parecida con descuento. */
-      if(!conVariantes(t,1,k)){
+      if(!conVariantes(t,1,k)&&!esVerbo(k)){
         /* La errata se marca con «!» y no con «~» para poder contarla aparte:
            una palabra del diccionario es una apuesta del sistema, pero una
            errata corregida ES la palabra que el asesor escribió, bien escrita.
@@ -2219,8 +2234,34 @@ function bm25Score(c,terms){
    186 preguntas verificadas salían sin ninguna tarjeta. Siguen sumando puntaje
    donde aparecen, pero no cuentan como acierto ni como palabra que exigir: si
    contaran, «¿dónde van los perros?» pasaría por contestable solo por el «van». */
-const VERBOS_DE_PISO=new Set(['va','van','vaya','vayan','pongo','pone','ponen','poner','pongan','ponga','acomodo','acomoda','acomodan','acomodar','acomodamos','hago','hace','hacen','hacer','exhibo','exhibe','exhiben','exhibir','armo','arma','arman','armar','ordeno','ordena','ordenan','ordenar','coloco','coloca','colocan','colocar','sirve','sirven','servir','uso','usa','usan','usar','lleva','llevan','llevar','cuanto','cuanta','cuantos','cuantas','quito','quita','quitan','quitar','necesito','debo','deben','tengo']);
-const esVerboDePiso=g=>VERBOS_DE_PISO.has(g.replace(/^[~!]/,''));
+const VERBOS_DE_PISO=new Set(['va','van','vaya','vayan','pongo','pone','ponen','poner','pongan','ponga','acomodo','acomoda','acomodan','acomodar','acomodamos','hago','hace','hacen','hacer','exhibo','exhibe','exhiben','exhibir','armo','arma','arman','armar','ordeno','ordena','ordenan','ordenar','coloco','coloca','colocan','colocar','sirve','sirven','servir','uso','usa','usan','usar','lleva','llevan','llevar','cuanto','cuanta','cuantos','cuantas','quito','quita','quitan','quitar','necesito','debo','deben','tengo','tienen','tener','dejo','deja','dejan','dejar',
+  /* Y las que dicen QUÉ TIPO de respuesta se busca, no DE QUÉ: los manuales
+     escriben «56% de participación», casi nunca «porcentaje». Contando como
+     acierto, «¿qué porcentaje tiene contempo?» ponía primero a LIBRERÍA —«menor
+     porcentaje de participación», sin rastro de Contempo— y con Casual activa
+     mandaba al asesor a Librería en vez de a los cuatro manuales que sí lo
+     tienen. La cifra la tiene que traer la palabra de la que se pregunta. */
+  'porcentaje','porcentajes','porciento','participacion']);
+/* Y como se escriben en el piso: «donde BAN las sandalias», «q YEBA el
+   precio», «para ke SIRBEN los roperos», «como ACOMDO los vinos». Con 186
+   preguntas reales pasadas por erratas de celular, 52 salían sin ninguna
+   tarjeta, y en la mayoría la única errata era el verbo: «ban» no era «van»,
+   contaba como palabra exigida y el corrector lo llevaba a «baño». Se compara
+   cómo suena, y con una letra de diferencia solo si la palabra no existe en los
+   manuales: «orden» está en ellos y no es una errata de «ordena». */
+const VERBOS_FONETICOS=new Set([...VERBOS_DE_PISO].map(fonetica));
+let verbosVistos=new Map();
+function esVerbo(w){
+  if(verbosVistos.has(w))return verbosVistos.get(w);
+  let si=VERBOS_DE_PISO.has(w)||VERBOS_FONETICOS.has(fonetica(w));
+  if(!si&&w.length>=5&&!bm25.df[w]){
+    const f=fonetica(w);
+    for(const v of VERBOS_FONETICOS)if(v.length>=5&&v[0]===f[0]&&distanciaEdicion(f,v)<=1){si=true;break}
+  }
+  verbosVistos.set(w,si);
+  return si
+}
+const esVerboDePiso=g=>esVerbo(g.replace(/^[~!]/,''));
 function retrieve(query,opts){
   const{source=null,limit=40,doc=null}=opts||{};
   let terms=weightedTerms(query);
@@ -2240,11 +2281,17 @@ function retrieve(query,opts){
   /* Lo que se exige se mide sobre lo que de verdad se busca. Contarlo sobre la
      pregunta entera pedía dos aciertos a «¿el saco va junto al pantalón?» en
      SACOS Y PANTALONES, donde a la búsqueda solo le queda «junto». */
-  const exigidos=exigenciaDeSolidez([...new Set(terms.map(x=>x.g.replace(/^[~!]/,'')))].filter(g=>!VERBOS_DE_PISO.has(g)).length);
+  const exigidos=exigenciaDeSolidez([...new Set(terms.map(x=>x.g.replace(/^[~!]/,'')))].filter(g=>!esVerbo(g)).length);
+  const strongContables=new Set(terms.filter(x=>x.w===1&&!esVerboDePiso(x.g)).map(x=>x.t));
+  const flojosContables=new Set(terms.filter(x=>x.w!==1&&!esVerboDePiso(x.g)).map(x=>x.t));
   const strong=terms.filter(t=>t.w===1);
   const flojos=terms.filter(t=>t.w!==1);
   const shingles=queryShingles(query);
   const wantsNumber=NUMERIC_INTENT.test(query);
+  /* Los manuales dan la participación siempre igual: «30% de participación».
+     Si se pregunta por el porcentaje, esa frase es la respuesta, y no el
+     planograma de la página siguiente con «50%+ 20%», que ganaba por corto. */
+  const pidePorcentaje=/porcentaje|porciento|participacion/.test(normalizeText(query))||query.includes('%');
   const out=[];
   for(const c of corpus){
     if(source&&c.source!==source)continue;
@@ -2265,7 +2312,7 @@ function retrieve(query,opts){
     const norm=' '+normalizeText((c.heading?c.heading+' ':'')+c.text).replace(/\s+/g,' ')+' ';
     const contiene=t=>norm.includes(' '+t+' ');
     const gAcierto=new Set();
-    for(const{t,g}of strong)if(!esVerboDePiso(g)&&contiene(t))gAcierto.add(g);
+    for(const{t,g}of strong)if(strongContables.has(t)&&contiene(t))gAcierto.add(g);
     const hits=gAcierto.size;
     /* Los aciertos por sinónimo se cuentan aparte: valen menos que la palabra
        que el asesor escribió, pero un fragmento que solo se encontró por el
@@ -2274,7 +2321,7 @@ function retrieve(query,opts){
        diga «alineación», «circulación» y «80 cm» a la vez es evidencia, aunque
        las tres salgan de haber escrito «pasillo». */
     let hitsSyn=0,hitsErrata=0;
-    for(const{t,g}of flojos)if(!esVerboDePiso(g)&&contiene(t)){if(g[0]==='!')hitsErrata++;else hitsSyn++}
+    for(const{t,g}of flojos)if(flojosContables.has(t)&&contiene(t)){if(g[0]==='!')hitsErrata++;else hitsSyn++}
     let phrase=0;
     for(const sh of shingles)if(norm.includes(sh))phrase++;
     score+=Math.min(phrase,3)*1.5;
@@ -2283,6 +2330,7 @@ function retrieve(query,opts){
       for(const{t}of strong)if(h.includes(t)){score+=2;break}
     }
     if(wantsNumber&&c.hasDigits)score+=1.5;
+    if(pidePorcentaje&&/\d\s*%\s*de\s+participaci[oó]n/i.test(c.text))score+=3;
     /* El check list repite en un renglón cada regla del manual, y en una página
        corta: BM25 lo subía por encima de la lámina que la explica. «¿para dónde
        va el gancho?» contestaba con «Ganchos hacia la izquierda y 3 cm…» en vez
