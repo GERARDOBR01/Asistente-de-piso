@@ -1,0 +1,12 @@
+<!-- Ícono de la app. Los PNG se sacan con Chromium: una página con este SVG a pantalla completa, --screenshot --window-size=N,N. El dibujo cabe en la zona segura de «maskable». -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#141416"/>
+  <!-- globo de diálogo -->
+  <path d="M136 132h240a28 28 0 0 1 28 28v164a28 28 0 0 1-28 28H244l-60 48v-48h-48a28 28 0 0 1-28-28V160a28 28 0 0 1 28-28z" fill="none" stroke="#D4AC54" stroke-width="16" stroke-linejoin="round"/>
+  <!-- hoja del manual -->
+  <path d="M206 170h78l34 34v112h-112z" fill="#F3EDE0"/>
+  <path d="M284 170v34h34" fill="#D9CFB8"/>
+  <rect x="222" y="222" width="80" height="10" rx="5" fill="#8A8A8A"/>
+  <rect x="218" y="248" width="88" height="20" rx="4" fill="#D4AC54"/>
+  <rect x="222" y="284" width="64" height="10" rx="5" fill="#8A8A8A"/>
+</svg>
