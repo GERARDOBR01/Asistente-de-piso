@@ -703,6 +703,46 @@ footer span {
 .visor-pie{color:#ddd;font-size:13px;padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);text-align:center}
 .evidencia-fig{cursor:zoom-in}
 
+/* ════════════════════════════════════════════════
+   TABLERO — lo que pregunta el equipo
+════════════════════════════════════════════════ */
+.tablero{display:flex;flex-direction:column;gap:14px}
+.tb-titulo{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--text);line-height:1.15}
+.tb-sub{font-size:13px;color:var(--text2);line-height:1.55;margin-top:4px}
+.tb-periodo{display:flex;gap:6px;flex-wrap:wrap}
+.tb-chip{font-family:'DM Sans',sans-serif;font-size:12.5px;padding:6px 14px;border-radius:999px;border:1px solid var(--border2);background:none;color:var(--text2);cursor:pointer}
+.tb-chip.activo{background:var(--gglow);border-color:rgba(212,172,84,0.55);color:var(--gold2);font-weight:600}
+.tb-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.tb-tile{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.tb-n{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:600;line-height:1;color:var(--text);font-variant-numeric:lining-nums tabular-nums}
+.tb-l{font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.4}
+.tb-l small{display:block;color:var(--text3);font-size:11.5px;margin-top:2px}
+.tb-bloque{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.tb-h{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.tb-hsub{font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5}
+.tb-fila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:6px 0}
+.tb-fila+.tb-fila{border-top:1px solid var(--border)}
+.tb-et{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
+.tb-et small{display:block;font-size:11.5px;color:var(--text3)}
+.tb-cuenta{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;text-align:right}
+.tb-barra{grid-column:1/-1;height:6px;background:var(--s3);border-radius:4px;overflow:hidden}
+.tb-barra span{display:block;height:100%;background:var(--gold);border-radius:4px}
+.tb-vacio-lista{font-size:13px;color:var(--text3)}
+.tb-acciones{display:flex;gap:8px;flex-wrap:wrap}
+.tb-btn{font-family:'DM Sans',sans-serif;font-size:13.5px;padding:10px 16px;border-radius:var(--r);border:1px solid var(--border2);background:var(--s2);color:var(--text);cursor:pointer}
+.tb-btn.primario{background:var(--gglow);border-color:rgba(212,172,84,0.55);color:var(--gold2);font-weight:600}
+.tb-btn.borrar{margin-left:auto;background:none;color:var(--text3)}
+.tb-btn.borrar:hover{color:var(--red);border-color:rgba(224,82,82,0.3)}
+.mem-plegada{margin-top:18px}
+.fb-pregunta{font-size:12px;color:var(--text3)}
+
+@media print{
+  header,.tabs,footer,.toast-wrap,.panel:not(#panel-memory),.tb-periodo,.tb-acciones,.mem-plegada{display:none!important}
+  #panel-memory{display:block!important}
+  body{background:#fff!important;padding:0}
+  .tb-bloque,.tb-tile{break-inside:avoid}
+}
+
 @media (max-width:600px){
   body{padding:calc(env(safe-area-inset-top) + 14px) 10px 18px}
   header{margin-bottom:12px;padding-bottom:10px;align-items:center}
@@ -758,7 +798,7 @@ footer span {
 <div class="tabs" role="tablist">
   <button class="tab active" onclick="switchTab('chat')">💬 Preguntar</button>
   <button class="tab" onclick="switchTab('docs')">📄 Manuales <span class="badge" id="badge" style="display:none">0</span></button>
-  <button class="tab" onclick="switchTab('memory')">🧠 Memoria</button>
+  <button class="tab" onclick="switchTab('memory')">📊 Tablero</button>
   <button class="tab" onclick="switchTab('config')" aria-label="Ajustes">⚙️</button>
 </div>
 
@@ -849,6 +889,9 @@ footer span {
 
 <!-- MEMORIA -->
 <div class="panel" id="panel-memory">
+  <div class="tablero" id="tablero"></div>
+  <details class="avanzado mem-plegada">
+  <summary>Memoria del modo con API · los 👍/👎 que se le recuerdan al modelo</summary>
   <div class="memory-panel">
     <div class="mem-header">
       <div class="memory-title">Memoria de aprendizaje</div>
@@ -863,6 +906,7 @@ footer span {
       <div class="mem-empty">Aún no hay registros.<br>Califica respuestas con 👍 👎 para comenzar.</div>
     </div>
   </div>
+  </details>
 </div>
 
 <!-- CONFIG -->
@@ -3472,6 +3516,253 @@ function saveConfig(evt){
 }
 
 /* ════════════════════════════════════════════════
+   TABLERO — LO QUE PREGUNTA TU EQUIPO
+
+   La memoria de 👍/👎 servía para el modelo, no para quien dirige el piso. A
+   una jefa o a una regional no le dice nada «12 éxitos, 3 fallos»; le sirve
+   saber qué duda se repite y qué no trae el manual, porque eso es lo que se
+   corrige con una junta o con retroalimentación a corporativo. Cada consulta
+   se anota aquí: la sección, si el manual la cubrió, la lámina que contestó
+   y el voto si lo hubo. Vive en el teléfono (localStorage) y solo sale si el
+   asesor comparte el resumen. Lo cuenta igual el modo manual —que es con el
+   que se trabaja con manuales reales— que el modo con API.
+════════════════════════════════════════════════ */
+const TABLERO_KEY='ap_tablero_v1',TABLERO_MAX=600;
+let tablero=[],tableroPeriodo='todo';
+function cargarTablero(){
+  try{const s=localStorage.getItem(TABLERO_KEY);tablero=s?JSON.parse(s):[]}catch{tablero=[]}
+  if(!Array.isArray(tablero))tablero=[];
+}
+function guardarTablero(){try{localStorage.setItem(TABLERO_KEY,JSON.stringify(tablero))}catch{}}
+function registrarConsulta(q,encontro,chunk,modo){
+  const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),
+    q:String(q).slice(0,200),sec:seccionActiva(),ok:!!encontro,modo,voto:null};
+  if(encontro&&chunk){
+    if(chunk.source==='pdf')r.sec=nombreDeSeccion(chunk.docName);
+    /* «CHECK LIST: 140 CASUAL HOMBRE»: el nombre de la sección ya va aparte. */
+    let h=(chunk.heading||'').replace(/^#+\s*/,'').trim();
+    if(r.sec&&normalizeText(h).endsWith(normalizeText(r.sec))&&h.length>r.sec.length)
+      h=h.slice(0,h.length-r.sec.length).replace(/[\s:·\-–]+$/,'');
+    r.h=h||null;
+    r.p=chunk.page||null;
+  }
+  tablero.push(r);
+  if(tablero.length>TABLERO_MAX)tablero=tablero.slice(-TABLERO_MAX);
+  guardarTablero();
+  if(document.getElementById('panel-memory').classList.contains('active'))renderTablero();
+  return r.id
+}
+function votarConsulta(id,voto){
+  const r=tablero.find(x=>x.id===id);if(!r)return;
+  r.voto=voto;guardarTablero();
+}
+/* 👍/👎 para la respuesta sin modelo. Sin esto «resuelta» solo podía querer
+   decir «el manual traía algo», y el piloto necesita saber si le sirvió. */
+function votoManual(msgEl,id){
+  const footer=document.createElement('div');footer.className='msg-footer';
+  const pr=document.createElement('span');pr.className='fb-pregunta';pr.textContent='¿Te sirvió?';
+  const bien=document.createElement('button');bien.className='fb-btn good';bien.type='button';bien.textContent='👍';bien.setAttribute('aria-label','Sí me sirvió');
+  const mal=document.createElement('button');mal.className='fb-btn bad';mal.type='button';mal.textContent='👎';mal.setAttribute('aria-label','No me sirvió');
+  const votar=(btn,voto)=>{
+    if(bien.disabled)return;
+    btn.classList.add('active');bien.disabled=mal.disabled=true;
+    votarConsulta(id,voto);
+    pr.textContent=voto==='bien'?'Anotado ✓':'Anotado en el tablero: esta no sirvió';
+  };
+  bien.onclick=()=>votar(bien,'bien');
+  mal.onclick=()=>votar(mal,'mal');
+  footer.append(pr,bien,mal);
+  msgEl.appendChild(footer);
+}
+
+function temaLegible(h){
+  if(!h)return'';
+  return /[a-záéíóúñ]/.test(h)?h:h.charAt(0)+h.slice(1).toLowerCase()
+}
+function consultasDelPeriodo(){
+  const dias={'7':7,'30':30}[tableroPeriodo];
+  if(!dias)return tablero;
+  const desde=Date.now()-dias*864e5;
+  return tablero.filter(r=>r.t>=desde)
+}
+function resumirTablero(regs){
+  const total=regs.length;
+  const cubiertas=regs.filter(r=>r.ok);
+  const sirvieron=cubiertas.filter(r=>r.voto!=='mal');
+  const noSirvieron=regs.filter(r=>r.voto==='mal');
+  const temas=new Map();
+  for(const r of cubiertas){
+    if(!r.h)continue;
+    const k=(r.sec||'')+'|'+normalizeText(r.h).trim();
+    const t=temas.get(k)||{h:temaLegible(r.h),sec:r.sec,paginas:new Set(),n:0};
+    t.n++;if(r.p)t.paginas.add(r.p);temas.set(k,t);
+  }
+  /* La misma duda escrita dos veces es una sola cosa que falta en el manual. */
+  const gaps=new Map();
+  for(const r of regs.filter(x=>!x.ok)){
+    const k=normalizeText(r.q).replace(/[^\p{L}\p{N} ]/gu,'').replace(/\s+/g,' ').trim();
+    const g=gaps.get(k)||{q:r.q,sec:r.sec,n:0,t:0};
+    g.n++;if(r.t>g.t){g.t=r.t;g.q=r.q}gaps.set(k,g);
+  }
+  const secciones=new Map();
+  for(const r of regs){const k=r.sec||'Manual interno';secciones.set(k,(secciones.get(k)||0)+1)}
+  const orden=(a,b)=>b.n-a.n||b.t-a.t;
+  return{total,cubiertas:cubiertas.length,sirvieron:sirvieron.length,noSirvieron,
+    pct:total?Math.round(sirvieron.length*100/total):0,
+    temas:[...temas.values()].sort(orden),
+    gaps:[...gaps.values()].sort(orden),
+    secciones:[...secciones.entries()].map(([sec,n])=>({sec,n})).sort((a,b)=>b.n-a.n),
+    desde:total?Math.min(...regs.map(r=>r.t)):null,hasta:total?Math.max(...regs.map(r=>r.t)):null}
+}
+const fechaCorta=t=>new Date(t).toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+function rangoDeFechas(res){
+  if(!res.desde)return'';
+  const a=fechaCorta(res.desde),b=fechaCorta(res.hasta);
+  return a===b?a:`${a} – ${b}`
+}
+function el(tag,cls,texto){
+  const e=document.createElement(tag);
+  if(cls)e.className=cls;
+  if(texto!=null)e.textContent=texto;
+  return e
+}
+function filaConBarra(etiqueta,detalle,n,max,unidad){
+  const f=el('div','tb-fila');
+  const et=el('div','tb-et',etiqueta);
+  if(detalle)et.appendChild(el('small',null,detalle));
+  const c=el('div','tb-cuenta',String(n));
+  c.title=`${n} ${n===1?unidad:unidad+'s'}`;
+  const barra=el('div','tb-barra');barra.title=c.title;
+  const b=el('span');b.style.width=Math.max(4,Math.round(n*100/max))+'%';
+  barra.appendChild(b);
+  f.append(et,c,barra);
+  return f
+}
+function renderTablero(){
+  const cont=document.getElementById('tablero');if(!cont)return;
+  const regs=consultasDelPeriodo();
+  const res=resumirTablero(regs);
+  cont.textContent='';
+
+  const cab=el('div');
+  cab.appendChild(el('div','tb-titulo','Lo que pregunta tu equipo'));
+  cab.appendChild(el('div','tb-sub',res.total
+    ?`${rangoDeFechas(res)} · en este teléfono. Nadie más lo ve hasta que compartes el resumen.`
+    :'Cada duda que se hace en 💬 Preguntar se anota aquí: qué se pregunta más y qué no trae el manual. Se queda en este teléfono.'));
+  cont.appendChild(cab);
+
+  if(tablero.length){
+    const per=el('div','tb-periodo');
+    for(const [k,txt] of [['7','7 días'],['30','30 días'],['todo','Todo']]){
+      const b=el('button','tb-chip'+(tableroPeriodo===k?' activo':''),txt);b.type='button';
+      b.onclick=()=>{tableroPeriodo=k;renderTablero()};
+      per.appendChild(b);
+    }
+    cont.appendChild(per);
+  }
+
+  if(!res.total){
+    const b=el('button','tb-btn primario',tablero.length?'No hay dudas en este periodo':'Ir a preguntar');b.type='button';
+    if(tablero.length)b.disabled=true;else b.onclick=()=>switchTab('chat');
+    const acc=el('div','tb-acciones');acc.appendChild(b);
+    cont.appendChild(acc);
+    return;
+  }
+
+  const tiles=el('div','tb-tiles');
+  const tile=(n,l,sub)=>{const t=el('div','tb-tile');t.appendChild(el('div','tb-n',n));const lb=el('div','tb-l',l);if(sub)lb.appendChild(el('small',null,sub));t.appendChild(lb);return t};
+  tiles.appendChild(tile(String(res.total),res.total===1?'duda':'dudas'));
+  tiles.appendChild(tile(res.pct+' %','resueltas con el manual',`${res.sirvieron} de ${res.total}`));
+  tiles.appendChild(tile(String(res.total-res.cubiertas),'no estaban en el manual',res.gaps.length&&res.gaps.length!==res.total-res.cubiertas?`${res.gaps.length} distintas`:null));
+  if(res.noSirvieron.length)tiles.appendChild(tile(String(res.noSirvieron.length),'👎 no sirvieron','el manual traía algo, pero no ayudó'));
+  cont.appendChild(tiles);
+
+  const bloque=(titulo,sub)=>{const b=el('div','tb-bloque');b.appendChild(el('div','tb-h',titulo));if(sub)b.appendChild(el('div','tb-hsub',sub));return b};
+
+  const bt=bloque('Lo más preguntado','Por la lámina que contestó. Lo que se repite es lo que conviene repasar con el equipo.');
+  if(res.temas.length){
+    const max=res.temas[0].n;
+    for(const t of res.temas.slice(0,6)){
+      const pags=[...t.paginas].sort((a,b)=>a-b);
+      const det=[res.secciones.length>1?t.sec:null,pags.length?(pags.length===1?'pág. ':'págs. ')+pags.join(', '):null].filter(Boolean).join(' · ');
+      bt.appendChild(filaConBarra(t.h,det,t.n,max,'duda'));
+    }
+  }else bt.appendChild(el('div','tb-vacio-lista','Todavía ninguna duda con lámina.'));
+  cont.appendChild(bt);
+
+  const bg=bloque('Lo que el manual no explica','Se preguntó y el manual no lo trae. Es la lista para mandar a quien hace los manuales.');
+  if(res.gaps.length){
+    for(const g of res.gaps.slice(0,12)){
+      const f=el('div','tb-fila');
+      const et=el('div','tb-et',g.q);
+      et.appendChild(el('small',null,[res.secciones.length>1?g.sec:null,fechaCorta(g.t)].filter(Boolean).join(' · ')));
+      f.append(et,el('div','tb-cuenta',g.n>1?'×'+g.n:''));
+      bg.appendChild(f);
+    }
+  }else bg.appendChild(el('div','tb-vacio-lista','Todo lo que se preguntó estaba en el manual.'));
+  cont.appendChild(bg);
+
+  if(res.noSirvieron.length){
+    const bn=bloque('Respuestas que no sirvieron','El manual traía algo, pero a quien preguntó no le ayudó: puede que la lámina no sea clara.');
+    for(const r of res.noSirvieron.slice(-8).reverse()){
+      const f=el('div','tb-fila');
+      const et=el('div','tb-et',r.q);
+      et.appendChild(el('small',null,[r.h?temaLegible(r.h):null,r.p?'pág. '+r.p:null,fechaCorta(r.t)].filter(Boolean).join(' · ')));
+      f.append(et,el('div','tb-cuenta',''));
+      bn.appendChild(f);
+    }
+    cont.appendChild(bn);
+  }
+
+  if(res.secciones.length>1){
+    const bs=bloque('Dudas por sección');
+    const max=res.secciones[0].n;
+    for(const s of res.secciones)bs.appendChild(filaConBarra(s.sec,null,s.n,max,'duda'));
+    cont.appendChild(bs);
+  }
+
+  const acc=el('div','tb-acciones');
+  const comp=el('button','tb-btn primario','📤 Compartir resumen');comp.type='button';comp.onclick=compartirResumen;
+  const imp=el('button','tb-btn','🖨 Imprimir');imp.type='button';imp.onclick=()=>window.print();
+  const bor=el('button','tb-btn borrar','Borrar registro');bor.type='button';bor.onclick=borrarTablero;
+  acc.append(comp,imp,bor);
+  cont.appendChild(acc);
+}
+function textoResumen(){
+  const res=resumirTablero(consultasDelPeriodo());
+  if(!res.total)return'';
+  const l=[`📊 Asistente de piso: lo que preguntó el equipo (${rangoDeFechas(res)})`];
+  if(res.secciones.length===1)l.push(`Sección: ${res.secciones[0].sec}`);
+  l.push('',`• ${res.total} ${res.total===1?'duda':'dudas'}; ${res.sirvieron} resueltas con el manual (${res.pct} %).`);
+  if(res.temas.length)l.push(`• Lo más preguntado: ${res.temas.slice(0,4).map(t=>`${t.h} (${t.n})`).join(', ')}.`);
+  if(res.gaps.length){
+    l.push(`• Lo que el manual no explica (${res.gaps.length}):`);
+    for(const g of res.gaps.slice(0,8))l.push(`   – ${g.q}${g.n>1?` (×${g.n})`:''}`);
+  }else l.push('• Todo lo que se preguntó estaba en el manual.');
+  if(res.noSirvieron.length)l.push(`• ${res.noSirvieron.length} ${res.noSirvieron.length===1?'respuesta marcada':'respuestas marcadas'} como que no sirvió.`);
+  if(res.secciones.length>1)l.push(`• Por sección: ${res.secciones.map(s=>`${s.sec} (${s.n})`).join(', ')}.`);
+  return l.join('\n')
+}
+async function compartirResumen(){
+  const texto=textoResumen();if(!texto)return;
+  if(navigator.share){
+    try{await navigator.share({title:'Lo que pregunta tu equipo',text:texto});return}
+    catch(e){if(e&&e.name==='AbortError')return}
+  }
+  try{
+    await navigator.clipboard.writeText(texto);
+    showToast('📋 Resumen copiado. Pégalo en WhatsApp o en un correo.','success',3500);
+  }catch{
+    showToast('No se pudo copiar el resumen en este navegador.','error',4000);
+  }
+}
+function borrarTablero(){
+  if(!confirm('¿Borrar todas las dudas anotadas en este teléfono? No se puede deshacer.'))return;
+  tablero=[];guardarTablero();renderTablero();
+  showToast('🗑️ Registro del tablero borrado','warn',2500);
+}
+
+/* ════════════════════════════════════════════════
    TABS
 ════════════════════════════════════════════════ */
 function switchTab(name){
@@ -3479,6 +3770,7 @@ function switchTab(name){
     document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);
     document.getElementById('panel-'+t).classList.toggle('active',t===name);
   });
+  if(name==='memory')renderTablero();
   /* En el celular, enfocar la caja abre el teclado, y el teclado tapa justo la
      respuesta que se acaba de pedir: pasaba en cada envío y en cada acceso
      rápido. El foco automático queda para quien tiene ratón. */
@@ -5171,6 +5463,8 @@ function responderSinModelo(q){
      página es literalmente de dónde sale lo que se está leyendo: el rótulo lo
      dice con esas palabras y no habla de citas, porque aquí nadie citó nada. */
   renderEvidencia(msgEl,figurasDeFragmentos(tarjetas.map(t=>t.c),null,fragmentos?null:'GAP'),'manual');
+  const idConsulta=registrarConsulta(q,!!fragmentos,tarjetas[0]&&tarjetas[0].c,'manual');
+  if(fragmentos)votoManual(msgEl,idConsulta);
   history.push({role:'user',content:q});
   history.push({role:'assistant',content:cuerpo});
   saveChatHistory();
@@ -6044,6 +6338,14 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
      en el piso, ejecutado— el dato que el aviso venía a poner en duda. */
   if(alerta)loaderEl.insertBefore(alerta,msgBody);
   if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal,certeza));
+  /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
+     manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */
+  let idConsulta=null;
+  if(contextoEnviado&&!cortada&&!/_\[Generación detenida/.test(rawText)){
+    const frags=ultimosFragmentos||[];
+    const fuente=frags.find(c=>c.page&&verif.citadas.has(String(c.page)))||frags[0];
+    idConsulta=registrarConsulta(originalQuestion,!esRespuestaSinDato(cleanFinal,certeza),fuente,'api');
+  }
 
   const footer=document.createElement('div');footer.className='msg-footer';
 
@@ -6130,6 +6432,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     goodBtn.classList.add('active');badBtn.classList.remove('active');cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
     addMemorySuccess(originalQuestion,cleanFinal);
+    if(idConsulta)votarConsulta(idConsulta,'bien');
     // v7.0: feedback visual inmediato
     showToast('✓ Respuesta marcada como correcta', 'success', 1800);
   };
@@ -6143,6 +6446,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
     addMemoryFail(originalQuestion,cleanFinal,noteEl.value.trim());
+    if(idConsulta)votarConsulta(idConsulta,'mal');
     showToast('✓ Feedback registrado en memoria', 'success', 1800);
   };
 
@@ -6195,6 +6499,7 @@ function loadTheme() {
 loadTheme();
 initSystemPromptCounter();
 loadSaved();
+cargarTablero();
 const restauracion=restaurarManualesGuardados().catch(e=>console.warn('restaurar',e));
 
 /* ════════════════════════════════════════════════
