@@ -2143,6 +2143,7 @@ function infinitivos(w){
 function weightedTerms(query){
   const palabras=palabrasDeConsulta(query);
   const terms=new Map();
+  const corregidas=new Map();
   const add=(t,w,g)=>{if(t&&!terms.has(t))terms.set(t,{w,g})};
   /* Se prueban TODAS las formas que existan en el índice, no solo cuando la
      escrita falta. La regla vieja —"si la palabra existe, el manual ya usa esa
@@ -2176,7 +2177,12 @@ function weightedTerms(query){
            falló ahí, no es una errata del asesor. Sin esto, «¿cómo cambio la
            llanta del coche?» volvía a pasar por pregunta contestable. */
         const cerca=masParecida(t);
-        if(cerca)add(cerca,SYNONYM_WEIGHT,(raizCorta(cerca)===raizCorta(t)?'~':'!')+k);
+        if(cerca){
+          add(cerca,SYNONYM_WEIGHT,(raizCorta(cerca)===raizCorta(t)?'~':'!')+k);
+          /* A sus sinónimos solo si está a una letra: «prmero» → «primero» sí;
+             «incapacidad» → «capacidad» (dos) llevaba a SURTIDO y LIMPIEZA. */
+          if(distanciaEdicion(t,cerca)<=1)corregidas.set(k,cerca);
+        }
       }
     }
   }
@@ -2187,6 +2193,9 @@ function weightedTerms(query){
      (88 de 88), así que no compran nada y cuestan una prueba de ruido. Donde sí
      hacen falta es en `terminosAusentes`, que es una comprobación y no una
      búsqueda: allí ensanchar solo puede callar un aviso, nunca inventarlo. */
+  /* La palabra corregida también llama a la puerta del diccionario: «q va
+     prmero en el pos» corregía a «primero», pero los sinónimos se buscaban con
+     «prmero», y «Prioridad 1» —como lo escriben los manuales— no llegaba. */
   for(const k of palabras){
     for(const base of variantes(k))for(const phrase of expandKeywords([base])){
       if(phrase===base)continue;
@@ -2194,6 +2203,15 @@ function weightedTerms(query){
          en plural («Pasillos: 90 cm»): el sinónimo se quedaba a una letra de su
          propia lámina. */
       for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
+    }
+    /* Los de la palabra corregida van a medio peso: son la apuesta de una
+       apuesta. Cuentan para no dejar en blanco la pregunta, pero no ordenan:
+       a peso entero, «las caisas ban con bolsa» corregía a «camisas» y sus
+       sinónimos —prenda alta, blusa— subían ENGANCHADO sobre la lámina que
+       dice «sin bolsa». */
+    if(corregidas.has(k))for(const base of variantes(corregidas.get(k)))for(const phrase of expandKeywords([base])){
+      if(phrase===base)continue;
+      for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT/2,'~'+k);
     }
   }
   return[...terms].map(([t,{w,g}])=>({t,w,g}))
@@ -2257,6 +2275,10 @@ function esVerbo(w){
   if(!si&&w.length>=5&&!bm25.df[w]){
     const f=fonetica(w);
     for(const v of VERBOS_FONETICOS)if(v.length>=5&&v[0]===f[0]&&distanciaEdicion(f,v)<=1){si=true;break}
+    /* Y lo que el corrector ya sabe llevar a una de estas palabras: «porcntaje»
+       suena a «porkntaje» y «porcentaje» a «porsentaje» —dos letras—, pero los
+       trigramas sí lo llevan a «porcentaje». */
+    if(!si){const c=masParecida(w);si=!!c&&VERBOS_DE_PISO.has(c)}
   }
   verbosVistos.set(w,si);
   return si
@@ -5533,7 +5555,11 @@ function seccionesPorRelevancia(q){
   /* En modo manual el filtro de sección activa vale igual: si el asesor dijo con
      qué manual trabaja, no tiene por qué recibir la lámina de otro. */
   const doc=docChunks.length?appState.manualActivo:null;
-  const buscar=c=>retrieve(c,{limit:12,doc}).filter(filtroSolidez(c));
+  /* Se filtra y DESPUÉS se corta. Cortando antes, los fragmentos que solo
+     trae el diccionario llenaban los doce lugares, el filtro los quitaba a
+     todos y la lámina con la palabra escrita se había quedado en el 13.º:
+     «que ba en la tore» salía en blanco teniendo TORRE en su página 11. */
+  const buscar=c=>retrieve(c,{limit:60,doc}).filter(filtroSolidez(c)).slice(0,12);
   const consulta=consultaDeBusqueda(q);
   /* Y la misma regla que en buildContext: una pregunta de una sola palabra se
      amplía de oficio con la anterior, pero si la palabra sola se sostiene manda
