@@ -12,6 +12,21 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Asistente"/>
+<!-- Lo que enseña WhatsApp al pegar el link. La imagen va con URL absoluta:
+     WhatsApp no resuelve rutas relativas y sin ella el link sale pelón. -->
+<meta name="description" content="Pregúntale al manual de montaje como hablas en piso. Te contesta con la página y la lámina exacta, y si no está, te lo dice."/>
+<meta property="og:type" content="website"/>
+<meta property="og:locale" content="es_MX"/>
+<meta property="og:site_name" content="Asistente de piso"/>
+<meta property="og:title" content="Asistente de piso"/>
+<meta property="og:description" content="Pregúntale al manual de montaje como hablas en piso. Te contesta con la página y la lámina exacta. Funciona sin señal."/>
+<meta property="og:url" content="https://gerardobr01.github.io/Asistente-de-piso/"/>
+<meta property="og:image" content="https://gerardobr01.github.io/Asistente-de-piso/icons/og.jpg"/>
+<meta property="og:image:type" content="image/jpeg"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="Asistente de piso: un globo de diálogo con una hoja de manual"/>
+<meta name="twitter:card" content="summary_large_image"/>
 <title>Asistente de piso — Mercadep · Visual Merchandising</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -361,6 +376,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .reasoning-block.open{display:block}
 .reasoning-block p{margin:0 0 5px}.reasoning-block p:last-child{margin:0}
 .msg-copy{background:none;border:1px solid var(--border);color:var(--text4);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
+.msg-share{border-color:rgba(37,211,102,0.35);color:var(--text2)}
+.msg-share:hover{background:rgba(37,211,102,0.08)}
 .msg-copy:hover{color:var(--text2);border-color:var(--border2);background:var(--s2)}
 .fb-btn{background:none;border:1px solid var(--border);color:var(--text4);font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
 .fb-btn:hover{border-color:var(--border2);background:var(--s2)}
@@ -683,6 +700,7 @@ footer span {
 /* Respuesta sin modelo: el manual tal cual, pero legible — una tarjeta por
    lámina, con de dónde sale arriba y las palabras que coincidieron marcadas. */
 .frag-aviso{font-size:12.5px;color:var(--text3);margin-bottom:8px}
+.frag-ausente{margin-bottom:8px;padding:8px 12px;background:rgba(245,166,35,0.09);border:1px solid rgba(245,166,35,0.28);border-left:3px solid var(--amber);border-radius:0 var(--r) var(--r) 0;font-size:13px;color:var(--text);line-height:1.5}
 .frag-card{background:var(--s1);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--r);padding:10px 12px;margin:8px 0}
 .frag-head{font-size:12px;font-weight:600;color:var(--gold2);letter-spacing:.2px;margin-bottom:4px}
 .frag-text{font-size:14px;line-height:1.65;color:var(--text);white-space:pre-line;overflow-wrap:anywhere}
@@ -1503,10 +1521,10 @@ const SYNONYMS={
   'marcademoa':['softline','contemporaneo','marca propia contemporaneo'],
   'marcademoc':['marca propia juvenil','juveniles mercadep','project anchor'],
   // ═══ REGLAS OPERATIVAS ═══
-  'sensor':['galleta','sensor galleta','sensor blando','antirrobo'],
+  'sensor':['galleta','sensor galleta','sensor blando','antirrobo','alarma'],
   'etiqueta':['plastiflecha','precio','etiquetado','tag'],
   'medida':['centimetros','separacion','distancia','cm'],
-  'pasillo':['alineacion','circulacion','80 cm','flujo cliente'],
+  'pasillo':['alineacion','circulacion','80 cm','flujo cliente','espacio'],
   /* Nadie en piso pregunta "¿cuánto pasillo dejo?": pregunta "¿cuánto espacio
      dejo para que pase la gente?". Sin este puente, la lámina de ALINEACIÓN
      —que dice "80 cm" y nunca escribe "pasillo"— no se alcanzaba. */
@@ -1612,6 +1630,7 @@ function rebuildCorpus(){
   bm25.avgdl=corpus.length?total/corpus.length:1;
   bm25.df=df;
   vocabTrigramas=null;
+  vocabFonetico=null;
   identificadores=null;
   vocabPorDoc=null;
   entidadesCorpus=null;
@@ -1656,6 +1675,43 @@ function raizCorta(w){
   return(w||'').replace(/(?:aciones|acion|ados|adas|ado|ada|ares|ales|iles|ar|er|ir|al|il|os|as|es|s|o|a|e)$/,'')
 }
 const ERRATA_MIN=0.6;
+/* Una errata de teclado cambia una o dos letras, no tres. Sin tope, el
+   parecido por trigramas corregía palabras bien escritas que el manual
+   simplemente no usa: «¿cómo se hace el inventario?» se leía como
+   «inventados» —de la nota de la portada— y la portada salía de respuesta. */
+function distanciaEdicion(a,b){
+  const m=a.length,n=b.length;
+  let prev2=null,prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      if(prev2&&i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])cur[j]=Math.min(cur[j],prev2[j-2]+1);
+    }
+    prev2=prev;prev=cur;
+  }
+  return prev[n]
+}
+const topeErrata=w=>w.length>=7?2:1;
+/* Cómo suena, no cómo se escribe: s/z/c, ll/y, b/v, la h muda. Los trigramas no
+   ven que «senzor» es «sensor» —en una palabra corta una sola letra rompe tres
+   de cuatro trigramas— y el asesor escribe de oído. */
+function fonetica(w){
+  return w.replace(/h/g,'').replace(/ll/g,'y').replace(/v/g,'b').replace(/qu/g,'k')
+    .replace(/c([ei])/g,'s$1').replace(/z/g,'s').replace(/c/g,'k').replace(/(.)\1+/g,'$1')
+}
+let vocabFonetico=null;
+function indiceFonetico(){
+  if(vocabFonetico)return vocabFonetico;
+  const m=new Map();
+  for(const t in bm25.df){
+    if(t.length<4)continue;
+    const k=fonetica(t);
+    const a=m.get(k);
+    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
+  }
+  return vocabFonetico=m
+}
 function masParecida(w){
   if(w.length<5)return null;
   const idx=indiceTrigramas(),gs=trigramas(w),cuenta=new Map();
@@ -1664,9 +1720,11 @@ function masParecida(w){
   for(const[t,c]of cuenta){
     if(Math.abs(t.length-w.length)>3)continue;
     const p=c/Math.max(gs.length,trigramas(t).length);
-    if(p>mejorP){mejorP=p;mejor=t}
+    if(p>mejorP&&distanciaEdicion(w,t)<=topeErrata(w)){mejorP=p;mejor=t}
   }
-  return mejorP>=ERRATA_MIN?mejor:null
+  if(mejorP>=ERRATA_MIN)return mejor;
+  const oido=indiceFonetico().get(fonetica(w));
+  return oido&&oido!==w?oido:null
 }
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
@@ -1958,7 +2016,9 @@ function variantes(w){
     const raices=[];
     const part=w.match(/^(.{3,})(?:ados|adas|ado|ada)$/);
     if(part)raices.push({raiz:part[1],part:true});
-    const conj=w.match(/^(.{3,})[aeo]$/);
+    /* «¿cómo se doblan los pantalones?»: la tercera del plural también es
+       verbo, y sin ella «doblan» solo llegaba a DOBLADO de rebote, como errata. */
+    const conj=w.match(/^(.{3,})(?:an|en|[aeo])$/);
     if(conj)raices.push({raiz:conj[1],part:false});
     /* Solo se deriva hacia el sustantivo, nunca hacia el verbo. La primera
        versión probaba también el infinitivo y reabrió un agujero que ya estaba
@@ -1968,7 +2028,9 @@ function variantes(w){
        asesor escribe el verbo y el manual titula el sustantivo, nunca al revés.
        Del participio sí se vuelve al sustantivo corto («rebajado» → «rebaja»),
        que es de donde el diccionario sabe seguir hasta LIQUIDACIÓN. */
-    const SUF_VERBO=['ado','ada','ados','adas','acion','aciones'];
+    /* «-eza» por «¿cuándo se limpia?»: la lámina se titula LIMPIEZA y dice
+       «limpiar», y la pregunta solo encontraba el check list. */
+    const SUF_VERBO=['ado','ada','ados','adas','acion','aciones','eza'];
     const SUF_PARTICIPIO=['a','o','ar'];
     for(const{raiz,part}of raices){
       const dip=raiz.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
@@ -2073,6 +2135,8 @@ function queryShingles(query){
   return out.slice(0,8)
 }
 
+const CHECKLIST=/\bcheck ?list\b|\bchecklist\b|lista de (?:verificacion|revision)/;
+const PIDE_CHECKLIST=/check|lista|revis|verific|pendiente|todo lo que/;
 const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separacion|separación|porcentaje|cantidad|piezas|\bcm\b|\bmts?\b|metro|%/i;
 
 function bm25Score(c,terms){
@@ -2091,7 +2155,17 @@ function bm25Score(c,terms){
    API decir "esto no está en el manual" en vez de entregar lo menos malo. */
 function retrieve(query,opts){
   const{source=null,limit=40,doc=null}=opts||{};
-  const terms=weightedTerms(query);
+  let terms=weightedTerms(query);
+  /* Dentro de UNA sección, su propio nombre no distingue nada: todo el manual
+     de CASUAL HOMBRE es de hombre. «entayado de hombres» contestaba con la
+     portada —titulada «140 CASUAL HOMBRE»— antes que con ENTALLADO. Entre
+     secciones sí distingue, y ahí (sin `doc`) se queda. */
+  if(doc){
+    const propio=new Set(tokenize(nombreDeSeccion(doc)));
+    const esDelNombre=g=>variantes(g.replace(/^[~!]/,'')).some(v=>propio.has(v));
+    const resto=terms.filter(x=>!esDelNombre(x.g));
+    if(resto.length)terms=resto;
+  }
   if(!terms.length)return[];
   const strong=terms.filter(t=>t.w===1);
   const flojos=terms.filter(t=>t.w!==1);
@@ -2135,6 +2209,11 @@ function retrieve(query,opts){
       for(const{t}of strong)if(h.includes(t)){score+=2;break}
     }
     if(wantsNumber&&c.hasDigits)score+=1.5;
+    /* El check list repite en un renglón cada regla del manual, y en una página
+       corta: BM25 lo subía por encima de la lámina que la explica. «¿para dónde
+       va el gancho?» contestaba con «Ganchos hacia la izquierda y 3 cm…» en vez
+       de ENGANCHADO, con su dibujo. Baja salvo que se pregunte por él. */
+    if(c.heading&&CHECKLIST.test(normalizeText(c.heading))&&!PIDE_CHECKLIST.test(normalizeText(query)))score*=0.6;
     /* Estos dos bonos suben un fragmento por lo que ES, no por lo que se
        preguntó. Sin evidencia léxica de por medio convertían cualquier regla
        obligatoria en la respuesta a todo, que es como una pregunta de cocina
@@ -2634,8 +2713,12 @@ const AUSENTE_MIN_LETRAS_SOLA=6;
 const INTERROGATIVAS=new Set(['cuanto','cuanta','cuantos','cuantas','cuando','cual','cuales',
   'como','donde','adonde','quien','quienes','porque','acaso','tambien','tampoco','entonces','ademas']);
 const FORMA_DE_VERBO=/(?:amos|emos|imos|aron|eron|ando|iendo|arla|arlo|arle|arse|arlos|arlas|aria|eria|an|en|as|es|mos)$/;
+/* «vacaciones», «exhibiciones», «novedades»: terminan como verbo («-es») y son
+   sustantivos. Sin esto, «¿cuántos días de vacaciones tengo?» contestaba con
+   MANIQUÍES —por los «21 días»— sin avisar de que el manual no habla de eso. */
+const SUSTANTIVO=/(?:ciones|siones|dades|tudes|ajes|ores|umbres)$/;
 function esPalabraDeTema(w){
-  return !INTERROGATIVAS.has(w)&&!FORMA_DE_VERBO.test(w)
+  return !INTERROGATIVAS.has(w)&&(SUSTANTIVO.test(w)||!FORMA_DE_VERBO.test(w))
 }
 /* Los pares de palabras que el asesor escribió PEGADAS, sin nada en medio. Es
    la unidad que hacía falta: «marca propia» es una cosa y «marca» y «propia»
@@ -3547,10 +3630,14 @@ function cargarTablero(){
   if(!Array.isArray(tablero))tablero=[];
 }
 function guardarTablero(){try{localStorage.setItem(TABLERO_KEY,JSON.stringify(tablero))}catch{}}
-function registrarConsulta(q,encontro,chunk,modo){
+/* `dudoso`: hubo tarjetas, pero una palabra clave de la pregunta no está en el
+   manual. Cuenta como no explicada hasta que alguien diga con 👍 que sí le
+   sirvió: quien preguntó sabe mejor que el buscador si «espacio» era «pasillo». */
+function registrarConsulta(q,encontro,chunk,modo,dudoso){
   const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),
     q:String(q).slice(0,200),sec:seccionActiva(),ok:!!encontro,modo,voto:null};
-  if(encontro&&chunk){
+  if(dudoso)r.dudoso=true;
+  if((encontro||dudoso)&&chunk){
     if(chunk.source==='pdf')r.sec=nombreDeSeccion(chunk.docName);
     /* «CHECK LIST: 140 CASUAL HOMBRE»: el nombre de la sección ya va aparte. */
     let h=(chunk.heading||'').replace(/^#+\s*/,'').trim();
@@ -3567,7 +3654,9 @@ function registrarConsulta(q,encontro,chunk,modo){
 }
 function votarConsulta(id,voto){
   const r=tablero.find(x=>x.id===id);if(!r)return;
-  r.voto=voto;guardarTablero();
+  r.voto=voto;
+  if(r.dudoso)r.ok=voto==='bien';
+  guardarTablero();
 }
 /* 👍/👎 para la respuesta sin modelo. Sin esto «resuelta» solo podía querer
    decir «el manual traía algo», y el piloto necesita saber si le sirvió. */
@@ -3586,6 +3675,7 @@ function votoManual(msgEl,id){
   mal.onclick=()=>votar(mal,'mal');
   footer.append(pr,bien,mal);
   msgEl.appendChild(footer);
+  return footer
 }
 
 function temaLegible(h){
@@ -5346,10 +5436,7 @@ function renglonesClave(lineas,terminos,max){
   });
   return pun.filter(p=>p.s>0).sort((a,b)=>b.s-a.s||a.i-b.i).slice(0,max).map(p=>p.i).sort((a,b)=>a-b)
 }
-function tarjetaDeFragmento(c,texto,terminos){
-  const card=document.createElement('div');card.className='frag-card';
-  const head=document.createElement('div');head.className='frag-head';
-  head.textContent='📄 '+rotuloDeFragmento(c);
+function lineasDeFragmento(c,texto){
   /* El título ya va en la cabecera de la tarjeta: repetido como «## …» en la
      primera línea solo empujaba el texto hacia abajo. */
   const titulo=normalizeText(c.heading||'').trim();
@@ -5357,8 +5444,14 @@ function tarjetaDeFragmento(c,texto,terminos){
      termina la frase: «a 15 / cm de la bastilla, por / dentro». Se unen los
      renglones que siguen a una frase sin terminar. */
   const corrido=texto.replace(/([^.:;!?\n])\n(?=[a-záéíóúñ0-9(])/g,'$1 ');
-  const lineas=corrido.split('\n').map(l=>l.replace(/^#+\s*/,'').trim())
-    .filter((l,i)=>l&&!(i<2&&titulo&&normalizeText(l).trim()===titulo));
+  return corrido.split('\n').map(l=>l.replace(/^#+\s*/,'').trim())
+    .filter((l,i)=>l&&!(i<2&&titulo&&normalizeText(l).trim()===titulo))
+}
+function tarjetaDeFragmento(c,texto,terminos){
+  const card=document.createElement('div');card.className='frag-card';
+  const head=document.createElement('div');head.className='frag-head';
+  head.textContent='📄 '+rotuloDeFragmento(c);
+  const lineas=lineasDeFragmento(c,texto);
   const completo=lineas.join('\n');
   const body=document.createElement('div');body.className='frag-text';
   card.append(head,body);
@@ -5394,6 +5487,84 @@ function tarjetaDeFragmento(c,texto,terminos){
   }
   return card
 }
+/* ════════════════════════════════════════════════
+   COMPARTIR UNA RESPUESTA (WhatsApp)
+
+   En el piso la duda no se queda en quien preguntó: se reenvía al grupo de la
+   sección o a la jefa. Se manda la pregunta, lo que dice el manual y de dónde
+   sale, y la lámina como foto —en WhatsApp el texto va de pie de foto—. Si la
+   respuesta traía un aviso, el aviso viaja con ella: reenviada sin él, una
+   respuesta dudosa llega al grupo como si fuera segura.
+══════════════════════════════════════════════════ */
+const URL_PUBLICA='https://gerardobr01.github.io/Asistente-de-piso/';
+function enlaceDeLaApp(){
+  return location.protocol==='https:'?location.origin+location.pathname.replace(/index\.html$/,''):URL_PUBLICA
+}
+/* WhatsApp marca negritas con un asterisco, no con dos. */
+function markdownAWhatsApp(md){
+  return String(md||'')
+    .replace(/```[\s\S]*?```/g,'')
+    .replace(/^#{1,6}\s*(.+)$/gm,'*$1*')
+    .replace(/\*\*(.+?)\*\*/g,'*$1*')
+    .replace(/__(.+?)__/g,'_$1_')
+    .replace(/`([^`]+)`/g,'$1')
+    .replace(/^[ \t]*[-*][ \t]+/gm,'• ')
+    .replace(/^>\s?/gm,'')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim()
+}
+function textoParaCompartir({pregunta,respuesta,fuente,aviso}){
+  const l=['*❓ '+String(pregunta).trim()+'*',''];
+  if(aviso)l.push(aviso,'');
+  l.push(respuesta.length>900?respuesta.slice(0,900).replace(/\s+\S*$/,'')+' …':respuesta);
+  if(fuente)l.push('','📄 '+fuente);
+  l.push('','_Asistente de piso_ · '+enlaceDeLaApp());
+  return l.join('\n')
+}
+function archivoDeLamina(fig){
+  if(!fig||!/^data:image\/\w+;base64,/.test(fig.dataUrl||''))return null;
+  try{
+    const[cab,datos]=fig.dataUrl.split(',');
+    const tipo=cab.slice(5,cab.indexOf(';'));
+    const bin=atob(datos),buf=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)buf[i]=bin.charCodeAt(i);
+    return new File([buf],`lamina-pag-${fig.page||'x'}.${tipo==='image/png'?'png':'jpg'}`,{type:tipo});
+  }catch{return null}
+}
+async function compartirRespuesta(datos){
+  const texto=textoParaCompartir(datos);
+  if(navigator.share){
+    const f=archivoDeLamina(datos.figura);
+    const conFoto=!!(f&&navigator.canShare&&navigator.canShare({files:[f]}));
+    try{await navigator.share(conFoto?{files:[f],text:texto}:{text:texto});return}
+    catch(e){if(e&&e.name==='AbortError')return}
+  }
+  /* Sin hoja de compartir (la computadora): WhatsApp Web con el texto. La
+     lámina no cabe en un link, así que se avisa. */
+  const w=window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank','noopener');
+  if(w){if(datos.figura)showToast('La lámina no se puede adjuntar desde aquí: mándala desde el celular.','warn',3500);return}
+  try{
+    await navigator.clipboard.writeText(texto);
+    showToast('📋 Respuesta copiada. Pégala en WhatsApp.','success',3000);
+  }catch{showToast('No se pudo compartir desde este navegador.','error',3500)}
+}
+function botonCompartir(datos){
+  const b=document.createElement('button');b.type='button';b.className='msg-copy msg-share';
+  b.textContent='📤 WhatsApp';b.setAttribute('aria-label','Compartir esta respuesta por WhatsApp');
+  b.onclick=()=>compartirRespuesta(typeof datos==='function'?datos():datos);
+  return b
+}
+/* Lo que se reenvía en modo manual es lo mismo que se ve en la tarjeta: los
+   renglones que coinciden, no la sección entera. */
+function extractoParaCompartir(t,terminos){
+  const lineas=lineasDeFragmento(t.c,t.texto);
+  const completo=lineas.join('\n');
+  if(completo.length<=420)return completo;
+  const clave=renglonesClave(lineas,terminos,3);
+  return clave.length?'… '+clave.map(i=>lineas[i]).join('\n… ')+' …':completo.slice(0,420)+' …'
+}
+
 function responderSinModelo(q){
   ocultarBannerRestaurar();
   switchTab('chat');
@@ -5453,16 +5624,37 @@ function responderSinModelo(q){
      Ahora es una tarjeta por lámina —de dónde sale arriba, el texto normal, las
      palabras que coincidieron marcadas— y el aviso de que nadie lo interpretó
      cabe en una línea. Lo que se guarda en el historial sigue siendo el texto. */
+  /* Hay tarjetas, pero la palabra que manda en la pregunta no está en el
+     manual: «¿cuántos días de descanso tengo?» salía con MANIQUÍES por el «21
+     días», y «¿cuánto cuesta la playera?» con la mesa de entrada. Con API key el
+     modelo ya recibía este aviso; sin ella, las tarjetas se enseñaban como si
+     contestaran. Se enseñan igual —puede que sirvan— pero con la advertencia
+     arriba, sin lámina que las respalde, y al tablero va como duda que el
+     manual no explica. */
+  const activo=appState.manualActivo||(docs.length===1?docs[0].name:null);
+  const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
+  const avisoAusente=ausentes.length?(()=>{
+    const lista=a=>a.map(i=>'«'+i.palabra+'»').join(' ni ');
+    const deNadie=ausentes.filter(i=>i.enNinguno),deOtra=ausentes.filter(i=>!i.enNinguno);
+    const partes=[];
+    if(deNadie.length)partes.push(`El manual no menciona ${lista(deNadie)}.`);
+    if(deOtra.length)partes.push(`${lista(deOtra)} no ${deOtra.length===1?'está':'están'} en esta sección; sí en ${nombreDeSeccion(deOtra[0].duenos[0].docName)}.`);
+    return '⚠ '+partes.join(' ')+' Te enseño lo más cercano que encontré: revisa que sí sea lo que buscas.'
+  })():'';
   const aviso='⚪ Así lo dice el manual, tal cual: sin modelo conectado, nadie lo interpretó.';
   const invitacion=!invitoApi&&navigator.onLine
     ?'Con una API key (en ⚙️) además te contesta en una frase, citando la página.':'';
   const cuerpo=fragmentos
-    ?`> ${aviso}\n\n${fragmentos}`
+    ?`${avisoAusente?`> ${avisoAusente}\n`:''}> ${aviso}\n\n${fragmentos}`
     :`**Nada${enOtra?' de esta sección':' del manual'} coincide con esa pregunta.** Prefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras.${enOtra?` **Pero eso sí aparece en ${enOtra}**, que también tienes cargada: cámbiala arriba y vuelve a preguntar.`:' Prueba con otras palabras o con un acceso rápido.'}`;
   const msgEl=appendMsg('assistant',fragmentos?'':cuerpo,false);
   const cuerpoEl=msgEl.querySelector('.msg-body');
   if(fragmentos){
     const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    if(avisoAusente){
+      const aa=document.createElement('div');aa.className='frag-ausente';aa.textContent=avisoAusente;
+      cuerpoEl.appendChild(aa);
+    }
     const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
     cuerpoEl.appendChild(av);
     for(const t of tarjetas)cuerpoEl.appendChild(tarjetaDeFragmento(t.c,t.texto,terminos));
@@ -5475,9 +5667,21 @@ function responderSinModelo(q){
   /* En modo manual los fragmentos se enseñan enteros en pantalla, así que su
      página es literalmente de dónde sale lo que se está leyendo: el rótulo lo
      dice con esas palabras y no habla de citas, porque aquí nadie citó nada. */
-  renderEvidencia(msgEl,figurasDeFragmentos(tarjetas.map(t=>t.c),null,fragmentos?null:'GAP'),'manual');
-  const idConsulta=registrarConsulta(q,!!fragmentos,tarjetas[0]&&tarjetas[0].c,'manual');
-  if(fragmentos)votoManual(msgEl,idConsulta);
+  const figs=fragmentos&&!avisoAusente?figurasDeFragmentos(tarjetas.map(t=>t.c),null,null):[];
+  renderEvidencia(msgEl,figs,figs.origen==='cita'?'manual':'manualPagina');
+  const idConsulta=registrarConsulta(q,!!fragmentos&&!avisoAusente,tarjetas[0]&&tarjetas[0].c,'manual',!!avisoAusente);
+  if(fragmentos){
+    const pie=votoManual(msgEl,idConsulta);
+    const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    const t0=tarjetas[0];
+    pie.appendChild(botonCompartir(()=>({
+      pregunta:q,
+      respuesta:extractoParaCompartir(t0,terminos),
+      fuente:rotuloDeFragmento(t0.c),
+      aviso:avisoAusente,
+      figura:figs.length&&figs.origen==='cita'?figs[0]:null
+    })));
+  }
   history.push({role:'user',content:q});
   history.push({role:'assistant',content:cuerpo});
   saveChatHistory();
@@ -5959,6 +6163,7 @@ function figurasDeFragmentos(chunks,citas,respuesta,certeza){
      no la del pantalón de la primera. Manda la tarjeta mejor puntuada, que es
      la que el asesor lee primero; si su página no trae lámina, no se enseña
      ninguna en vez de la de una coincidencia floja. */
+  const sinModelo=citas===null;
   if(citas===null){
     const primera=chunks.find(c=>c.source==='pdf'&&c.page);
     if(!primera)return[];
@@ -6061,6 +6266,15 @@ function figurasDeFragmentos(chunks,citas,respuesta,certeza){
      Tres imágenes debajo de un dato se leen como tres pruebas del dato, y lo
      único que se puede sostener es que son de esa página. */
   const identificada=!!(orden.length&&orden[0].p>0);
+  /* Sin modelo no hay respuesta con la que reconocer la lámina, solo la sección
+     de la tarjeta. Si la única lámina de la página está rotulada con OTRA
+     sección, no es la de esta duda: «¿cómo doblo las playeras?» enseñaba el
+     dibujo de ENTALLADO —misma pág. 4— bajo «la lámina de la que sale esto».
+     Mejor ninguna que una que afirma algo falso. */
+  if(sinModelo&&!identificada){
+    orden=orden.filter(o=>!o.f.heading);
+    if(!orden.length)return[];
+  }
   const tope=identificada?MAX_EVIDENCIA:1;
   for(const{f}of orden){
     if(salida.length>=tope)break;
@@ -6080,6 +6294,7 @@ const ROTULO_EVIDENCIA={
   pagina:['De la página que cita la respuesta — no pude distinguir cuál lámina sostiene el dato:','De las páginas que cita la respuesta — no pude distinguir cuáles sostienen el dato:'],
   consultado:['Lámina del fragmento que se consultó (la respuesta no citó página):','Láminas de los fragmentos que se consultaron (la respuesta no citó página):'],
   manual:['Del manual, la lámina de la que sale esto:','Del manual, las láminas de las que sale esto:'],
+  manualPagina:['De la misma página del manual (no sé si esta lámina es justo la de tu duda):','De la misma página del manual (no sé si estas láminas son justo las de tu duda):'],
 };
 function renderEvidencia(container,figuras,origen){
   if(!figuras||!figuras.length)return;
@@ -6368,13 +6583,15 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   /* El aviso va ARRIBA del cuerpo. Colgado debajo, el asesor ya había leído —y
      en el piso, ejecutado— el dato que el aviso venía a poner en duda. */
   if(alerta)loaderEl.insertBefore(alerta,msgBody);
-  if(contextoEnviado)renderEvidencia(loaderEl,figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal,certeza));
+  const figsApi=contextoEnviado?figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal,certeza):[];
+  if(contextoEnviado)renderEvidencia(loaderEl,figsApi);
   /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
      manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */
-  let idConsulta=null;
+  let idConsulta=null,fuenteCitada=null;
   if(contextoEnviado&&!cortada&&!/_\[Generación detenida/.test(rawText)){
     const frags=ultimosFragmentos||[];
     const fuente=frags.find(c=>c.page&&verif.citadas.has(String(c.page)))||frags[0];
+    if(fuente&&fuente.page&&verif.citadas.has(String(fuente.page)))fuenteCitada=fuente;
     idConsulta=registrarConsulta(originalQuestion,!esRespuestaSinDato(cleanFinal,certeza),fuente,'api');
   }
 
@@ -6494,6 +6711,16 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     }
   };
   footer.appendChild(copyBtn);
+  /* La cortada no se comparte: es el razonamiento, no la respuesta. La lámina
+     solo viaja si la respuesta la citó y se identificó; «de la misma página»
+     no alcanza para mandarla al grupo como prueba. */
+  if(!cortada)footer.appendChild(botonCompartir({
+    pregunta:originalQuestion,
+    respuesta:markdownAWhatsApp(cleanFinal),
+    fuente:fuenteCitada?rotuloDeFragmento(fuenteCitada):'',
+    aviso:alerta?'⚠ La app no pudo comprobar todo en el manual: revisa la lámina antes de montarlo.':'',
+    figura:figsApi.length&&figsApi.origen==='cita'?figsApi[0]:null
+  }));
 
   loaderEl.appendChild(noteWrap);
   loaderEl.appendChild(footer);
