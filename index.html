@@ -666,6 +666,10 @@ footer span {
 .vacio-ej{font-family:'DM Sans',sans-serif;font-size:14px;text-align:left;padding:11px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--s2);color:var(--text);cursor:pointer;transition:all .15s;line-height:1.4}
 .vacio-ej:hover{border-color:rgba(212,172,84,0.45);background:var(--gglow)}
 .vacio-ej small{display:block;font-size:11.5px;color:var(--text3);margin-top:2px}
+.vacio-demo{font-family:'DM Sans',sans-serif;width:100%;margin-bottom:14px;padding:12px 14px;border-radius:var(--r);border:1px solid rgba(212,172,84,0.55);background:var(--gglow);color:var(--gold2);font-size:14.5px;font-weight:600;text-align:left;cursor:pointer;transition:all .15s;line-height:1.4}
+.vacio-demo:hover{border-color:var(--gold)}
+.vacio-demo:disabled{opacity:.6;cursor:wait}
+.vacio-demo small{display:block;font-size:11.5px;font-weight:400;color:var(--text3);margin-top:2px}
 .vacio-nota{font-size:12px;color:var(--text3);margin-top:14px;line-height:1.6}
 .vacio-nota a,.vacio-link{color:var(--gold);cursor:pointer;text-decoration:underline;background:none;border:none;font:inherit;padding:0}
 
@@ -1353,7 +1357,11 @@ const DEFAULT_QUICK=[
 /* ════════════════════════════════════════════════
    STOPWORDS + SINÓNIMOS
 ════════════════════════════════════════════════ */
-const STOPWORDS=new Set(['de','la','el','en','y','a','los','del','se','las','un','por','con','una','para','es','al','lo','como','pero','sus','le','si','sobre','este','entre','cuando','desde','sin','que','hay','tiene','esta','son','muy','tambien','estar','hasta','puede','todo','asi','nos','ni','bien','ser','porque','todos','solo','anos','dos','mismo','hace','cada','eso','han','sido','tres','otro','tanto','donde','cual','esto','estos','estas','ese','esa','esos','esas','mi','tu','su','nos','les','me','te']);
+const STOPWORDS=new Set(['de','la','el','en','y','a','los','del','se','las','un','por','con','una','para','es','al','lo','como','pero','sus','le','si','sobre','este','entre','cuando','desde','sin','que','hay','tiene','esta','son','muy','tambien','estar','hasta','puede','todo','asi','nos','ni','bien','ser','porque','todos','solo','anos','dos','mismo','hace','cada','eso','han','sido','tres','otro','tanto','donde','cual','esto','estos','estas','ese','esa','esos','esas','mi','tu','su','nos','les','me','te',
+  /* «¿Qué dice el manual sobre X?» es la plantilla de los accesos rápidos, y
+     «manual» está en la portada y en el índice de cualquier manual: la portada
+     entraba como segunda tarjeta a todo lo que se preguntaba así. */
+  'manual','manuales']);
 const SYNONYMS={
   // ═══ TIPOS DE PRENDA ═══
   'chamarra':['parte alta','exterior','prenda exterior','outerwear'],
@@ -5410,15 +5418,45 @@ function renderChatVacio(){
     lista.appendChild(b);
   }
   const nota=document.createElement('div');nota.className='vacio-nota';
+  let demo=null;
   if(!conPdf){
-    nota.append('Esta demo usa un manual inventado. ');
+    demo=document.createElement('button');demo.className='vacio-demo';demo.type='button';
+    demo.textContent='📕 Probar con un manual de ejemplo';
+    const d=document.createElement('small');d.textContent='Un PDF de 8 láminas: lo lee aquí mismo y te enseña la lámina de cada respuesta';
+    demo.appendChild(d);
+    demo.onclick=()=>cargarManualDeEjemplo(demo);
+    nota.append('Todo en esta demo es inventado: cliente, marcas y medidas. ');
     const a=document.createElement('button');a.className='vacio-link';a.type='button';
     a.textContent='Carga el tuyo en PDF';a.onclick=()=>switchTab('docs');
     nota.append(a,': se lee aquí mismo, sin subirlo a ningún lado.');
   }else{
     nota.textContent='Nada de esto sale de tu teléfono.';
   }
-  el.append(t,s,lista,nota);
+  el.append(t,s);
+  if(demo)el.append(demo);
+  el.append(lista,nota);
+}
+
+/* ── MANUAL DE EJEMPLO ────────────────────────────
+   Sin un PDF la demo no enseña lo más importante —que lee el manual de verdad,
+   detecta la sección y pone la lámina junto a la respuesta—, y para verlo había
+   que tener a mano un manual de campaña. Este es sintético (docs/manual-demo/)
+   y pasa por el mismo camino que uno del asesor: se procesa en el teléfono, se
+   guarda en el dispositivo y se puede quitar como cualquier otro. */
+async function cargarManualDeEjemplo(btn){
+  const rotulo=btn?btn.firstChild.textContent:'';
+  if(btn){btn.disabled=true;btn.firstChild.textContent='📕 Abriendo el manual de ejemplo…'}
+  try{
+    const r=await fetch('docs/manual-demo.pdf');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const blob=await r.blob();
+    await handleFiles([new File([blob],'140 CASUAL HOMBRE.pdf',{type:'application/pdf'})]);
+    switchTab('chat');
+  }catch(e){
+    console.warn('manual de ejemplo',e);
+    showToast('No se pudo abrir el manual de ejemplo. Revisa la conexión y vuelve a intentarlo.','error',5000);
+    if(btn&&btn.isConnected){btn.disabled=false;btn.firstChild.textContent=rotulo}
+  }
 }
 function toggleQuickEdit(){
   editingQuick=!editingQuick;

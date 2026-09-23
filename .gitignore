@@ -3,3 +3,5 @@
 *.pdf
 *.xlsx
 *.csv
+# El manual sintético de la demo sí va en el repo
+!docs/manual-demo.pdf
