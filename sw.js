@@ -11,7 +11,7 @@
    - Librerías de cdnjs y fuentes: sus URL llevan versión, así que lo
      guardado no caduca: primero la caché.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.2.0';
+const VERSION='ap-v1.3.0';
 const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf'];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -19,7 +19,7 @@ const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js'
 ];
-const FUENTES='https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap';
+const FUENTES='https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap';
 
 async function guardarFuentes(cache){
   /* La hoja de Google Fonts apunta a los .woff2 de gstatic: hay que bajar
