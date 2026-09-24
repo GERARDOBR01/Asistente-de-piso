@@ -701,6 +701,7 @@ footer span {
    lámina, con de dónde sale arriba y las palabras que coincidieron marcadas. */
 .frag-aviso{font-size:12.5px;color:var(--text3);margin-bottom:8px}
 .frag-ausente{margin-bottom:8px;padding:8px 12px;background:rgba(245,166,35,0.09);border:1px solid rgba(245,166,35,0.28);border-left:3px solid var(--amber);border-radius:0 var(--r) var(--r) 0;font-size:13px;color:var(--text);line-height:1.5}
+.frag-ausente.frag-parecidas{background:transparent;border-color:var(--border2);border-left-color:var(--text3);color:var(--text2)}
 .frag-card{background:var(--s1);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--r);padding:10px 12px;margin:8px 0}
 .frag-head{font-size:12px;font-weight:600;color:var(--gold2);letter-spacing:.2px;margin-bottom:4px}
 .frag-text{font-size:14px;line-height:1.65;color:var(--text);white-space:pre-line;overflow-wrap:anywhere}
@@ -1636,6 +1637,7 @@ function rebuildCorpus(){
   bm25.df=df;
   vocabTrigramas=null;
   vocabFonetico=null;
+  foneticoPorDoc=new Map();
   verbosVistos=new Map();
   nombresEnTexto=null;
   identificadores=null;
@@ -1719,19 +1721,52 @@ function indiceFonetico(){
   }
   return vocabFonetico=m
 }
+/* La errata se corrige hacia el manual que el asesor tiene abierto. El
+   vocabulario es el de todos los manuales cargados, y con treinta a la vez
+   «botyas» en VINOS Y LICORES se corregía a «botas» —de ZAPATOS, más común y a
+   una letra— en vez de a «botellas», que es la palabra de su lámina. Primero
+   se busca entre las palabras de la sección activa y, si ahí no hay nada, en
+   todas, como antes. */
+let foneticoPorDoc=new Map();
+function indiceFoneticoDeDoc(doc){
+  let m=foneticoPorDoc.get(doc);
+  if(m)return m;
+  m=new Map();
+  for(const[t]of vocabDeDoc(doc)){
+    if(t.length<4||!(t in bm25.df))continue;
+    const k=fonetica(t),a=m.get(k);
+    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
+  }
+  foneticoPorDoc.set(doc,m);
+  return m
+}
 function masParecida(w){
+  const activo=docChunks.length&&appState.manualActivo?appState.manualActivo:null;
+  const delActivo=activo?vocabDeDoc(activo):null;
+  const enActivo=t=>!!delActivo&&delActivo.has(t);
+  const fw=fonetica(w);
+  /* «que ba en la tore»: TORRE está en la página 11 y la palabra tiene cuatro
+     letras, así que el corrector ni la miraba. En una palabra tan corta una
+     letra ya es otra palabra, por eso aquí solo vale el sonido idéntico —la rr
+     que se escribe r— y nunca el parecido. */
+  if(w.length===4){
+    const t=(activo&&indiceFoneticoDeDoc(activo).get(fw))||indiceFonetico().get(fw);
+    return t&&t!==w?t:null
+  }
   if(w.length<5)return null;
   const idx=indiceTrigramas(),gs=trigramas(w),cuenta=new Map();
   for(const g of gs){const a=idx.get(g);if(!a)continue;for(const t of a)cuenta.set(t,(cuenta.get(t)||0)+1)}
-  let mejor=null,mejorP=0;
+  let mejor=null,mejorP=0,propia=null,propiaP=0;
   for(const[t,c]of cuenta){
     if(Math.abs(t.length-w.length)>3)continue;
     const p=c/Math.max(gs.length,trigramas(t).length);
-    if(p>mejorP&&distanciaEdicion(w,t)<=topeErrata(w)){mejorP=p;mejor=t}
+    if(p<ERRATA_MIN||distanciaEdicion(w,t)>topeErrata(w))continue;
+    if(p>mejorP){mejorP=p;mejor=t}
+    if(enActivo(t)&&p>propiaP){propiaP=p;propia=t}
   }
-  if(mejorP>=ERRATA_MIN)return mejor;
-  const fw=fonetica(w);
-  const oido=indiceFonetico().get(fw);
+  if(propia)return propia;
+  if(!activo&&mejor)return mejor;
+  const oido=(activo?indiceFoneticoDeDoc(activo):indiceFonetico()).get(fw);
   if(oido&&oido!==w)return oido;
   /* Cómo suena Y una letra comida, que es la errata del pulgar: «likidcion»,
      «mankies», «serveas». Ni los trigramas (demasiados rotos en una palabra
@@ -1739,13 +1774,34 @@ function masParecida(w){
      pregunta. Misma primera letra, a una edición de sonido, y entre varias la
      que más usa el manual. Solo en palabras de seis o más: en una de cinco,
      una letra ya es otra palabra, y «motos» salía como «moños». */
-  if(fw.length<6)return null;
-  let cerca=null,df=0;
-  for(const[k,t]of indiceFonetico()){
-    if(k[0]!==fw[0]||Math.abs(k.length-fw.length)>1||t===w)continue;
-    if(bm25.df[t]>df&&distanciaEdicion(fw,k)<=1){df=bm25.df[t];cerca=t}
-  }
-  return cerca
+  const cercaDe=(tope,difLargo,extra,soloActivo)=>{
+    let cerca=null,df=0;
+    for(const[k,t]of indiceFonetico()){
+      if(k[0]!==fw[0]||Math.abs(k.length-fw.length)>difLargo||t===w||!extra(k))continue;
+      if(soloActivo&&!enActivo(t))continue;
+      if(bm25.df[t]>df&&distanciaEdicion(fw,k)<=tope){df=bm25.df[t];cerca=t}
+    }
+    return cerca
+  };
+  /* Las dos letras que se come el pulgar en una palabra larga: «liidasion»,
+     «likidacon», «clasiican», «laavajiyas». A una sola edición no llegaban a
+     LIQUIDACIÓN, CLASIFICACIÓN ni LAVAVAJILLAS. Con dos ediciones cualquier
+     palabra se parece a otra, así que el listón sube: ocho sonidos o más, las
+     dos primeras letras y la última iguales, y la palabra buena más larga que
+     la errata, porque el pulgar come letras. Sin esto último «mascotas» se
+     leía como «macetas» y la pregunta trampa encontraba la lámina de PROPS.
+     «incapacidad» → «capacidad» sigue fuera, porque empieza distinto. */
+  const dosLetras=k=>k.length>fw.length&&k.slice(0,2)===fw.slice(0,2)&&k.slice(-1)===fw.slice(-1);
+  const pasos=soloActivo=>(fw.length>=6&&cercaDe(1,1,()=>true,soloActivo))
+    ||(fw.length>=8&&cercaDe(2,2,dosLetras,soloActivo))||null;
+  if(!activo)return pasos(false);
+  const propiaCerca=pasos(true);
+  if(propiaCerca)return propiaCerca;
+  /* Nada en la sección activa: lo de siempre, en todos los manuales. */
+  if(mejor)return mejor;
+  const oidoTodos=indiceFonetico().get(fw);
+  if(oidoTodos&&oidoTodos!==w)return oidoTodos;
+  return pasos(false)
 }
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
@@ -5560,6 +5616,7 @@ function seccionesPorRelevancia(q){
      todos y la lámina con la palabra escrita se había quedado en el 13.º:
      «que ba en la tore» salía en blanco teniendo TORRE en su página 11. */
   const buscar=c=>retrieve(c,{limit:60,doc}).filter(filtroSolidez(c)).slice(0,12);
+  if(esOperacionDeTienda(q))return[];
   const consulta=consultaDeBusqueda(q);
   /* Y la misma regla que en buildContext: una pregunta de una sola palabra se
      amplía de oficio con la anterior, pero si la palabra sola se sostiene manda
@@ -5736,6 +5793,95 @@ function extractoParaCompartir(t,terminos){
   const clave=renglonesClave(lineas,terminos,3);
   return clave.length?'… '+clave.map(i=>lineas[i]).join('\n… ')+' …':completo.slice(0,420)+' …'
 }
+/* ── ¿CUÁNTOS? ────────────────────────────────────
+   «¿Cuántos maniquíes van por sección?» enseñaba la lámina de MANIQUÍES como
+   si contestara, y esa lámina no da ninguna cantidad de maniquíes: da cada
+   cuántos días se renuevan. El número estaba, pero era de otra cosa. Cuando se
+   pregunta cuántos de algo, la tarjeta tiene que traer un número pegado a eso
+   —«3 tipos de perímetro», «un zapato por charola», «carga mínima 3
+   artículos»— o un número suelto en la lámina que lleva su nombre —ALTURAS:
+   «para las mesas coloca máximo 4»—. Si ninguna lo trae, se dice. */
+const NUMEROS_EN_LETRA=new Set(['un','una','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','quince','veinte']);
+/* Lo que no se cuenta: unidades de medida y de tiempo. «¿a cuántos cm va el
+   sensor?» y «¿cada cuántos días?» son otra pregunta. */
+const NO_SE_CUENTA=new Set(['cm','centimetros','metros','mts','mt','pulgadas','dias','semanas','meses','horas','minutos','veces','pesos']);
+function cosaQueSeCuenta(q){
+  const t=normalizeText(q).split(/\s+/).filter(Boolean);
+  for(let i=0;i<t.length-1;i++){
+    if(!/^cuant[oa]s$/.test(t[i]))continue;
+    if(i>0&&(t[i-1]==='cada'||t[i-1]==='a'))return null;
+    const x=t[i+1];
+    if(x.length<4||/^\d/.test(x)||NO_SE_CUENTA.has(x))return null;
+    return x;
+  }
+  return null
+}
+function mismaCosa(a,b){
+  const s=w=>(w||'').replace(/(es|s)$/,'');
+  const A=s(a),B=s(b);
+  return !!A&&(A===B||(A.length>=5&&B.length>=5&&A.slice(0,5)===B.slice(0,5)))
+}
+function traeCifraDe(texto,titulo,x){
+  const tok=(texto||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .match(/\d+(?:[.,]\d+)?%?|[a-zñ]+|[.:;•]/g)||[];
+  const enTitulo=normalizeText(titulo||'').split(/\s+/).some(w=>w&&mismaCosa(w,x));
+  const esNumero=w=>/^\d/.test(w)||NUMEROS_EN_LETRA.has(w);
+  /* El renglón no cuenta como fin de frase: el PDF corta donde cortó la
+     maqueta, y «bloques de 2 ó 3 / piezas» es una sola frase. */
+  const finDeFrase=w=>!w||/^[.:;•]$/.test(w);
+  for(let i=0;i<tok.length;i++){
+    const w=tok[i];
+    if(!esNumero(w))continue;
+    /* «2 o 3 piezas», «10 a 15»: el rango cuenta como un solo número. */
+    let j=i+1;
+    while(j+1<tok.length&&/^(a|o|y|al|hasta)$/.test(tok[j])&&esNumero(tok[j+1]))j+=2;
+    const sig=tok[j];
+    if(!/^\d/.test(w)){
+      /* «un» casi siempre es artículo: «nunca un maniquí sin zapatos» no dice
+         cuántos. Cuenta si reparte —«un zapato por charola»— o si lo acota
+         —«solo un estilo de vida»—. */
+      if(!mismaCosa(sig,x))continue;
+      if(/^un[oa]?$/.test(w)&&tok[j+1]!=='por'&&!/^(solo|solamente|unicamente|maximo|minimo)$/.test(tok[i-1]||''))continue;
+      return true
+    }
+    if(mismaCosa(sig,x))return true;
+    if(i>0&&mismaCosa(tok[i-1],x))return true;
+    if(finDeFrase(sig)){
+      if(enTitulo)return true;
+      for(let k=Math.max(0,i-4);k<i;k++)if(mismaCosa(tok[k],x))return true;
+    }
+  }
+  return false
+}
+function hablaDe(texto,titulo,x){
+  return normalizeText((titulo||'')+' '+(texto||'')).split(/\s+/).some(w=>w&&mismaCosa(w,x))
+}
+/* ── LO QUE PASA EN LA TIENDA, NO EN EL MUEBLE ─────
+   «¿Qué hago si se va la luz?» enseñaba EQUILIBRIO, porque la lámina habla de
+   la luz del focal; «¿cómo uso la caja registradora?» enseñaba MUEBLES EN
+   POS, porque el diccionario lleva «caja» al punto de venta. Las palabras son
+   del manual y la pregunta no: es de operación de tienda, y ningún manual de
+   exhibición la contesta. Son frases, no palabras sueltas: «¿cómo va la luz en
+   el focal?» y «¿qué va en la caja?» sí son del manual. */
+const OPERACION_DE_TIENDA=[
+  /\bse (va|fue|vaya|iba) la luz\b/,/\b(sin|no hay) luz\b/,/\bapagon/,
+  /\bcaja registradora\b/,/\bcorte de caja\b/,/\bcuadrar (la )?caja\b/,
+];
+/* La palabra como la escribió el asesor —«maniquíes», «góndola»— y no como
+   queda normalizada para buscar. */
+function palabraOriginal(q,x){
+  return(q.match(/[\p{L}\p{N}]+/gu)||[]).find(w=>normalizeText(w).trim()===x)||x
+}
+function avisoSinCifra(q,x){
+  const pal=q.match(/[\p{L}\p{N}]+/gu)||[];
+  const original=palabraOriginal(q,x);
+  const cuantos=/^cu[aá]ntas$/i.test(pal.find(w=>/^cu[aá]nt[oa]s$/i.test(w))||'')?'cuántas':'cuántos';
+  return `⚠ El manual habla de «${original}», pero no dice ${cuantos}. Te enseño lo que sí dice: revisa si te sirve.`
+}
+function esOperacionDeTienda(q){
+  const n=normalizeText(q||'').replace(/\s+/g,' ');
+  return OPERACION_DE_TIENDA.some(p=>p.test(n))
+}
 
 function responderSinModelo(q){
   ocultarBannerRestaurar();
@@ -5782,7 +5928,7 @@ function responderSinModelo(q){
      coincide" mientras BLANCOS —cargado, a un clic— tenía la lámina. La misma
      comprobación que ya se hace con API key, aquí sin gastar nada. */
   let enOtra=null;
-  if(!fragmentos&&docChunks.length&&appState.manualActivo&&docs.length>1){
+  if(!fragmentos&&docChunks.length&&appState.manualActivo&&docs.length>1&&!esOperacionDeTienda(q)){
     const otra=otraSeccionConEvidencia(consultaDeBusqueda(q),appState.manualActivo);
     if(otra)enOtra=otra.nombre;
     else{
@@ -5805,7 +5951,10 @@ function responderSinModelo(q){
      manual no explica. */
   const activo=appState.manualActivo||(docs.length===1?docs[0].name:null);
   const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
-  const avisoAusente=ausentes.length?(()=>{
+  const cuenta=fragmentos&&!ausentes.length?cosaQueSeCuenta(q):null;
+  const sinCifra=!!cuenta&&tarjetas.some(t=>hablaDe(t.texto,t.c.heading,cuenta))
+    &&!tarjetas.some(t=>traeCifraDe(t.texto,t.c.heading,cuenta));
+  const avisoAusente=sinCifra?avisoSinCifra(q,cuenta):ausentes.length?(()=>{
     const lista=a=>a.map(i=>'«'+i.palabra+'»').join(' ni ');
     const deNadie=ausentes.filter(i=>i.enNinguno),deOtra=ausentes.filter(i=>!i.enNinguno);
     const partes=[];
@@ -5813,18 +5962,45 @@ function responderSinModelo(q){
     if(deOtra.length)partes.push(`${lista(deOtra)} no ${deOtra.length===1?'está':'están'} en esta sección; sí en ${nombreDeSeccion(deOtra[0].duenos[0].docName)}.`);
     return '⚠ '+partes.join(' ')+' Te enseño lo más cercano que encontré: revisa que sí sea lo que buscas.'
   })():'';
+  /* La tarjeta llegó solo por el diccionario: ni una palabra escrita por el
+     asesor, ni una errata corregida. Medido con 30 manuales, así llegaban 20 de
+     las 21 preguntas «que no están» que aun así enseñaban tarjeta —«¿dónde van
+     los props?» salía con LIQUIDACIÓN por «estilos de vida», «¿en qué mundo van
+     los cinturones?» con COLECCIÓN MES ACTUAL por «accesorio»— y solo 2 de las
+     186 buenas. En esas dos también es verdad que el manual no usa la palabra
+     («liquidación», «góndola»), así que el aviso no miente en ningún caso. Es
+     más suave que el de arriba: la lámina se queda, porque sí es del manual. */
+  const primera=relevantes[0];
+  const porParecidas=fragmentos&&!avisoAusente&&primera&&primera.hits===0&&primera.hitsErrata===0
+    ?(()=>{
+      const voc=activo?vocabDeDoc(activo):null;
+      const pesos=weightedTerms(consultaDeBusqueda(q));
+      const enTarjeta=' '+normalizeText((primera.c.heading||'')+' '+primera.c.text).replace(/\s+/g,' ')+' ';
+      const out=[];
+      for(const k of new Set(pesos.filter(x=>x.g&&x.g[0]==='~').map(x=>x.g.slice(1)))){
+        if(k.length<4||esVerbo(k)||(voc&&variantes(k).some(v=>voc.has(v))))continue;
+        const como=pesos.find(x=>x.g==='~'+k&&enTarjeta.includes(' '+x.t+' '));
+        if(como)out.push({dijo:palabraOriginal(q,k),como:como.t});
+      }
+      return out
+    })():[];
+  /* Es una nota, no una alarma: dice lo que pasó —la palabra no está, se
+     buscó por otra— y deja al asesor juzgar con la tarjeta delante. */
+  const avisoParecidas=porParecidas.length
+    ?'ℹ Tu manual no dice '+porParecidas.map(p=>`«${p.dijo}»`).join(' ni ')+'; lo encontré como '+porParecidas.map(p=>`«${p.como}»`).join(' y ')+'.':'';
+  const avisoVisible=avisoAusente||avisoParecidas;
   const aviso='⚪ Así lo dice el manual, tal cual: sin modelo conectado, nadie lo interpretó.';
   const invitacion=!invitoApi&&navigator.onLine
     ?'Con una API key (en ⚙️) además te contesta en una frase, citando la página.':'';
   const cuerpo=fragmentos
-    ?`${avisoAusente?`> ${avisoAusente}\n`:''}> ${aviso}\n\n${fragmentos}`
+    ?`${avisoVisible?`> ${avisoVisible}\n`:''}> ${aviso}\n\n${fragmentos}`
     :`**Nada${enOtra?' de esta sección':' del manual'} coincide con esa pregunta.** Prefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras.${enOtra?` **Pero eso sí aparece en ${enOtra}**, que también tienes cargada: cámbiala arriba y vuelve a preguntar.`:' Prueba con otras palabras o con un acceso rápido.'}`;
   const msgEl=appendMsg('assistant',fragmentos?'':cuerpo,false);
   const cuerpoEl=msgEl.querySelector('.msg-body');
   if(fragmentos){
     const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
-    if(avisoAusente){
-      const aa=document.createElement('div');aa.className='frag-ausente';aa.textContent=avisoAusente;
+    if(avisoVisible){
+      const aa=document.createElement('div');aa.className=avisoAusente?'frag-ausente':'frag-ausente frag-parecidas';aa.textContent=avisoVisible;
       cuerpoEl.appendChild(aa);
     }
     const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
@@ -5850,7 +6026,7 @@ function responderSinModelo(q){
       pregunta:q,
       respuesta:extractoParaCompartir(t0,terminos),
       fuente:rotuloDeFragmento(t0.c),
-      aviso:avisoAusente,
+      aviso:avisoVisible,
       figura:figs.length&&figs.origen==='cita'?figs[0]:null
     })));
   }
@@ -7350,6 +7526,30 @@ function correrPruebas(){
   ];
   for(const p of pruebasCerteza)filas.push({tipo:'certeza',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
 
+  /* «¿Cuántos…?» con una lámina que habla de eso pero no lo cuenta, y las
+     preguntas de operación de tienda que usan palabras del manual. Salieron de
+     la evaluación con 30 manuales reales; los textos de abajo son los de esas
+     láminas, sin nombres. */
+  const pruebasCifras=[
+    {nombre:'«¿cuántos maniquíes van por sección?» pregunta por maniquíes',ok:cosaQueSeCuenta('¿cuántos maniquíes van por sección?')==='maniquies'},
+    {nombre:'«¿cada cuánto cambio el maniquí?» no cuenta nada',ok:cosaQueSeCuenta('¿cada cuánto cambio el maniquí?')===null},
+    {nombre:'«¿a cuántos cm va el sensor?» es una medida, no una cuenta',ok:cosaQueSeCuenta('¿a cuántos cm va el sensor?')===null},
+    {nombre:'«cada 21 días» y «un maniquí sin zapatos» no dicen cuántos maniquíes',
+      ok:!traeCifraDe('Se renuevan cada 21 días. Nunca un maniquí sin zapatos.','MANIQUÍES','maniquies')},
+    {nombre:'ALTURAS «coloca máximo 4» sí dice cuántas alturas',
+      ok:traeCifraDe('Alturas genéricas. Para las mesas coloca máximo 4. Colócalas en pares.','ALTURAS','alturas')},
+    {nombre:'«un zapato por charola» sí dice cuántos zapatos',ok:traeCifraDe('Coloca un zapato por charola.','SNEAKERS','zapatos')},
+    {nombre:'«existen tres tipos de perímetros» sí dice cuántos tipos',ok:traeCifraDe('Existen tres tipos de perímetros:','PERÍMETROS','tipos')},
+    {nombre:'«solo 1 o 2 estilos de vida» sí dice cuántos estilos',ok:traeCifraDe('Realizar solo 1 o 2 estilos de vida por mundo','ESTILO DE VIDA','estilos')},
+    {nombre:'«carga mínima 3 artículos» sí dice cuántos artículos',ok:traeCifraDe('Carga mínima 3 artículos, carga máximo 6 artículos.','MESAS','articulos')},
+    {nombre:'el renglón cortado «bloques de 2 ó 3 / piezas» sí dice cuántas piezas',ok:traeCifraDe('Exhibe la mercancía en bloques de 2 ó 3\npiezas.','VIÑETA CENTRAL','piezas')},
+    {nombre:'«¿qué hago si se va la luz?» es de operación de tienda',ok:esOperacionDeTienda('¿qué hago si se va la luz?')},
+    {nombre:'«¿cómo uso la caja registradora?» también',ok:esOperacionDeTienda('¿cómo uso la caja registradora?')},
+    {nombre:'«¿cómo va la luz en el focal?» NO lo es',ok:!esOperacionDeTienda('¿cómo va la luz en el focal?')},
+    {nombre:'«¿qué va en la caja?» NO lo es',ok:!esOperacionDeTienda('¿qué va en la caja?')},
+  ];
+  for(const p of pruebasCifras)filas.push({tipo:'cifras',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+
   const conManuales=pruebasConManuales();
   filas.push(...conManuales);
 
@@ -7383,6 +7583,7 @@ function correrPruebas(){
     rotulo:`${pruebasRotulo.filter(p=>p.ok).length}/${pruebasRotulo.length}`,
     morfologia:`${pruebasMorfologia.filter(p=>p.ok).length}/${pruebasMorfologia.length}`,
     estado:`${pruebasEstado.filter(p=>p.ok).length}/${pruebasEstado.length}`,
+    cifras:`${pruebasCifras.filter(p=>p.ok).length}/${pruebasCifras.length}`,
     seccion:`${pruebasSeccion.filter(p=>p.ok).length}/${pruebasSeccion.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
