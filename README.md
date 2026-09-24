@@ -19,8 +19,8 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F5F1E8?labelColor=0B0B0D">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F5F1E8?labelColor=0B0B0D">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F5F1E8?labelColor=0B0B0D">
-  <img alt="Arnés interno" src="https://img.shields.io/badge/arn%C3%A9s-91%2F91-F5F1E8?labelColor=0B0B0D">
-  <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2087%25-F5F1E8?labelColor=0B0B0D">
+  <img alt="Arnés interno" src="https://img.shields.io/badge/arn%C3%A9s-118%2F118-F5F1E8?labelColor=0B0B0D">
+  <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F5F1E8?labelColor=0B0B0D">
 </p>
 
 Asistente conversacional de una sola página para el personal de piso de una tienda:
@@ -49,13 +49,17 @@ verificada a mano:
 
 | | Resultado |
 |---|---|
-| 186 preguntas de piso: la lámina que contesta sale entre las 3 primeras | **162/186 (87 %)** |
-| … y en primer lugar | 128/186 |
+| 186 preguntas de piso: la lámina que contesta sale entre las 3 primeras | **166/186 (89 %)** |
+| … y en primer lugar | 137/186 (74 %) |
 | Preguntas que se quedan sin ninguna respuesta | **0** |
 | Las mismas 186, escritas con faltas de celular («donde ban las sandalas»): sin respuesta | 6 |
 | 118 preguntas hechas en un manual que no las contiene: dice «no está» | **117/118** |
 | 30 preguntas trampa que ningún manual contesta («¿qué hago si se va la luz?»): ninguna sale con tarjeta | **30/30** |
 | Fragmentos o cifras sacados de otro manual | **0** |
+
+En primer lugar eran 128. Subió a 137 cuando los rótulos sueltos de los dibujos dejaron de ganar
+por cortos y las palabras que escribió el asesor empezaron a pesar más que sus sinónimos. Los
+«no está», las trampas y los avisos quedaron igual.
 
 El último renglón es el que más cuido. La misma pregunta tiene cifras distintas según la
 sección, y un dato de otra sección suena cierto aunque esté mal.
@@ -82,6 +86,10 @@ luz como elemento de equilibrio de una exhibición. Con el manual demo
 También probé quitarle las seis etapas para que la respuesta saliera mientras se escribe. El
 primer texto bajó a 0.9 s, pero acertó 51/60 en vez de 55: dos veces dijo «no está» cuando
 sí estaba. La regla era no perder más de un acierto a cambio de velocidad, así que no entró.
+
+Estos números son de antes de cambiar el orden de las láminas (arriba). Ese cambio no movió
+cuántas preguntas llevan el dato al modelo (182 de 186), pero sí el orden en que llega, así
+que falta volver a medirlo con una key.
 
 ## En 37 segundos
 
@@ -117,6 +125,7 @@ pregunta, lo dice — no rellena con la sección más cercana.
 
 - **Un solo archivo `index.html`.** Sin build, sin bundler, sin backend propio, sin
   servidor que mantener. Se publica como archivo estático y se abre desde un link.
+  Es a propósito: [por qué, y cómo se recorre](#por-qué-todo-vive-en-un-solo-indexhtml).
 - **Conocimiento embebido y estructurado**, con un diccionario de sinónimos y alias por
   término — la gente no pregunta con el vocabulario del manual. "Acomodar" tiene que
   encontrar "exhibir", "clasificar" y "mercadear".
@@ -159,6 +168,45 @@ pregunta, lo dice — no rellena con la sección más cercana.
 - **Cada respuesta declara su certeza** —`ALTA`, `MEDIA` o `GAP`— en una última línea que se
   lee automáticamente, no se muestra, y decide el distintivo del mensaje y si se enseña
   lámina o no.
+
+### Por qué todo vive en un solo `index.html`
+
+Son unas 8,200 líneas en un archivo, y a primera vista parece desorden. Lo decidí así por
+cómo se usa la app en el piso:
+
+- **Tiene que abrir sin señal.** En el piso la señal va y viene, y la prueba de la junta es
+  poner el celular en modo avión y seguir preguntando. El service worker (`sw.js`) guarda
+  la página, las tres librerías del CDN y las fuentes. Como todo el código viaja en un solo
+  archivo, el celular nunca queda con el JavaScript nuevo y el HTML viejo.
+- **Se publica sin compilar.** GitHub Pages sirve el archivo tal cual: no hay build que se
+  rompa, ni `node_modules` que caduquen, ni servidor que pagar. Lo que está en `main` es lo
+  que abre el asesor.
+- **Se puede revisar entero.** Todo lo que la app hace con la pregunta y con la key está en
+  un archivo que se lee en GitHub o en DevTools. No hay un backend mío en medio.
+- **El arnés prueba el código que corre.** `index.html?test=1` ejecuta las mismas funciones
+  que usa el asesor, no una copia.
+
+Para recorrerlo: unas 1,150 líneas son estilos, 350 son las pantallas y el resto es
+JavaScript, partido en bloques con un rótulo `/* ════ NOMBRE ════ */`. Se busca el rótulo
+con Ctrl+F:
+
+| Rótulo | Qué hace |
+|---|---|
+| `STOPWORDS + SINÓNIMOS` y `MOTOR 2 — CORPUS UNIFICADO Y RETRIEVAL BM25` | La búsqueda: BM25, variantes, erratas y cuándo decir «no está» |
+| `MOTOR 2 — RECONSTRUCCIÓN LAYOUT-AWARE` y `MOTOR 2 — DETECCIÓN DE FIGURAS` | Lee el PDF por columnas y recorta las láminas |
+| `MANUALES GUARDADOS EN EL DISPOSITIVO` | Guarda los manuales en IndexedDB para no reprocesarlos |
+| `MODO SIN MODELO — retrieval local, cero red` | El modo manual |
+| `CONSTRUCCIÓN DE CONTEXTO` | Qué fragmentos llegan al modelo |
+| `STREAMING` y `REINTENTOS Y RESPALDO` | Llamadas a Gemini y OpenAI, y el modelo de respaldo |
+| `EVIDENCIA VISUAL` y `VERIFICACIÓN CONTRA EL CONTEXTO` | Qué lámina se enseña y cuándo sale un aviso |
+| `ARNÉS DE MEDICIÓN — abrir con ?test=1` | Las pruebas |
+
+Una cuarta parte del JavaScript son comentarios. Casi todos explican por qué una regla es
+como es, con la pregunta que la hizo necesaria.
+
+Lo partiría en módulos si entra otra persona a trabajar en él. Se puede hacer sin
+bundler; el costo es que el service worker tendría que guardar varios archivos de la misma
+versión.
 
 ### Cómo se mide
 
