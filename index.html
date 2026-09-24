@@ -397,6 +397,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .evidencia-fig.ampliada{max-width:100%;cursor:zoom-out}
 .verify-warn{margin-top:8px;padding:9px 13px;background:rgba(245,166,35,0.09);border:1px solid rgba(245,166,35,0.28);border-left:2px solid var(--amber);border-radius:0 var(--r) var(--r) 0;font-size:11.5px;color:var(--text2);line-height:1.65;font-family:'Geist',system-ui,sans-serif}
 .verify-warn strong{color:var(--amber);font-weight:600}
+.cita-manual{margin-top:8px;padding:8px 12px;border-left:2px solid var(--gold);background:var(--s2);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text2);line-height:1.6}
+.cita-manual b{display:block;margin-bottom:2px;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
 .reasoning-block{margin-top:6px;padding:10px 14px;background:var(--s1);border:1px solid var(--border);border-left:2px solid rgba(255,90,110,0.35);border-radius:0 var(--r) var(--r) 0;font-size:11.5px;color:var(--text3);line-height:1.75;display:none;font-family:'Geist',system-ui,sans-serif}
 .reasoning-block.open{display:block}
 .reasoning-block p{margin:0 0 5px}.reasoning-block p:last-child{margin:0}
@@ -1377,10 +1379,10 @@ body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10
 SALUDOS (hola, buenos días, qué tal, etc.):
 - NO es fuera de tema. Responde amable en 1-2 oraciones invitando a preguntar sobre la sección del manual cargado.
 - Ejemplo: "Hola. ¿En qué te ayudo con exhibición o reglas de Hombres Mercadep?"
-- Sin formato de 6 etapas.
+- Sin CITA.
 
 PREGUNTAS FUERA DE TEMA (clima, tareas escolares, chisme, programación general — NO saludos):
-- NO uses el formato de 6 etapas ni [PENSAMIENTO INTERNO].
+- Sin CITA.
 - Responde solo: "Solo puedo ayudarte con reglas de exhibición y visual merchandising de Mercadep. ¿Tienes alguna duda de piso?"
 - Máximo 2 oraciones. Sin bullets ni explicaciones extra.
 
@@ -1395,65 +1397,31 @@ QUÉ FUENTE MANDA:
 
 SOBRE TU CREADOR: Solo si preguntan EXPLÍCITAMENTE quién te creó o programó, responde: "Fui creado por Gerardo Barrera, Asesor de piso de Mercadep Zona Piloto." En cualquier otra respuesta, NUNCA menciones quién te creó.
 
-NUNCA repitas ni resumas el razonamiento interno dentro de [RESPUESTA FINAL]. Ahí va únicamente la respuesta directa al asesor.
+No escribas análisis, pasos ni reformulaciones de la pregunta: el asesor está parado frente al mueble y lee solo la respuesta.
 
 REGLA DE ORO: Mandatory > Recommendation > Exception.
 Responde con autoridad en Mandatory, con caveat en Recommendation, y especifica contexto en Exception.
 
-ALGORITMO OBLIGATORIO — cada respuesta usa este formato:
-
-[PENSAMIENTO INTERNO]
-
-ETAPA 1 — INTENT
-Clasifico la pregunta:
-- mercadeo: cómo armar/montar algo físicamente
-- clasificación: dónde va qué marca o producto
-- marcas propias: MarcaDemoB / MarcaDemoA / MarcaDemoC
-- básicos: reglas operativas (sensor, gancho, etiqueta)
-- normativa: medidas, pasillos, capacidades
-
-ETAPA 2 — EXPANSIÓN SEMÁNTICA
-Reformulo la pregunta 3 veces con terminología Mercadep:
-V1 (técnica): [versión del manual]
-V2 (piso): [como lo diría el asesor]
-V3 (sinónimos): [términos alternativos]
-
-ETAPA 3 — RETRIEVAL PONDERADO
-Busco en el contexto con las 3 variantes.
-Peso: [MANDATORY] > [RECOMMENDATION] > [EXCEPTION]
-Jerarquía: Mundo → Marca → Colección → Concepto
-Fuente encontrada: [citar de dónde viene la información]
-
-ETAPA 4 — RAZONAMIENTO EN CAPAS
-① Literal del manual: [qué dice exactamente]
-② Inferencia lógica: [qué se puede deducir]
-③ Módulo de sección: [regla específica de Hombres]
-④ Principio general: [si aplica a todo Mercadep]
-Conflicto detectado: [sí/no — si sí, cuál]
-
-ETAPA 5 — MOTOR DE CERTEZA
-ALTO: regla Mandatory confirmada → respondo con autoridad
-MEDIO: Recommendation o inferencia → agrego caveat
-BAJO/GAP: no cubierto → admito el límite honestamente
-
-ETAPA 6 — RESPUESTA CALIBRADA
-Tono = nivel de certeza de Etapa 5.
-Terminología Mercadep obligatoria:
-focal · estilo de vida · básicos · cross-merchandising ·
-enganchado · colorización · POS · tringla · planograma ·
-barata · entallado · perímetro · mundo · corner · genérico ·
-descanso visual · triangulación · slow mover
+FORMATO OBLIGATORIO — tu salida empieza directamente con la marca, sin nada antes:
 
 [RESPUESTA FINAL AL ASESOR]
-
-[Respuesta directa en 2-4 oraciones. Sin introducción.
+[Respuesta directa en 1-4 oraciones. Sin introducción.
 Sin "recuerda que". Sin conclusiones vacías.
+Toda medida, cantidad, porcentaje o regla va seguida de su página: "(pág. N)".
 Bullets solo para listas. Prosa para preguntas directas.
 Negritas solo para términos técnicos del manual.]
-
+CITA: «la frase del contexto que sostiene la respuesta, copiada letra por letra» (pág. N)
 CERTEZA: ALTA | MEDIA | GAP
 
-La última línea de la respuesta es SIEMPRE esa marca, sola, sin nada más:
+Cómo buscar antes de contestar:
+- Revisa TODO el contexto antes de decidir que algo no está. El asesor pregunta como habla en piso: "alarma" es sensor, "espacio para que pase la gente" es pasillo, "entayado" es entallado.
+
+La CITA:
+- Una sola frase copiada tal cual del contexto, de 25 palabras como máximo: sin parafrasear, sin corregir erratas, sin unir frases de lugares distintos.
+- La app la busca en los fragmentos que consultaste. Si no aparece tal cual, se le avisa al asesor que no se pudo verificar.
+- Sin CITA en saludos, redirecciones, preguntas sobre la app ni respuestas GAP.
+
+La última línea es SIEMPRE la marca de certeza, sola, sin nada más:
 - ALTA: el dato está literal en el contexto y lo citaste con su página.
 - MEDIA: lo dedujiste de lo que hay, o es una recomendación, no una regla.
 - GAP: el contexto no lo cubre y lo dijiste con "El manual no especifica [X]".
@@ -1655,9 +1623,9 @@ const PROVIDERS={
        presupuesto pensando y la respuesta salía cortada a media frase, justo
        antes del dato: el asesor veía el razonamiento y ninguna contestación.
        Subir el tope no bastó —con 8000 seguía cortándose—, así que se apaga el
-       pensamiento interno. No se pierde nada: este asistente ya razona en seis
-       etapas visibles y auditables, que es precisamente lo contrario de un
-       razonamiento que no se puede leer.
+       pensamiento interno. Lo que se puede auditar no es un razonamiento largo
+       sino la CITA: la frase literal del manual que sostiene la respuesta, que
+       la app busca en los fragmentos consultados antes de enseñarla.
        La perilla no es la misma en todas las familias: los 2.x usan
        `thinkingBudget` y rechazan `thinkingLevel`; los 3.x usan `thinkingLevel`,
        y 3.7 y 3.8 no bajan de LOW. */
@@ -3780,13 +3748,13 @@ function clearMemory(){
 ════════════════════════════════════════════════ */
 /* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
    viejo guardado en localStorage, sin pedirle que borre nada a mano. */
-const PROMPT_VERSION='11.0';  // 11.0: la cadena real no es fuente (regla 8b)
+const PROMPT_VERSION='12.0';  // 12.0: respuesta directa con CITA literal, sin las seis etapas
 const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
-2. Preguntas fuera de visual merchandising Mercadep (clima, tareas, etc.) → redirección corta, SIN formato de 6 etapas.
+2. Preguntas fuera de visual merchandising Mercadep (clima, tareas, etc.) → redirección corta, sin CITA.
 3. Menciona al creador SOLO si preguntan explícitamente quién te creó o programó.
-4. [RESPUESTA FINAL] contiene SOLO la respuesta al asesor — nunca repitas ETAPAS ni razonamiento interno.
+4. Tu salida empieza con [RESPUESTA FINAL AL ASESOR]: nada de análisis, etapas ni reformulaciones antes.
 5. Conflictos documentados en el contexto → cítalos; nunca digas "no especifica" si hay conflicto registrado.
    Si el conflicto es entre el PDF cargado y el manual interno, el valor operativo es el del PDF (ver regla 9).
 6. Otra tienda + tema VM → aclara que solo conoces Mercadep y responde la regla Mercadep si está en el contexto.
@@ -3849,22 +3817,65 @@ function assessQuestionScope(q){
   return{hasVm,clearlyOff,otherStore,isGreeting,isVmQuestion};
 }
 /* ── CERTEZA DECLARADA ────────────────────────────
-   La ETAPA 5 del prompt clasifica la certeza desde siempre, pero moría dentro
-   del razonamiento: nada la comprobaba y el asesor no la veía. Ahora la
+   El prompt de seis etapas clasificaba la certeza en la quinta, pero moría
+   dentro del razonamiento: nada la comprobaba y el asesor no la veía. Ahora la
    respuesta cierra con una línea que la máquina puede leer, y esa línea decide
    dos cosas visibles: el distintivo del mensaje y si se enseña lámina o no.
    Una respuesta que admite el hueco no puede venir acompañada de una foto. */
 const CERTEZA_RE=/(?:^|\n)\s*\**\s*CERTEZA\s*:?\s*\**\s*(ALTA|MEDIA|GAP)\s*\**\s*\.?\s*$/i;
 function certezaDe(texto){
-  const m=(texto||'').match(CERTEZA_RE);
+  const m=sinLineaDeCita(texto).match(CERTEZA_RE);
   return m?m[1].toUpperCase():null
+}
+/* ── CITA LITERAL ─────────────────────────────────
+   La respuesta cierra con la frase del manual que la sostiene, copiada tal
+   cual: «CITA: «…» (pág. N)». No va en el cuerpo —el asesor lee la respuesta—
+   sino debajo, y solo si de verdad aparece en los fragmentos consultados. */
+const CITA_LINEA=/^[ \t]*[*_]*[ \t]*CITA[ \t]*[*_]*[ \t]*:[^\n]*\n?/m;
+function extraerCita(texto){
+  const m=(texto||'').match(CITA_LINEA);
+  if(!m)return null;
+  const linea=m[0].replace(/^[\s*_]*CITA[\s*_]*:\s*/,'').trim();
+  const pagina=(linea.match(/p[áa]g\.?\s*(\d+)/i)||[])[1]||null;
+  const frase=(linea.match(/[«"“]([^»"”]+)[»"”]/)||[])[1]
+    ||linea.replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?\s*$/i,'').trim();
+  return frase?{frase:frase.trim(),pagina}:null
+}
+function sinLineaDeCita(texto){
+  return(texto||'').replace(CITA_LINEA,'').trim()
+}
+/* Mientras se escribe: la cita y la certeza llegan al final y a pedazos
+   («CI», «CERTEZA: AL»). No se enseñan a medias en el cuerpo. */
+function sinMarcasAMedias(texto){
+  let t=texto||'';
+  const i=t.search(/\n[ \t]*[*_]*[ \t]*CITA\b/);
+  if(i>=0)t=t.slice(0,i);
+  const lineas=t.split('\n');
+  const ult=(lineas[lineas.length-1]||'').replace(/[*_\s]/g,'');
+  const marca=ult.split(':')[0];
+  if(ult&&['CITA','CERTEZA'].some(m=>ult.includes(':')?marca===m:m.startsWith(marca)))lineas.pop();
+  return lineas.join('\n').trimEnd()
+}
+/* La frase se busca en los fragmentos que entraron al contexto, sin acentos,
+   mayúsculas ni puntuación. Si el modelo la partió con «…», cada pedazo tiene
+   que estar en el mismo fragmento. La página que se enseña es la del fragmento
+   donde está, no la que dijo el modelo. */
+function verificarCita(cita,fragmentos,contexto){
+  if(!cita)return null;
+  const n=t=>normalizeText(t).replace(/\s+/g,' ').trim();
+  const trozos=cita.frase.split(/\s*(?:…|\.\.\.)\s*/).map(n).filter(t=>t.split(' ').length>=3);
+  if(!trozos.length)return{ok:false,frase:cita.frase};
+  const fuente=(fragmentos||[]).find(c=>{const t=n((c.heading||'')+' '+c.text);return trozos.every(x=>t.includes(x))});
+  if(fuente)return{ok:true,frase:cita.frase,pagina:fuente.page?String(fuente.page):cita.pagina,doc:fuente.docName};
+  const ctx=n(contexto);
+  return{ok:!!ctx&&trozos.every(x=>ctx.includes(x)),frase:cita.frase,pagina:cita.pagina}
 }
 function sinLineaDeCerteza(texto){
   return(texto||'').replace(CERTEZA_RE,'').trim()
 }
 
 function sanitizeFinalAnswer(final,question){
-  let text=sinLineaDeCerteza(final);
+  let text=sinLineaDeCerteza(sinLineaDeCita(final));
   if(!text)return'';
   if(!isCreatorQuestion(question)){
     text=text
@@ -3936,9 +3947,9 @@ function parseAIResponse(text){
 }
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
-  if(parsed.parsed&&parsed.final)return sinLineaDeCerteza(parsed.final);
+  if(parsed.parsed&&parsed.final)return sinMarcasAMedias(sinLineaDeCerteza(parsed.final));
   const partial=streamedText.match(/\[RESPUESTA\s+FINAL[^\]]*\]([\s\S]*)$/i);
-  if(partial)return sinLineaDeCerteza(partial[1]);
+  if(partial)return sinMarcasAMedias(sinLineaDeCerteza(partial[1]));
   return null;
 }
 
@@ -6552,11 +6563,11 @@ async function sendMessage(){
   let pendingSanitize=null;
   let context='';
 
-  /* Mientras el modelo escribe sus seis etapas internas no se enseña nada: la
-     respuesta sale hasta [RESPUESTA FINAL]. En pantalla quedaban tres puntitos
-     quietos veinte o treinta segundos y parecía colgada. Ahora la tarjeta dice
-     qué está pasando y cuánto lleva, y si el proveedor se queda callado
-     ESPERA_MAX, se corta la espera en vez de esperar para siempre. */
+  /* Lo escrito antes de [RESPUESTA FINAL] no se enseña. Con el prompt de seis
+     etapas eso eran veinte o treinta segundos de tres puntitos quietos; ahora
+     la marca es lo primero que escribe el modelo y la respuesta sale mientras
+     se escribe. Mientras tanto la tarjeta dice qué está pasando y cuánto
+     lleva, y si el proveedor se queda callado ESPERA_MAX, se corta la espera. */
   const nombreModelo=(PROVIDERS[appState.provider]?.name||'el modelo').replace(/^Google /,'');
   const inicio=Date.now();
   let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null;
@@ -6567,14 +6578,11 @@ async function sendMessage(){
       msgBody.innerHTML='<span class="espera" role="status"><span class="espera-puntos" aria-hidden="true"><span class="typing-dot">•</span><span class="typing-dot">•</span><span class="typing-dot">•</span></span><span class="espera-txt"></span><span class="espera-seg"></span></span>';
       caja=msgBody.querySelector('.espera');
     }
-    const etapas=[...streamedText.matchAll(/ETAPA\s+(\d)/gi)];
-    const etapa=etapas.length?etapas[etapas.length-1][1]:null;
     const modeloVivo=respaldo?respaldo.a:appState.chatModel;
     caja.querySelector('.espera-txt').textContent=
       reintento&&!streamedText?`${nombreModelo} ${nombreCortoDeModelo(modeloVivo)} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
       :respaldo&&!streamedText?`${nombreCortoDeModelo(respaldo.de)} saturado · contesta ${nombreCortoDeModelo(respaldo.a)}`
-      :etapa?`Razonando con el manual · etapa ${etapa} de 6`
-      :streamedText?'Razonando con el manual…'
+      :streamedText?'Leyendo el manual…'
       :`Esperando a ${nombreModelo}…`;
     caja.querySelector('.espera-seg').textContent=Math.round((Date.now()-inicio)/1000)+' s';
   };
@@ -6617,14 +6625,14 @@ async function sendMessage(){
   if(scope.isGreeting){
     userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre la sección del manual cargado. NO uses la redirección de fuera de tema.]';
   }else if(scope.clearlyOff&&!isCreatorQuestion(q)){
-    userContent+='\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio de visual merchandising. Responde con la redirección corta, sin formato de 6 etapas.]';
+    userContent+='\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio de visual merchandising. Responde con la redirección corta, sin CITA.]';
   }else if(scope.otherStore){
     userContent+='\n\n[NOTA DEL SISTEMA: Menciona otra tienda. Aclara que solo conoces manuales Mercadep; si la pregunta incluye un producto VM (corbata, sensor, etc.), responde la regla de Mercadep del contexto.]';
   }else if(scope.isVmQuestion){
-    userContent+='\n\n[NOTA DEL SISTEMA: Pregunta válida de VM Hombres. Usa el formato de 6 etapas y basa la respuesta en el contexto. Si hay conflicto documentado, cítalo — no digas "no especifica".]';
+    userContent+=`\n\n[NOTA DEL SISTEMA: Pregunta válida de visual merchandising${seccion?` de ${seccion}`:''}. Basa la respuesta en el contexto y ciérrala con CITA y CERTEZA. Si hay conflicto documentado, cítalo — no digas "no especifica".]`;
   }
   if(ctx.estado){
-    userContent+='\n\n[NOTA DEL SISTEMA: Esto es una pregunta sobre la app o sobre el manual en sí. Responde con el bloque ESTADO DE LA APP, breve y sin el formato de 6 etapas. No cites páginas.]';
+    userContent+='\n\n[NOTA DEL SISTEMA: Esto es una pregunta sobre la app o sobre el manual en sí. Responde con el bloque ESTADO DE LA APP, breve y sin CITA. No cites páginas.]';
   }else if(ctx.sinCoincidencias){
     userContent+='\n\n[NOTA DEL SISTEMA: La búsqueda no encontró ni un fragmento que coincida con esta pregunta. Responde "El manual no especifica [X]" y cierra con CERTEZA: GAP. No improvises una regla.]';
   }else if(ctx.flojo){
@@ -6656,10 +6664,10 @@ async function sendMessage(){
       key:appState.apiKey,
       messages,
       model:appState.chatModel,
-      /* Margen para las seis etapas visibles. Subir esto NO era el arreglo del
-         corte de respuesta —medido: con 8000 se seguía cortando—; eso se
-         resuelve apagando el pensamiento interno del proveedor. */
-      maxTokens:6000,
+      /* La respuesta son 1-4 oraciones, la cita y la certeza: 1200 sobran. Con
+         las seis etapas hacían falta 6000, y ni así: el corte se resolvió
+         apagando el pensamiento interno del proveedor, no subiendo el tope. */
+      maxTokens:1200,
       temperature:appState.temperature,
       onDelta:renderChunk,
       /* Un corte a media respuesta se reintenta desde cero, pero el texto del
@@ -7415,13 +7423,17 @@ function verificarContraContexto(respuesta,contexto){
 }
 
 function renderAvisoVerificacion(res){
-  if(!res||(!res.cifras.length&&!res.paginas.length&&!(res.nombres||[]).length))return null;
+  if(!res||(!res.cifras.length&&!res.paginas.length&&!(res.nombres||[]).length&&!res.cita))return null;
   const el=document.createElement('div');
   el.className='verify-warn';
   const partes=[];
   if(res.cifras.length)partes.push(`${res.cifras.length===1?'el dato':'los datos'} <strong>${res.cifras.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   if((res.nombres||[]).length)partes.push(`${res.nombres.length===1?'el nombre':'los nombres'} <strong>${res.nombres.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   if(res.paginas.length)partes.push(`${res.paginas.length===1?'la página citada':'las páginas citadas'} <strong>${res.paginas.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
+  if(res.cita){
+    const corta=res.cita.length>70?res.cita.slice(0,70).trim()+'…':res.cita;
+    partes.push(`la frase <strong>«${escapeHtml(corta)}»</strong>`);
+  }
   el.innerHTML=`⚠ No pude verificar ${partes.join(' ni ')} en los fragmentos que se consultaron. Contrasta contra el manual antes de aplicarlo.`;
   return el
 }
@@ -7449,6 +7461,19 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   }
 
   const verif=verificarContraContexto(cleanFinal,contextoEnviado);
+  /* La cita: si está tal cual en lo consultado, va debajo de la respuesta con
+     su página; si no, no se enseña como del manual y entra al aviso. */
+  const cita=certeza!=='GAP'?verificarCita(extraerCita(final),ultimosFragmentos,contextoEnviado):null;
+  if(cita&&!cita.ok)verif.cita=cita.frase;
+  /* Una cita comprobada es la mejor evidencia de dónde sale la respuesta: su
+     página cuenta como citada para elegir la lámina. */
+  if(cita&&cita.ok&&cita.pagina)verif.citadas.add(String(cita.pagina));
+  if(cita&&cita.ok){
+    const bloque=document.createElement('div');
+    bloque.className='cita-manual';
+    bloque.innerHTML=`<b>Dice el manual${cita.pagina?` · pág. ${escapeHtml(cita.pagina)}`:''}</b>«${escapeHtml(cita.frase)}»`;
+    msgBody.after(bloque);
+  }
   const alerta=renderAvisoVerificacion(verif);
   /* El aviso va ARRIBA del cuerpo. Colgado debajo, el asesor ya había leído —y
      en el piso, ejecutado— el dato que el aviso venía a poner en duda. */
@@ -8136,6 +8161,37 @@ function correrPruebas(){
     for(const p of pruebasProveedor)filas.push({tipo:'proveedor',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
   }
 
+  /* Respuesta directa con cita literal. Lo que se rompe si esto falla: la
+     cita sale pegada al cuerpo, la certeza no se lee porque la cita quedó
+     debajo, o una frase que el manual no dice se enseña como «dice el manual». */
+  const pruebasCita=[];
+  {
+    const resp='[RESPUESTA FINAL AL ASESOR]\nEl sensor va oculto a **15 cm** de la bastilla (pág. 4).\nCITA: «En pantalones, el sensor va oculto a 15 cm de la bastilla, por dentro.» (pág. 4)\nCERTEZA: ALTA';
+    const{final}=parseAIResponse(resp);
+    const frags=[{docName:'140 CASUAL HOMBRE.pdf',page:5,heading:'SENSORES',text:'En pantalones, el sensor va oculto a 15 cm de la bastilla, por dentro. En camisas, en la costura lateral interna.'}];
+    const c=extraerCita(final);
+    const v=verificarCita(c,frags,'');
+    const inventada=verificarCita({frase:'el sensor va a 20 cm de la bastilla por fuera'},frags,'');
+    const partida=verificarCita({frase:'En pantalones, el sensor… en la costura lateral interna'},frags,'');
+    const sinAcentos=verificarCita({frase:'EN PANTALONES EL SENSOR VA OCULTO A 15 CM DE LA BASTILLA'},frags,'');
+    pruebasCita.push(
+      {nombre:'la cita se separa del cuerpo',ok:sanitizeFinalAnswer(final,'¿a qué altura va el sensor?')==='El sensor va oculto a **15 cm** de la bastilla (pág. 4).'},
+      {nombre:'se lee la frase y su página',ok:!!c&&c.frase.startsWith('En pantalones')&&c.pagina==='4'},
+      {nombre:'la certeza se lee con la cita en medio',ok:certezaDe(final)==='ALTA'},
+      {nombre:'y con la cita después de la certeza',ok:certezaDe('Va a 15 cm (pág. 4).\nCERTEZA: MEDIA\nCITA: «a 15 cm» (pág. 4)')==='MEDIA'},
+      {nombre:'una frase que sí está se verifica',ok:!!v&&v.ok},
+      {nombre:'la página es la del fragmento, no la que dijo el modelo',ok:!!v&&v.pagina==='5'},
+      {nombre:'una frase que no está NO se verifica',ok:!!inventada&&!inventada.ok},
+      {nombre:'partida con «…», los dos pedazos en el mismo fragmento',ok:!!partida&&partida.ok},
+      {nombre:'sin importar mayúsculas ni acentos',ok:!!sinAcentos&&sinAcentos.ok},
+      {nombre:'mientras se escribe, la cita a medias no se enseña',ok:getStreamingDisplayText('[RESPUESTA FINAL AL ASESOR]\nVa a 15 cm (pág. 4).\nCITA: «En pantal')==='Va a 15 cm (pág. 4).'},
+      {nombre:'ni la marca a medio escribir',ok:getStreamingDisplayText('[RESPUESTA FINAL AL ASESOR]\nVa a 15 cm (pág. 4).\nCI')==='Va a 15 cm (pág. 4).'},
+      {nombre:'una línea normal que empieza con C sí se enseña',ok:getStreamingDisplayText('[RESPUESTA FINAL AL ASESOR]\nVa a 15 cm.\nCerca de la caja')==='Va a 15 cm.\nCerca de la caja'},
+      {nombre:'el aviso nombra la frase que no se pudo verificar',ok:/la frase/.test(renderAvisoVerificacion({cifras:[],paginas:[],nombres:[],cita:'el sensor va a 20 cm'})?.innerHTML||'')},
+    );
+    for(const p of pruebasCita)filas.push({tipo:'cita',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+  }
+
   const resumen={
     recall:`${recallOk}/${recallTot}`,
     ruido:`${ruidoOk}/${ruidoTot}`,
@@ -8150,6 +8206,7 @@ function correrPruebas(){
     cifras:`${pruebasCifras.filter(p=>p.ok).length}/${pruebasCifras.length}`,
     seccion:`${pruebasSeccion.filter(p=>p.ok).length}/${pruebasSeccion.length}`,
     proveedor:`${pruebasProveedor.filter(p=>p.ok).length}/${pruebasProveedor.length}`,
+    cita:`${pruebasCita.filter(p=>p.ok).length}/${pruebasCita.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',
