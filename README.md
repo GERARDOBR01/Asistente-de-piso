@@ -125,6 +125,7 @@ pregunta, lo dice — no rellena con la sección más cercana.
 
 - **Un solo archivo `index.html`.** Sin build, sin bundler, sin backend propio, sin
   servidor que mantener. Se publica como archivo estático y se abre desde un link.
+  Es a propósito: [por qué, y cómo se recorre](#por-qué-todo-vive-en-un-solo-indexhtml).
 - **Conocimiento embebido y estructurado**, con un diccionario de sinónimos y alias por
   término — la gente no pregunta con el vocabulario del manual. "Acomodar" tiene que
   encontrar "exhibir", "clasificar" y "mercadear".
@@ -167,6 +168,45 @@ pregunta, lo dice — no rellena con la sección más cercana.
 - **Cada respuesta declara su certeza** —`ALTA`, `MEDIA` o `GAP`— en una última línea que se
   lee automáticamente, no se muestra, y decide el distintivo del mensaje y si se enseña
   lámina o no.
+
+### Por qué todo vive en un solo `index.html`
+
+Son unas 8,200 líneas en un archivo, y a primera vista parece desorden. Lo decidí así por
+cómo se usa la app en el piso:
+
+- **Tiene que abrir sin señal.** En el piso la señal va y viene, y la prueba de la junta es
+  poner el celular en modo avión y seguir preguntando. El service worker (`sw.js`) guarda
+  la página, las tres librerías del CDN y las fuentes. Como todo el código viaja en un solo
+  archivo, el celular nunca queda con el JavaScript nuevo y el HTML viejo.
+- **Se publica sin compilar.** GitHub Pages sirve el archivo tal cual: no hay build que se
+  rompa, ni `node_modules` que caduquen, ni servidor que pagar. Lo que está en `main` es lo
+  que abre el asesor.
+- **Se puede revisar entero.** Todo lo que la app hace con la pregunta y con la key está en
+  un archivo que se lee en GitHub o en DevTools. No hay un backend mío en medio.
+- **El arnés prueba el código que corre.** `index.html?test=1` ejecuta las mismas funciones
+  que usa el asesor, no una copia.
+
+Para recorrerlo: unas 1,150 líneas son estilos, 350 son las pantallas y el resto es
+JavaScript, partido en bloques con un rótulo `/* ════ NOMBRE ════ */`. Se busca el rótulo
+con Ctrl+F:
+
+| Rótulo | Qué hace |
+|---|---|
+| `STOPWORDS + SINÓNIMOS` y `MOTOR 2 — CORPUS UNIFICADO Y RETRIEVAL BM25` | La búsqueda: BM25, variantes, erratas y cuándo decir «no está» |
+| `MOTOR 2 — RECONSTRUCCIÓN LAYOUT-AWARE` y `MOTOR 2 — DETECCIÓN DE FIGURAS` | Lee el PDF por columnas y recorta las láminas |
+| `MANUALES GUARDADOS EN EL DISPOSITIVO` | Guarda los manuales en IndexedDB para no reprocesarlos |
+| `MODO SIN MODELO — retrieval local, cero red` | El modo manual |
+| `CONSTRUCCIÓN DE CONTEXTO` | Qué fragmentos llegan al modelo |
+| `STREAMING` y `REINTENTOS Y RESPALDO` | Llamadas a Gemini y OpenAI, y el modelo de respaldo |
+| `EVIDENCIA VISUAL` y `VERIFICACIÓN CONTRA EL CONTEXTO` | Qué lámina se enseña y cuándo sale un aviso |
+| `ARNÉS DE MEDICIÓN — abrir con ?test=1` | Las pruebas |
+
+Una cuarta parte del JavaScript son comentarios. Casi todos explican por qué una regla es
+como es, con la pregunta que la hizo necesaria.
+
+Lo partiría en módulos si entra otra persona a trabajar en él. Se puede hacer sin
+bundler; el costo es que el service worker tendría que guardar varios archivos de la misma
+versión.
 
 ### Cómo se mide
 
