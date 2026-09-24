@@ -1172,6 +1172,14 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 /* Con el teclado abierto la barra flotaría encima de él: se esconde mientras se escribe. */
 body:has(#user-input:focus) .tabs{display:none}
 body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10px)}
+
+/* Espera en modo API: puntos grandes, qué está pasando y cuánto lleva. */
+.msg.loading .msg-body{font-style:normal;color:var(--text2)}
+.espera{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.4}
+.espera-puntos{display:inline-flex;gap:3px;color:var(--gold);font-size:22px;line-height:1}
+.espera-txt{flex:1;min-width:0}
+.espera-seg{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums}
+.msg.loading .typing-dot{font-size:22px;line-height:1;color:var(--gold)}
 </style>
 </head>
 <body>
@@ -5834,6 +5842,8 @@ async function streamGemini(url, body, onDelta, signal) {
    1s, 2s, 4s, 8s, 16s, 30s
 ════════════════════════════════════════════════ */
 const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
+/* Silencio máximo del proveedor antes de cortar la espera (ver sendMessage). */
+const ESPERA_MAX = 45000;
 const RETRYABLE_HTTP = [408, 425, 429, 500, 502, 503, 504];
 /* «temporarily» no casaba con lo que responde GitHub Models cuando está al tope:
    "Spikes in demand are usually temporary". Sin código HTTP en el mensaje, no se
@@ -6466,6 +6476,36 @@ async function sendMessage(){
   let pendingSanitize=null;
   let context='';
 
+  /* Mientras el modelo escribe sus seis etapas internas no se enseña nada: la
+     respuesta sale hasta [RESPUESTA FINAL]. En pantalla quedaban tres puntitos
+     quietos veinte o treinta segundos y parecía colgada. Ahora la tarjeta dice
+     qué está pasando y cuánto lleva, y si el proveedor se queda callado
+     ESPERA_MAX, se corta la espera en vez de esperar para siempre. */
+  const nombreModelo=(PROVIDERS[appState.provider]?.name||'el modelo').replace(/^Google /,'');
+  const inicio=Date.now();
+  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false;
+  const pintarEspera=()=>{
+    if(!loaderEl.classList.contains('loading'))return;
+    let caja=msgBody.querySelector('.espera');
+    if(!caja){
+      msgBody.innerHTML='<span class="espera" role="status"><span class="espera-puntos" aria-hidden="true"><span class="typing-dot">•</span><span class="typing-dot">•</span><span class="typing-dot">•</span></span><span class="espera-txt"></span><span class="espera-seg"></span></span>';
+      caja=msgBody.querySelector('.espera');
+    }
+    const etapas=[...streamedText.matchAll(/ETAPA\s+(\d)/gi)];
+    const etapa=etapas.length?etapas[etapas.length-1][1]:null;
+    caja.querySelector('.espera-txt').textContent=
+      reintento&&!streamedText?`${nombreModelo} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
+      :etapa?`Razonando con el manual · etapa ${etapa} de 6`
+      :streamedText?'Razonando con el manual…'
+      :`Esperando a ${nombreModelo}…`;
+    caja.querySelector('.espera-seg').textContent=Math.round((Date.now()-inicio)/1000)+' s';
+  };
+  const reloj=setInterval(()=>{
+    if(!sinRespuesta&&Date.now()-ultimoDato>ESPERA_MAX&&currentAbort){sinRespuesta=true;currentAbort.abort()}
+    pintarEspera();
+  },1000);
+  pintarEspera();
+
   /* Todo lo que viene después va dentro del try. Antes armar el contexto corría
      fuera: si cualquier función de ahí fallaba, isGenerating se quedaba en true
      y el botón en «■ Detener» —con currentAbort aún vacío, así que pulsarlo no
@@ -6518,15 +6558,16 @@ async function sendMessage(){
 
   const renderChunk=(chunk)=>{
     streamedText+=chunk;
+    ultimoDato=Date.now();
     if(pendingSanitize)clearTimeout(pendingSanitize);
     pendingSanitize=setTimeout(()=>{
       const visible=getStreamingDisplayText(streamedText);
       if(visible!==null){
         loaderEl.classList.remove('loading');
         msgBody.innerHTML=safeMarkdown(visible);
-      }else if(!loaderEl.classList.contains('loading')){
-        loaderEl.classList.add('loading');
-        msgBody.innerHTML='<span class="typing-dot">•</span><span class="typing-dot">•</span><span class="typing-dot">•</span> <span style="font-size:12px;color:var(--text3)">Consultando manuales…</span>';
+      }else{
+        if(!loaderEl.classList.contains('loading')){loaderEl.classList.add('loading');msgBody.innerHTML=''}
+        pintarEspera();
       }
       scrollToBottom();
     },180);
@@ -6546,7 +6587,10 @@ async function sendMessage(){
       /* Un corte a media respuesta se reintenta desde cero, pero el texto del
          intento fallido seguía en streamedText: la respuesta salía con media
          copia pegada delante. */
-      onRetry:()=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize)},
+      onRetry:()=>{
+        streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
+        reintento++;ultimoDato=Date.now()+(RETRY_DELAYS[reintento-1]||0);pintarEspera();
+      },
       signal:currentAbort.signal
     };
     const{tokens}=await callWithRetryStream(provider,streamParams);
@@ -6564,7 +6608,16 @@ async function sendMessage(){
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
     if(chatDescartado){loaderEl.remove();return}
-    if(err.name==='AbortError'){
+    if(err.name==='AbortError'&&sinRespuesta){
+      const parcial=getStreamingDisplayText(streamedText);
+      if(parcial&&parcial.trim().length>50){
+        renderAssistantMessage(loaderEl,streamedText+`\n\n_[${nombreModelo} dejó de mandar texto; la respuesta puede estar incompleta]_`,estimateTokens(streamedText),q,context);
+      }else{
+        loaderEl.classList.remove('loading');
+        msgBody.style.color='var(--amber)';
+        msgBody.innerHTML=safeMarkdown(`**${nombreModelo} no mandó nada en ${ESPERA_MAX/1000} s**, así que corté la espera. Puede ser la señal o que el servicio esté lento. Vuelve a preguntar, prueba otro modelo arriba del chat, o quita la clave en Ajustes y te contesto con el manual tal cual.`);
+      }
+    }else if(err.name==='AbortError'){
       if(streamedText.length>50){
         renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context);
         history.push({role:'user',content:q});
@@ -6579,6 +6632,7 @@ async function sendMessage(){
       msgBody.innerHTML=safeMarkdown(formatError(err));
     }
   }finally{
+    clearInterval(reloj);
     saveChatHistory();
     isGenerating=false;chatDescartado=false;currentAbort=null;
     sendBtn.disabled=false;
