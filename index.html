@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://models.inference.ai.azure.com https://api.openai.com https://generativelanguage.googleapis.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests;"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests;"/>
 <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
 <meta name="referrer" content="no-referrer"/>
 <meta name="theme-color" content="#0D0E12"/>
@@ -1266,8 +1266,7 @@ body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10
     <div class="api-experta-row">
       <span class="api-experta-label">Modelo</span>
       <div class="api-experta-btns">
-        <button class="api-btn active" data-provider="github" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="GPT-4o mini vía GitHub Models">GitHub</button>
-        <button class="api-btn" data-provider="gemini" data-model="gemini-3.5-flash" onclick="switchExpert(this)" title="Gemini 3.5 Flash vía Google AI Studio">Gemini</button>
+        <button class="api-btn active" data-provider="gemini" data-model="gemini-3.5-flash" onclick="switchExpert(this)" title="Gemini vía Google AI Studio">Gemini</button>
         <button class="api-btn" data-provider="openai" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="GPT-4o mini vía OpenAI">OpenAI</button>
       </div>
     </div>
@@ -1336,9 +1335,8 @@ body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10
         <div class="fld-label">Proveedor de IA <span class="fld-req">OPCIONAL</span></div>
         <div class="cfg-nota">Sin clave la app funciona igual: te enseña el manual tal cual, con su página y su lámina. Con clave, además te contesta en una frase.</div>
         <div class="provider-tabs">
-          <button class="prov-tab active" onclick="selectProvider('github',this)">GitHub Models</button>
+          <button class="prov-tab active" onclick="selectProvider('gemini',this)">Google Gemini</button>
           <button class="prov-tab" onclick="selectProvider('openai',this)">OpenAI</button>
-          <button class="prov-tab" onclick="selectProvider('gemini',this)">Google Gemini</button>
         </div>
         <div class="provider-info" id="prov-info"></div>
         <div class="key-wrap">
@@ -1597,38 +1595,25 @@ function showToast(message, type='info', duration=4500) {
 }
 
 /* ════════════════════════════════════════════════
-   PROVEEDORES — GitHub, OpenAI, Gemini
+   PROVEEDORES — Gemini, OpenAI
+   GitHub Models se quitó: su dirección (models.inference.ai.azure.com) dejó de
+   existir en octubre de 2025 y GitHub retiró el servicio entero en julio de
+   2026. Era el proveedor por defecto, así que quien ponía un token de GitHub
+   recibía un error en cada pregunta.
 ════════════════════════════════════════════════ */
+/* Orden de las pestañas de Ajustes: loadSaved, saveConfig y switchExpert las
+   ubican por posición, y antes cada uno llevaba su propia copia de la lista. */
+const PROV_ORDEN=['gemini','openai'];
+/* Quien tenía GitHub guardado pasa a Gemini: GitHub Models ya no existe y, si
+   no, la app seguiría eligiendo un proveedor que no está en la lista. */
+function proveedorValido(p){return PROV_ORDEN.includes(p)?p:PROV_ORDEN[0]}
 const PROVIDERS={
-  github:{
-    name:'GitHub Models',
-    placeholder:'github_pat_••••••••••••••••••••',
-    hint:'Token de GitHub con acceso a GitHub Models. <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>',
-    chatModels:['gpt-4o-mini','gpt-4o'],
-    async call(key,messages,model,maxTokens,temperature){
-      const res=await fetch('https://models.inference.ai.azure.com/chat/completions',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature??0.2})
-      });
-      const data=await res.json();
-      if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
-      return{text:data.choices[0].message.content,tokens:data.usage?.total_tokens||0};
-    },
-    async stream({key, messages, model, maxTokens, temperature, onDelta, signal}) {
-      return streamOpenAICompatible(
-        'https://models.inference.ai.azure.com/chat/completions',
-        key,
-        buildOpenAIStreamBody(messages, model, maxTokens, temperature),
-        onDelta, signal
-      );
-    }
-  },
   openai:{
+    id:'openai',
     name:'OpenAI',
     placeholder:'sk-••••••••••••••••••••••••••••••',
     hint:'API key de OpenAI. <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>',
-    chatModels:['gpt-4o-mini','gpt-4o','gpt-4-turbo'],
+    chatModels:['gpt-4o-mini','gpt-4o'],
     async call(key,messages,model,maxTokens,temperature){
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
@@ -1636,7 +1621,7 @@ const PROVIDERS={
         body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature??0.2})
       });
       const data=await res.json();
-      if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
+      if(!res.ok)throw errorDeProveedor(res.status,data);
       return{text:data.choices[0].message.content,tokens:data.usage?.total_tokens||0};
     },
     async stream({key, messages, model, maxTokens, temperature, onDelta, signal}) {
@@ -1649,10 +1634,14 @@ const PROVIDERS={
     }
   },
   gemini:{
+    id:'gemini',
     name:'Google Gemini',
     placeholder:'AIza••••••••••••••••••••••••••••••',
     hint:'API key de Google AI Studio. <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>',
-    chatModels:['gemini-3.5-flash','gemini-2.5-flash','gemini-2.5-flash-lite','gemini-3-flash-preview','gemini-3.1-flash-lite'],
+    /* Solo modelos estables que cualquier key nueva puede usar. Los 2.5 quedaron
+       limitados a cuentas que ya los usaban, 3-flash-preview lo reemplaza
+       3.6-flash y 3.1-flash-lite se apaga en mayo de 2027. */
+    chatModels:['gemini-3.5-flash','gemini-3.6-flash','gemini-3.8-flash','gemini-3.5-flash-lite'],
     _toGeminiMessages(messages){
       const sys=messages.find(m=>m.role==='system');
       const rest=messages.filter(m=>m.role!=='system');
@@ -1668,32 +1657,57 @@ const PROVIDERS={
        Subir el tope no bastó —con 8000 seguía cortándose—, así que se apaga el
        pensamiento interno. No se pierde nada: este asistente ya razona en seis
        etapas visibles y auditables, que es precisamente lo contrario de un
-       razonamiento que no se puede leer. */
-    _genConfig(maxTokens,temperature){
-      return{maxOutputTokens:maxTokens,temperature:temperature??0.2,thinkingConfig:{thinkingBudget:0}};
+       razonamiento que no se puede leer.
+       La perilla no es la misma en todas las familias: los 2.x usan
+       `thinkingBudget` y rechazan `thinkingLevel`; los 3.x usan `thinkingLevel`,
+       y 3.7 y 3.8 no bajan de LOW. */
+    _genConfig(maxTokens,temperature,model){
+      return{maxOutputTokens:maxTokens,temperature:temperature??0.2,thinkingConfig:razonamientoGemini(model)};
     },
+    _headers(key){return{'Content-Type':'application/json','x-goog-api-key':key}},
     async call(key,messages,model,maxTokens,temperature){
       const{systemInstruction,contents}=this._toGeminiMessages(messages);
-      const body={contents,generationConfig:this._genConfig(maxTokens,temperature)};
+      const body={contents,generationConfig:this._genConfig(maxTokens,temperature,model)};
       if(systemInstruction)body.systemInstruction=systemInstruction;
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
-        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+      /* La key va en el encabezado y no en la URL (`?key=`): una URL acaba en
+         historiales, registros y capturas de pantalla. */
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+        method:'POST',headers:this._headers(key),body:JSON.stringify(body)
       });
-      const data=await res.json();
-      if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
-      const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'Sin respuesta.';
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw errorDeProveedor(res.status,data);
+      const text=textoDeGemini(data)||'Sin respuesta.';
       const tokens=data.usageMetadata?.totalTokenCount||0;
       return{text,tokens};
     },
     async stream({key, messages, model, maxTokens, temperature, onDelta, signal}) {
       const {systemInstruction, contents} = this._toGeminiMessages(messages);
-      const body = {contents, generationConfig: this._genConfig(maxTokens, temperature)};
+      const body = {contents, generationConfig: this._genConfig(maxTokens, temperature, model)};
       if (systemInstruction) body.systemInstruction = systemInstruction;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`;
-      return streamGemini(url, body, onDelta, signal);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+      return streamGemini(url, this._headers(key), body, onDelta, signal);
     }
   }
 };
+
+function razonamientoGemini(model){
+  if(/^gemini-[12]\./.test(model||''))return{thinkingBudget:0};
+  if(/^gemini-3\.[78]-/.test(model||''))return{thinkingLevel:'LOW'};
+  return{thinkingLevel:'MINIMAL'};
+}
+/* Una respuesta de Gemini puede venir en varias partes, y con razonamiento
+   visible algunas son pensamiento (`thought:true`), que no es la respuesta. */
+function textoDeGemini(obj){
+  return(obj?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('')
+}
+/* El código HTTP viaja con el error. Gemini contesta «This model is currently
+   experiencing high demand» sin número en el texto, y el reintento y el
+   respaldo necesitan saber que fue un 503. */
+function errorDeProveedor(status,data){
+  const e=new Error(data?.error?.message||`Error ${status}`);
+  e.status=status;
+  return e
+}
 
 /* ════════════════════════════════════════════════
    MANUAL INTERNO BASE — Mercadep
@@ -3932,7 +3946,7 @@ function getStreamingDisplayText(streamedText){
    ESTADO DE LA APP
 ════════════════════════════════════════════════ */
 const appState={
-  provider:'github',apiKey:'',chatModel:'gpt-4o-mini',
+  provider:'gemini',apiKey:'',chatModel:'gemini-3.5-flash',
   system:'',extra:'',tokenLimit:80000,
   memoryEnabled:true,extraEnabled:true,temperature:0.2,
   /* `null` = todos los manuales. En el piso se trabaja UNA sección: con cinco
@@ -3965,7 +3979,6 @@ function resetTokens(){
    PROVIDER UI
 ════════════════════════════════════════════════ */
 const PROV_INFO={
-  github:'Token de GitHub con acceso a <strong>GitHub Models</strong>. <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>',
   openai:'API key de OpenAI. <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>',
   gemini:'API key de Google AI Studio. <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a> — Plan gratuito disponible.'
 };
@@ -3999,7 +4012,7 @@ function selectProvider(id,btn){
 ════════════════════════════════════════════════ */
 function loadSaved(){
   try{
-    appState.provider=localStorage.getItem('ap_provider')||'github';
+    appState.provider=proveedorValido(localStorage.getItem('ap_provider'));
     // v7.0: API key migrada a sessionStorage — carga por proveedor
     try {
       const provKey = 'ap_api_key_' + appState.provider;
@@ -4009,7 +4022,7 @@ function loadSaved(){
     if (!appState.apiKey) {
       try { localStorage.removeItem('ap_api_key'); } catch {}
     }
-    appState.chatModel=localStorage.getItem('ap_chat_model')||'gpt-4o-mini';
+    appState.chatModel=localStorage.getItem('ap_chat_model')||PROVIDERS[appState.provider].chatModels[0];
     if(localStorage.getItem('ap_prompt_version')!==PROMPT_VERSION){
       appState.system=document.getElementById('system-prompt').value;
       try{localStorage.setItem('ap_system',appState.system);localStorage.setItem('ap_prompt_version',PROMPT_VERSION);}catch{}
@@ -4023,9 +4036,9 @@ function loadSaved(){
     document.getElementById('system-prompt').value=appState.system;
     document.getElementById('extra-ctx').value=appState.extra;
     document.getElementById('token-limit-input').value=appState.tokenLimit;
-    const provBtn=document.querySelector(`.prov-tab:nth-child(${['github','openai','gemini'].indexOf(appState.provider)+1})`);
+    const provBtn=document.querySelector(`.prov-tab:nth-child(${PROV_ORDEN.indexOf(appState.provider)+1})`);
     if(provBtn)selectProvider(appState.provider,provBtn);
-    else selectProvider('github',document.querySelector('.prov-tab'));
+    else selectProvider(PROV_ORDEN[0],document.querySelector('.prov-tab'));
     const chatSel=document.getElementById('chat-model-select');
     if([...chatSel.options].some(o=>o.value===appState.chatModel))chatSel.value=appState.chatModel;
     try{quickBtns=JSON.parse(localStorage.getItem('ap_quick'))||[...DEFAULT_QUICK]}catch{quickBtns=[...DEFAULT_QUICK]}
@@ -4039,7 +4052,7 @@ function loadSaved(){
     document.getElementById('toggle-extra').checked=appState.extraEnabled;
     document.getElementById('temp-slider').value=Math.round(appState.temperature*100);
     document.getElementById('temp-display').textContent=appState.temperature.toFixed(2);
-  }catch{appState.provider='github';quickBtns=[...DEFAULT_QUICK]}
+  }catch{appState.provider='gemini';quickBtns=[...DEFAULT_QUICK]}
   initManualSections();loadMemory();
   updateKeyStatus(appState.apiKey);
   // Mostrar aviso de key si está configurada
@@ -4162,7 +4175,7 @@ function ocultarBannerRestaurar(){
    CONFIG — GUARDAR v7.0
 ════════════════════════════════════════════════ */
 function saveConfig(evt){
-  const activeProv=['github','openai','gemini'].find((_,i)=>document.querySelectorAll('.prov-tab')[i]?.classList.contains('active'))||'github';
+  const activeProv=PROV_ORDEN.find((_,i)=>document.querySelectorAll('.prov-tab')[i]?.classList.contains('active'))||PROV_ORDEN[0];
   appState.provider=activeProv;
   appState.apiKey=document.getElementById('api-key-input').value.trim();
   appState.chatModel=document.getElementById('chat-model-select').value;
@@ -5349,21 +5362,20 @@ let describiendo=false;
 
 async function describirFiguraConIA(fig,provider,key,model,signal){
   if(provider==='gemini'){
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},signal,
+    /* Sin apagar el razonamiento, un 3.x gastaba en pensar los 300 tokens y
+       devolvía la descripción vacía. */
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+      method:'POST',headers:PROVIDERS.gemini._headers(key),signal,
       body:JSON.stringify({
         contents:[{role:'user',parts:[{text:VLM_PROMPT},{inline_data:{mime_type:'image/jpeg',data:fig.dataUrl.split(',')[1]}}]}],
-        generationConfig:{maxOutputTokens:VLM_MAX_TOKENS,temperature:0.1}
+        generationConfig:{maxOutputTokens:VLM_MAX_TOKENS,temperature:0.1,thinkingConfig:razonamientoGemini(model)}
       })
     });
-    const data=await res.json();
-    if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
-    return(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw errorDeProveedor(res.status,data);
+    return textoDeGemini(data).trim();
   }
-  const url=provider==='openai'
-    ?'https://api.openai.com/v1/chat/completions'
-    :'https://models.inference.ai.azure.com/chat/completions';
-  const res=await fetch(url,{
+  const res=await fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},signal,
     body:JSON.stringify({model,max_tokens:VLM_MAX_TOKENS,temperature:0.1,messages:[{role:'user',content:[
       {type:'text',text:VLM_PROMPT},
@@ -5371,7 +5383,7 @@ async function describirFiguraConIA(fig,provider,key,model,signal){
     ]}]})
   });
   const data=await res.json();
-  if(!res.ok)throw new Error(data?.error?.message||`Error ${res.status}`);
+  if(!res.ok)throw errorDeProveedor(res.status,data);
   return(data.choices?.[0]?.message?.content||'').trim();
 }
 
@@ -5401,7 +5413,8 @@ async function describirFiguras(){
     procMsg.textContent=`👁 Describiendo figura ${hechas+1}/${pendientes.length} (pág. ${fig.page})…`;
     procBar.style.width=Math.round((hechas/pendientes.length)*100)+'%';
     try{
-      fig.vlmDescription=await describirFiguraConIA(fig,provider,key,model);
+      fig.vlmDescription=(await conReintentos(PROVIDERS[provider],model,
+        m=>describirFiguraConIA(fig,provider,key,m).then(text=>({text})))).text;
       if(fig.vlmDescription){docChunks.push(chunkDeFigura(fig));hechas++;fallos=0}
     }catch(e){
       console.warn('describirFigura',e);
@@ -5722,24 +5735,33 @@ function renderSourceIndicator(container,query,contextBuilt,memUsed,hasPdfs,ampl
 ════════════════════════════════════════════════ */
 const ERROR_GUIDE={
   400:{icon:'⚠️',msg:'Solicitud inválida.',solution:'Revisa que el mensaje no sea demasiado largo o tenga caracteres especiales.'},
-  401:{icon:'🔑',msg:'Token inválido o expirado.',solution:'Genera un nuevo token en el sitio de tu proveedor y actualiza Config.'},
+  401:{icon:'🔑',msg:'Token inválido o expirado.',solution:'Genera una clave nueva en el sitio de tu proveedor y pégala en Ajustes.'},
   403:{icon:'🚫',msg:'Sin permiso para este modelo.',solution:'Cambia a un modelo diferente o verifica que tu plan lo incluya.'},
   404:{icon:'🔍',msg:'Modelo no encontrado.',solution:'El modelo seleccionado no existe o no está disponible para tu región.'},
   429:{icon:'⏳',msg:'Demasiadas consultas.',solution:'Espera 30 segundos — hay límite de consultas por minuto. El sistema reintentará automáticamente.'},
   500:{icon:'🔧',msg:'Error interno del servidor.',solution:'El servidor tuvo un error temporal. Vuelve a intentar en unos segundos.'},
-  503:{icon:'🔧',msg:'Servicio no disponible.',solution:'El servicio está en mantenimiento. Espera unos minutos y reintenta.'},
+  503:{icon:'🔧',msg:'Servicio no disponible.',solution:'El proveedor está caído o saturado. Espera un minuto o cambia de modelo en Ajustes.'},
 };
 const ERROR_KEYWORDS=[
-  {keys:['image','image input','vision','multimodal'],icon:'🖼️',msg:'El modelo no soporta imágenes.',solution:'Cambia el modelo de Visión PDF en Config por uno que sí soporte visión (gpt-4o, gemini-1.5-flash) o desactiva Visión OCR.'},
-  {keys:['high demand','overloaded','over capacity','temporary','congestion'],icon:'🔥',msg:'El modelo está saturado.',solution:'No es tu conexión ni tu manual: el proveedor está al tope. Se reintenta solo unas cuantas veces; si insiste, cambia de modelo en Config.'},
+  {keys:['image','image input','vision','multimodal'],icon:'🖼️',msg:'El modelo no soporta imágenes.',solution:'Elige en Ajustes un modelo que lea imágenes: cualquier Gemini de la lista o gpt-4o-mini.'},
+  {keys:['high demand','overloaded','over capacity','temporary','congestion'],icon:'🔥',msg:'El modelo está saturado.',solution:'No es tu conexión ni tu manual: el proveedor está al tope. Ya se reintentó unas cuantas veces; espera un minuto o cambia de modelo en Ajustes.'},
   {keys:['rate limit','too many','quota','429'],icon:'⏳',msg:'Límite de consultas excedido.',solution:'Espera 30 segundos y vuelve a intentar. Hay un límite por minuto.'},
-  {keys:['auth','unauthorized','invalid key','api_key','token'],icon:'🔑',msg:'Error de autenticación.',solution:'Tu clave API no es válida. Genera una nueva y actualízala en Config.'},
-  {keys:['not found','does not exist','not available','not support'],icon:'🔍',msg:'Modelo o recurso no encontrado.',solution:'El modelo seleccionado no existe para tu proveedor. Cambia el modelo en Config.'},
+  {keys:['auth','unauthorized','invalid key','api_key','api key','token','permission denied'],icon:'🔑',msg:'Error de autenticación.',solution:'Tu clave API no es válida. Genera una nueva y actualízala en Ajustes.'},
+  {keys:['not found','does not exist','not available','not support'],icon:'🔍',msg:'Modelo o recurso no encontrado.',solution:'El modelo elegido no existe o tu clave no tiene acceso a él. Cambia el modelo en Ajustes.'},
   {keys:['network','fetch','failed to fetch','abort','timeout'],icon:'📡',msg:'Error de conexión.',solution:'Revisa tu conexión a internet. Si usas VPN, desactívala o cambia de red.'},
 ];
 function formatError(err){
   const msg=err.message||'';
-  const code=msg.match(/(\d{3})/)?.[1];
+  const code=err.status?String(err.status):msg.match(/(\d{3})/)?.[1];
+  /* El texto dice más que el número. Gemini saturado responde 503 con «high
+     demand», que por el código se leería como «en mantenimiento»; y una key
+     mal pegada responde 400 «API key not valid», que se leería como «el
+     mensaje es demasiado largo», justo lo primero que ve quien prueba el demo. */
+  const porTexto=/high demand|overloaded|over capacity|congestion/i.test(msg)
+    ?ERROR_KEYWORDS.find(e=>e.keys.includes('high demand'))
+    :/api.?key|unauthori[sz]ed|permission denied/i.test(msg)
+    ?ERROR_KEYWORDS.find(e=>e.keys.includes('api_key')):null;
+  if(porTexto)return`${porTexto.icon} ${porTexto.msg}\n\n<div class="err-detail"><span class="err-code">${escapeHtml(msg)}</span><span class="err-solution">💡 ${porTexto.solution}</span></div>`;
   const guide=ERROR_GUIDE[code];
   if(guide)return`${guide.icon} ${guide.msg}\n\n<div class="err-detail"><span class="err-code">Error ${code}</span><span class="err-solution">💡 ${guide.solution}</span></div>`;
   for(const entry of ERROR_KEYWORDS){
@@ -5751,7 +5773,7 @@ function formatError(err){
 }
 
 /* ════════════════════════════════════════════════
-   STREAMING — helpers SSE para OpenAI/GitHub y Gemini
+   STREAMING — helpers SSE para OpenAI y Gemini
    v7.0 — C1
 ════════════════════════════════════════════════ */
 let currentAbort = null;
@@ -5780,7 +5802,7 @@ async function streamOpenAICompatible(url, key, body, onDelta, signal) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error?.message || `Error ${res.status}`);
+    throw errorDeProveedor(res.status, data);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
@@ -5802,15 +5824,14 @@ async function streamOpenAICompatible(url, key, body, onDelta, signal) {
   return {tokens: totalUsage};
 }
 
-async function streamGemini(url, body, onDelta, signal) {
+async function streamGemini(url, headers, body, onDelta, signal) {
   const res = await fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    method: 'POST', headers,
     body: JSON.stringify(body), signal
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error?.message || `Error ${res.status}`);
+    throw errorDeProveedor(res.status, data);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
@@ -5827,7 +5848,7 @@ async function streamGemini(url, body, onDelta, signal) {
       const jsonStr = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
       try {
         const obj = JSON.parse(jsonStr);
-        const text = obj.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const text = textoDeGemini(obj);
         if (text) { onDelta(text); }
         const m = obj.usageMetadata?.totalTokenCount;
         if (m) usage = m;
@@ -5838,10 +5859,13 @@ async function streamGemini(url, body, onDelta, signal) {
 }
 
 /* ════════════════════════════════════════════════
-   RETRY EXPONENCIAL — F5
-   1s, 2s, 4s, 8s, 16s, 30s
+   REINTENTOS Y RESPALDO
+   1s, 2s, 4s. Antes eran seis (1, 2, 4, 8, 16 y 30 s): con Gemini saturado se
+   iba casi un minuto y medio antes de ver el error, y en el piso nadie espera
+   eso con el cliente enfrente. Ahora, si el modelo elegido sale saturado dos
+   veces seguidas, contesta el de respaldo.
 ════════════════════════════════════════════════ */
-const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
+const RETRY_DELAYS = [1000, 2000, 4000];
 /* Silencio máximo del proveedor antes de cortar la espera (ver sendMessage). */
 const ESPERA_MAX = 45000;
 const RETRYABLE_HTTP = [408, 425, 429, 500, 502, 503, 504];
@@ -5851,8 +5875,49 @@ const RETRYABLE_HTTP = [408, 425, 429, 500, 502, 503, 504];
    que la app está rota. Falta de dos letras. */
 const RETRYABLE_KEYWORDS = ['rate limit','too many','quota','temporarily','temporary','high demand','overloaded','over capacity','capacity','congestion','try again later','unavailable','fetch failed','network','econnreset','etimedout'];
 
+/* El respaldo es 3.5 Flash-Lite y no 2.5 Flash: Google dejó los 2.5 solo a
+   cuentas que ya los usaban, así que con una key nueva el respaldo también
+   fallaba. Flash-Lite es estable, es el más rápido y entra en el plan gratis. */
+const GEMINI_RESPALDO = 'gemini-3.5-flash-lite';
+const RESPALDO_TRAS = 2;                  // saturaciones seguidas antes de cambiar
+const RESPALDO_MEMORIA = 10 * 60 * 1000;  // mientras tanto, las siguientes van directo
+let respaldoActivo = null;                // {de, a, hasta}: solo en memoria, no en Ajustes
+
+function modeloDeRespaldo(provider, model) {
+  if (provider !== 'gemini' || !model || model === GEMINI_RESPALDO) return null;
+  return GEMINI_RESPALDO;
+}
+/* Saturación o cuota, no la red: sin señal cambiar de modelo no arregla nada, y
+   dejaría el elegido de lado diez minutos por un túnel. */
+function esSaturacion(err) {
+  if (err?.status === 429 || err?.status === 503) return true;
+  return /high demand|overloaded|over capacity|capacity|quota|rate limit|too many|resource.?exhausted|unavailable/i.test(err?.message || '');
+}
+function modeloEfectivo(provider, model) {
+  if (respaldoActivo && respaldoActivo.de === model && Date.now() < respaldoActivo.hasta
+      && modeloDeRespaldo(provider, model) === respaldoActivo.a) return respaldoActivo.a;
+  return model;
+}
+/* Qué modelo contestó, en la etiqueta del mensaje. Con el respaldo de por medio
+   ya no es necesariamente el que dice Ajustes. */
+function marcarModelo(msgEl,model,esRespaldo){
+  const label=msgEl?.querySelector('.msg-label');
+  if(!label||!model)return;
+  const pill=document.createElement('span');
+  pill.className='msg-tokens msg-modelo';
+  pill.textContent=nombreCortoDeModelo(model)+(esRespaldo?' · respaldo':'');
+  label.appendChild(pill);
+}
+/* «gemini-3.5-flash-lite» → «3.5 Flash-Lite», que es como cabe en la tarjeta. */
+function nombreCortoDeModelo(model) {
+  const m = (model || '').match(/^gemini-([\d.]+)-flash(-lite)?/);
+  if (m) return `${m[1]} Flash${m[2] ? '-Lite' : ''}`;
+  return (model || '').replace(/^gpt-/, 'GPT-').replace(/-mini$/, ' mini');
+}
+
 function isRetryable(err) {
   if (err?.name === 'AbortError') return false;
+  if (RETRYABLE_HTTP.includes(err?.status)) return true;
   const msg = (err?.message || '').toLowerCase();
   const code = msg.match(/(\d{3})/)?.[1];
   if (code && RETRYABLE_HTTP.includes(parseInt(code, 10))) return true;
@@ -5867,38 +5932,48 @@ async function sleep(ms, signal) {
   });
 }
 
-async function callWithRetryStream(provider, params) {
-  const {signal} = params;
-  let lastErr;
+/* Un solo bucle para las dos formas de llamar. `intento(modelo)` hace la
+   petición; lo que regresa lleva además `model`, el que de verdad contestó. */
+async function conReintentos(provider, model, intento, {signal, onRetry, onRespaldo} = {}) {
+  let actual = modeloEfectivo(provider.id, model);
+  if (actual !== model) onRespaldo?.(model, actual);
+  let saturaciones = 0;
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try {
-      return await provider.stream(params);
+      const r = await intento(actual);
+      return {...r, model: actual};
     } catch (err) {
-      lastErr = err;
       if (err.name === 'AbortError') throw err;
-      if (!isRetryable(err) || attempt === RETRY_DELAYS.length) throw err;
-      if (params.onRetry) params.onRetry();
+      if (!isRetryable(err)) throw err;
+      saturaciones = esSaturacion(err) ? saturaciones + 1 : 0;
+      const respaldo = modeloDeRespaldo(provider.id, actual);
+      if (respaldo && saturaciones >= RESPALDO_TRAS) {
+        respaldoActivo = {de: actual, a: respaldo, hasta: Date.now() + RESPALDO_MEMORIA};
+        if (onRespaldo) onRespaldo(actual, respaldo);
+        else showToast(`${nombreCortoDeModelo(actual)} saturado · contesta ${nombreCortoDeModelo(respaldo)}`, 'warn', 3000);
+        actual = respaldo; saturaciones = 0; attempt = -1;  // el respaldo empieza sus propios reintentos
+        continue;
+      }
+      if (attempt === RETRY_DELAYS.length) {
+        /* Si el respaldo tampoco pudo, no se recuerda: la siguiente pregunta
+           vuelve a intentar con el que eligió el asesor. */
+        if (respaldoActivo && respaldoActivo.a === actual) respaldoActivo = null;
+        throw err;
+      }
+      if (onRetry) onRetry();
       const delay = RETRY_DELAYS[attempt];
-      const next = RETRY_DELAYS[attempt + 1] ? RETRY_DELAYS[attempt + 1] / 1000 + 's' : 'último';
       showToast(`⏳ Reintento ${attempt + 1}/${RETRY_DELAYS.length} en ${delay / 1000}s…`, 'warn', delay);
-      try { await sleep(delay, signal); } catch (e) { throw e; }
+      await sleep(delay, signal);
     }
   }
-  throw lastErr;
+}
+
+async function callWithRetryStream(provider, params) {
+  return conReintentos(provider, params.model, model => provider.stream({...params, model}), params);
 }
 
 async function callWithRetry(provider, key, messages, model, maxTokens, temperature) {
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-    try {
-      return await provider.call(key, messages, model, maxTokens, temperature);
-    } catch (err) {
-      if (err.name === 'AbortError') throw err;
-      if (!isRetryable(err) || attempt === RETRY_DELAYS.length) throw err;
-      const delay = RETRY_DELAYS[attempt];
-      showToast(`⏳ Reintento ${attempt + 1}/${RETRY_DELAYS.length} en ${delay / 1000}s…`, 'warn', delay);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
+  return conReintentos(provider, model, m => provider.call(key, messages, m, maxTokens, temperature));
 }
 
 function stopGeneration() {
@@ -5927,12 +6002,13 @@ async function consultarTodosLosManuales(pregunta,btn){
       {role:'user',content:contexto},
       {role:'user',content:pregunta}
     ];
-    const{text,tokens}=await callWithRetry(provider,appState.apiKey,messages,appState.chatModel,900,appState.temperature);
+    const{text,tokens,model:contesto}=await callWithRetry(provider,appState.apiKey,messages,appState.chatModel,900,appState.temperature);
     const limpio=sanitizeFinalAnswer(text,pregunta);
     const certeza=certezaDe(text);
     loaderEl.classList.remove('loading');
     loaderEl.querySelector('.msg-body').innerHTML=safeMarkdown(limpio);
     loaderEl.querySelector('.msg-label').innerHTML='Asistente <span class="certeza ref">todas tus secciones — no es tu sección activa</span>';
+    marcarModelo(loaderEl,contesto,contesto!==appState.chatModel);
     const verif=verificarContraContexto(limpio,contexto);
     const alerta=renderAvisoVerificacion(verif);
     if(alerta)loaderEl.insertBefore(alerta,loaderEl.querySelector('.msg-body'));
@@ -6483,7 +6559,7 @@ async function sendMessage(){
      ESPERA_MAX, se corta la espera en vez de esperar para siempre. */
   const nombreModelo=(PROVIDERS[appState.provider]?.name||'el modelo').replace(/^Google /,'');
   const inicio=Date.now();
-  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false;
+  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null;
   const pintarEspera=()=>{
     if(!loaderEl.classList.contains('loading'))return;
     let caja=msgBody.querySelector('.espera');
@@ -6493,8 +6569,10 @@ async function sendMessage(){
     }
     const etapas=[...streamedText.matchAll(/ETAPA\s+(\d)/gi)];
     const etapa=etapas.length?etapas[etapas.length-1][1]:null;
+    const modeloVivo=respaldo?respaldo.a:appState.chatModel;
     caja.querySelector('.espera-txt').textContent=
-      reintento&&!streamedText?`${nombreModelo} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
+      reintento&&!streamedText?`${nombreModelo} ${nombreCortoDeModelo(modeloVivo)} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
+      :respaldo&&!streamedText?`${nombreCortoDeModelo(respaldo.de)} saturado · contesta ${nombreCortoDeModelo(respaldo.a)}`
       :etapa?`Razonando con el manual · etapa ${etapa} de 6`
       :streamedText?'Razonando con el manual…'
       :`Esperando a ${nombreModelo}…`;
@@ -6591,14 +6669,21 @@ async function sendMessage(){
         streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
         reintento++;ultimoDato=Date.now()+(RETRY_DELAYS[reintento-1]||0);pintarEspera();
       },
+      /* El elegido salió saturado y contesta otro: la tarjeta lo dice y los
+         reintentos vuelven a contar desde cero con el nuevo. */
+      onRespaldo:(de,a)=>{
+        streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
+        respaldo={de,a};reintento=0;ultimoDato=Date.now();pintarEspera();
+      },
       signal:currentAbort.signal
     };
-    const{tokens}=await callWithRetryStream(provider,streamParams);
+    const{tokens,model:contesto}=await callWithRetryStream(provider,streamParams);
     if(chatDescartado)return;
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
     renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context);
+    marcarModelo(loaderEl,contesto,!!respaldo);
 
     sessionTokens+=tokens||estimateTokens(streamedText);updateTokenBar();
     history.push({role:'user',content:q});
@@ -6855,18 +6940,21 @@ function switchExpert(btn){
   document.querySelectorAll('.api-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 
+  /* Si el modelo guardado en Ajustes es de este proveedor, se respeta: el botón
+     elige proveedor, no pisa el 3.6 o el 3.8 que el asesor escogió. */
+  let guardado=null;try{guardado=localStorage.getItem('ap_chat_model')}catch{}
+  const elegido=PROVIDERS[provider].chatModels.includes(guardado)?guardado:model;
   appState.provider=provider;
-  appState.chatModel=model;
+  appState.chatModel=elegido;
 
-  // Sincronizar selector visual de Config para que saveConfig no sobreescriba
+  // Sincronizar selector visual de Ajustes para que saveConfig no sobreescriba
   const provBtns=document.querySelectorAll('.prov-tab');
-  const provOrder=['github','openai','gemini'];
-  provBtns.forEach((t,i)=>t.classList.toggle('active',provOrder[i]===provider));
+  provBtns.forEach((t,i)=>t.classList.toggle('active',PROV_ORDEN[i]===provider));
   document.getElementById('prov-info').innerHTML=PROV_INFO[provider];
   document.getElementById('api-key-input').placeholder=PROVIDERS[provider].placeholder;
   const chatSel=document.getElementById('chat-model-select');
   chatSel.innerHTML=PROVIDERS[provider].chatModels.map(m=>`<option value="${m}">${m}</option>`).join('');
-  chatSel.value=model;
+  chatSel.value=elegido;
   /* El campo de la key también cambia de proveedor. Si se quedaba la del
      anterior, «Guardar cambios» la escribía encima de la buena del nuevo. */
   try{
@@ -6874,22 +6962,16 @@ function switchExpert(btn){
     document.getElementById('api-key-input').value=k;appState.apiKey=k;updateKeyStatus(k);
   }catch{}
 
-  const names={github:'⚡ Normativo — GPT-4o mini',gemini:'🧠 Estratega — Gemini 3.5 Flash',openai:'🚀 Rápido — GPT-4o mini'};
-  showToast(names[provider],'success',2000);
+  showToast(`${PROVIDERS[provider].name.replace(/^Google /,'')} · ${nombreCortoDeModelo(elegido)}`,'success',2000);
 }
 
 function syncExpertSelector(){
   const btns=document.querySelectorAll('.api-btn');
   btns.forEach(b=>{
     const prov=b.dataset.provider;
-    b.classList.toggle('active',b.dataset.provider===appState.provider&&b.dataset.model===appState.chatModel);
+    b.classList.toggle('active',b.dataset.provider===appState.provider);
     b.classList.toggle('locked',!hasKey(prov));
   });
-  if(!hasKey(appState.provider)){
-    const normBtn=document.querySelector('.api-btn[data-provider="github"]');
-    if(normBtn&&hasKey('github')){normBtn.classList.add('active');appState.provider='github';appState.chatModel='gpt-4o-mini';}
-    else if(normBtn){normBtn.classList.add('active');}
-  }
 }
 function appendMsg(role,text,loading){
   const box=document.getElementById('chat-messages');
@@ -8012,6 +8094,48 @@ function correrPruebas(){
     for(const p of pruebasSeccion)filas.push({tipo:'sección',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'quedó: '+p.got});
   }
 
+  /* Proveedores. GitHub Models dejó de existir y era el de fábrica; Gemini
+     saturado dejaba al asesor minuto y medio esperando un error. */
+  const pruebasProveedor=[];
+  {
+    const sinScripts=document.body.cloneNode(true);
+    sinScripts.querySelectorAll('script,style').forEach(e=>e.remove());
+    const textosDeError=[...Object.values(ERROR_GUIDE),...ERROR_KEYWORDS].map(e=>e.solution).join(' ');
+    const guardado=respaldoActivo;
+    let efectivo,vencido;
+    try{
+      respaldoActivo={de:'gemini-3.5-flash',a:GEMINI_RESPALDO,hasta:Date.now()+60000};
+      efectivo=modeloEfectivo('gemini','gemini-3.5-flash');
+      respaldoActivo={de:'gemini-3.5-flash',a:GEMINI_RESPALDO,hasta:Date.now()-1};
+      vencido=modeloEfectivo('gemini','gemini-3.5-flash');
+    }finally{respaldoActivo=guardado}
+    const csp=document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content||'';
+    pruebasProveedor.push(
+      {nombre:'«github» guardado pasa a Gemini',ok:proveedorValido('github')==='gemini'},
+      {nombre:'«openai» guardado se respeta',ok:proveedorValido('openai')==='openai'},
+      {nombre:'sin nada guardado → Gemini',ok:proveedorValido(null)==='gemini'},
+      {nombre:'3.5 Flash saturado → 3.5 Flash-Lite',ok:modeloDeRespaldo('gemini','gemini-3.5-flash')===GEMINI_RESPALDO},
+      {nombre:'el respaldo no tiene respaldo',ok:modeloDeRespaldo('gemini',GEMINI_RESPALDO)===null},
+      {nombre:'OpenAI no cambia de modelo solo',ok:modeloDeRespaldo('openai','gpt-4o-mini')===null},
+      {nombre:'el respaldo se recuerda mientras dura',ok:efectivo===GEMINI_RESPALDO},
+      {nombre:'y se olvida al vencer',ok:vencido==='gemini-3.5-flash'},
+      {nombre:'503 es saturación',ok:esSaturacion({status:503,message:''})},
+      {nombre:'«high demand» sin código es saturación',ok:esSaturacion(new Error('This model is currently experiencing high demand'))},
+      {nombre:'sin señal NO es saturación',ok:!esSaturacion(new Error('Failed to fetch'))},
+      {nombre:'2.5 apaga con thinkingBudget',ok:razonamientoGemini('gemini-2.5-flash').thinkingBudget===0},
+      {nombre:'3.5 usa thinkingLevel MINIMAL',ok:razonamientoGemini('gemini-3.5-flash').thinkingLevel==='MINIMAL'&&!('thinkingBudget' in razonamientoGemini('gemini-3.5-flash'))},
+      {nombre:'3.8 no baja de LOW',ok:razonamientoGemini('gemini-3.8-flash').thinkingLevel==='LOW'},
+      {nombre:'nombre corto «3.5 Flash-Lite»',ok:nombreCortoDeModelo('gemini-3.5-flash-lite')==='3.5 Flash-Lite'},
+      {nombre:'el texto de Gemini ignora las partes de pensamiento',ok:textoDeGemini({candidates:[{content:{parts:[{text:'pienso',thought:true},{text:'Va '},{text:'a 1.20 m'}]}}]})==='Va a 1.20 m'},
+      {nombre:'key mal pegada (400) se lee como clave inválida',ok:/autenticaci/.test(formatError(errorDeProveedor(400,{error:{message:'API key not valid. Please pass a valid API key.'}})))},
+      {nombre:'503 «high demand» se lee como saturado',ok:/saturado/.test(formatError(errorDeProveedor(503,{error:{message:'This model is currently experiencing high demand.'}})))},
+      {nombre:'ningún texto visible dice «Config»',ok:!/\bConfig\b/.test(sinScripts.textContent+' '+textosDeError)},
+      {nombre:'el CSP ya no abre la dirección de GitHub Models',ok:!/azure/.test(csp)&&/generativelanguage/.test(csp)},
+      {nombre:'ningún modelo de la lista es un 2.x',ok:!PROVIDERS.gemini.chatModels.some(m=>/^gemini-[12]\./.test(m))},
+    );
+    for(const p of pruebasProveedor)filas.push({tipo:'proveedor',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
+  }
+
   const resumen={
     recall:`${recallOk}/${recallTot}`,
     ruido:`${ruidoOk}/${ruidoTot}`,
@@ -8025,6 +8149,7 @@ function correrPruebas(){
     estado:`${pruebasEstado.filter(p=>p.ok).length}/${pruebasEstado.length}`,
     cifras:`${pruebasCifras.filter(p=>p.ok).length}/${pruebasCifras.length}`,
     seccion:`${pruebasSeccion.filter(p=>p.ok).length}/${pruebasSeccion.length}`,
+    proveedor:`${pruebasProveedor.filter(p=>p.ok).length}/${pruebasProveedor.length}`,
     tusManuales:conManuales.length?`${conManuales.filter(f=>f.ok).length}/${conManuales.length}`:'sin manuales cargados',
     margenMinimo:(margenMin*100).toFixed(0)+'%',
     alfa:(CTX_ALPHA*100).toFixed(0)+'%',
