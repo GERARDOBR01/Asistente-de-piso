@@ -2693,13 +2693,23 @@ const CHECKLIST=/\bcheck ?list\b|\bchecklist\b|lista de (?:verificacion|revision
 const PIDE_CHECKLIST=/check|lista|revis|verific|pendiente|todo lo que/;
 const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separacion|separación|porcentaje|cantidad|piezas|\bcm\b|\bmts?\b|metro|%/i;
 
+/* Los rótulos sueltos de un dibujo —«+ CAPACIDAD −», «TAMAÑO», «ICEE»— llegan
+   como fragmentos de tres a cinco palabras, y BM25 premia tanto lo corto que
+   ganaban a la sección que explica: en LÍNEA BLANCA, «¿dónde van los
+   refrigeradores?» salía con el rótulo de la página 7 y no con «plataformas»
+   de la 9. Por debajo de 12 palabras, un fragmento se puntúa como si tuviera 12.
+   Medido con las 186 preguntas de los 30 manuales: con 8 o 16 mejora menos, y
+   con 30 o más sale peor que sin tope, porque entonces los fragmentos largos
+   tapan la respuesta. */
+const LARGO_MINIMO=12;
 function bm25Score(c,terms){
   let s=0;
+  const largo=Math.max(c.len,LARGO_MINIMO);
   for(const{t,w}of terms){
     const f=c.tf[t];if(!f)continue;
     const n=bm25.df[t]||0;
     const idf=Math.log(1+(bm25.N-n+0.5)/(n+0.5));
-    s+=w*idf*(f*(bm25.k1+1))/(f+bm25.k1*(1-bm25.b+bm25.b*c.len/bm25.avgdl));
+    s+=w*idf*(f*(bm25.k1+1))/(f+bm25.k1*(1-bm25.b+bm25.b*largo/bm25.avgdl));
   }
   return s
 }
@@ -2770,6 +2780,7 @@ function retrieve(query,opts){
   const flojosContables=new Set(terms.filter(x=>x.w!==1&&!esVerboDePiso(x.g)).map(x=>x.t));
   const strong=terms.filter(t=>t.w===1);
   const flojos=terms.filter(t=>t.w!==1);
+  const palabrasEscritas=new Set(strong.filter(x=>!esVerboDePiso(x.g)).map(x=>x.g)).size||1;
   const shingles=queryShingles(query);
   const wantsNumber=NUMERIC_INTENT.test(query);
   /* Los manuales dan la participación siempre igual: «30% de participación».
@@ -2828,6 +2839,14 @@ function retrieve(query,opts){
       if(/\[mandatory\]/i.test(c.text))score+=2;
       if(/conflicto documentado/i.test(c.text))score+=2.5;
     }
+    /* Cuántas de las palabras que escribió el asesor trae el fragmento. BM25
+       suma cada término por separado, y tres sinónimos pesaban más que la
+       palabra escrita: en CALCETINES, «¿dónde va la liquidación?» salía con
+       TEMPORADA BARATA —«barata» y «descuento», del diccionario— y no con la
+       lámina que dice «liquidación» tal cual. Un fragmento que las trae todas
+       vale el doble que uno que no trae ninguna. La errata corregida cuenta
+       como escrita, porque es la palabra del asesor bien escrita. */
+    score*=1+Math.min(palabrasEscritas,hits+hitsErrata)/palabrasEscritas;
     out.push({c,score,hits,hitsSyn,hitsErrata,exigidos});
   }
   return out.sort((a,b)=>b.score-a.score||b.hits-a.hits).slice(0,limit)
@@ -7813,6 +7832,34 @@ function pruebasNombres(){
   return casos;
 }
 
+/* Qué lámina sale primero, con los dos casos que la movían mal en los 30
+   manuales reales: un rótulo de dibujo de dos palabras que ganaba por corto, y
+   tres sinónimos que ganaban a la palabra que el asesor escribió. Corpus mínimo
+   y sintético, como en `pruebasNombres`. */
+function pruebasOrden(){
+  const gChunks=docChunks,gDocs=docs,gManual=manualSections,gActivo=appState.manualActivo;
+  const frag=(id,page,heading,text)=>({id,source:'pdf',docName:'M.pdf',page,heading,text});
+  docs=[{name:'M.pdf'}];manualSections=[];appState.manualActivo='M.pdf';
+  docChunks=[
+    frag('o1',7,'CAPACIDAD','Refrigeradores'),
+    frag('o2',9,'EXHIBICIÓN','Refrigeradores sobre plataformas al fondo de la sección, de menor a mayor capacidad; refrigeradores de dos puertas al centro.'),
+    frag('o3',16,'TEMPORADA BARATA','Barata: en la primera etapa de barata el descuento va del 10 al 20 por ciento y en la segunda etapa de barata los descuentos llegan al 40 por ciento. Cada descuento se marca con cartulina roja y las rebajas se revisan cada lunes.'),
+    frag('o4',14,'BÁSICOS','Los básicos van al frente del mueble; la liquidación se coloca en el mueble del fondo, junto al probador, separada por talla y con su cartulina.'),
+    frag('o5',3,'ALINEACIÓN','Deja 80 cm libres entre muebles y alinea los frentes con el pasillo principal, revisando que ningún exhibidor invada el paso de los clientes durante el día.'),
+    frag('o6',5,'COLORIZACIÓN','Acomoda la mercancía en bloques de color, de claro a oscuro y de izquierda a derecha, respetando la misma secuencia en todos los muebles de la sección.'),
+    frag('o7',11,'LIMPIEZA','Limpia los entrepaños, los cristales y los espejos al abrir la tienda y después de cada surtido, y retira cualquier caja o gancho que quede en el piso.'),
+  ];
+  rebuildCorpus();
+  const primera=q=>{const r=seccionesPorRelevancia(q);return r.length?r[0].c.page:null};
+  const casos=[
+    {nombre:'«¿dónde van los refrigeradores?» sale con la lámina que explica, no con el rótulo',ok:primera('¿dónde van los refrigeradores?')===9},
+    {nombre:'«¿dónde va la liquidación?» sale con la lámina que dice «liquidación», no con los sinónimos',ok:primera('¿dónde va la liquidación?')===14},
+  ];
+  docChunks=gChunks;docs=gDocs;manualSections=gManual;appState.manualActivo=gActivo;
+  rebuildCorpus();
+  return casos;
+}
+
 /* ── SEGUNDA TANDA: LOS MANUALES DEL ASESOR ───────
    Solo corre si hay PDF cargado. No puede comprobar respuestas concretas —cada
    manual dice lo suyo—, así que mide lo que sí es igual en cualquier manual de
@@ -7966,6 +8013,9 @@ function correrPruebas(){
 
   const nom=pruebasNombres();
   for(const n of nom)filas.push({tipo:'nombres',q:n.nombre,ok:n.ok,detalle:n.ok?'correcto':'falla'});
+
+  const orden=pruebasOrden();
+  for(const o of orden)filas.push({tipo:'orden',q:o.nombre,ok:o.ok,detalle:o.ok?'correcto':'falla'});
 
   /* Seguimiento. Lo que se rompió en el piso: el umbral viejo ampliaba con la
      pregunta anterior casi siempre —en español quedan dos o tres palabras tras
@@ -8154,6 +8204,7 @@ function correrPruebas(){
     verificacion:`${verifOk}/${TEST_VERIF.length}`,
     laminas:`${lam.filter(l=>l.ok).length}/${lam.length}`,
     nombres:`${nom.filter(n=>n.ok).length}/${nom.length}`,
+    orden:`${orden.filter(o=>o.ok).length}/${orden.length}`,
     certeza:`${pruebasCerteza.filter(p=>p.ok).length}/${pruebasCerteza.length}`,
     seguimiento:`${pruebasSeguimiento.filter(p=>p.ok).length}/${pruebasSeguimiento.length}`,
     rotulo:`${pruebasRotulo.filter(p=>p.ok).length}/${pruebasRotulo.length}`,
