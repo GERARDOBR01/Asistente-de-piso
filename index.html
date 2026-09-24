@@ -5746,17 +5746,21 @@ const ERROR_KEYWORDS=[
   {keys:['image','image input','vision','multimodal'],icon:'🖼️',msg:'El modelo no soporta imágenes.',solution:'Elige en Ajustes un modelo que lea imágenes: cualquier Gemini de la lista o gpt-4o-mini.'},
   {keys:['high demand','overloaded','over capacity','temporary','congestion'],icon:'🔥',msg:'El modelo está saturado.',solution:'No es tu conexión ni tu manual: el proveedor está al tope. Ya se reintentó unas cuantas veces; espera un minuto o cambia de modelo en Ajustes.'},
   {keys:['rate limit','too many','quota','429'],icon:'⏳',msg:'Límite de consultas excedido.',solution:'Espera 30 segundos y vuelve a intentar. Hay un límite por minuto.'},
-  {keys:['auth','unauthorized','invalid key','api_key','token'],icon:'🔑',msg:'Error de autenticación.',solution:'Tu clave API no es válida. Genera una nueva y actualízala en Ajustes.'},
+  {keys:['auth','unauthorized','invalid key','api_key','api key','token','permission denied'],icon:'🔑',msg:'Error de autenticación.',solution:'Tu clave API no es válida. Genera una nueva y actualízala en Ajustes.'},
   {keys:['not found','does not exist','not available','not support'],icon:'🔍',msg:'Modelo o recurso no encontrado.',solution:'El modelo elegido no existe o tu clave no tiene acceso a él. Cambia el modelo en Ajustes.'},
   {keys:['network','fetch','failed to fetch','abort','timeout'],icon:'📡',msg:'Error de conexión.',solution:'Revisa tu conexión a internet. Si usas VPN, desactívala o cambia de red.'},
 ];
 function formatError(err){
   const msg=err.message||'';
   const code=err.status?String(err.status):msg.match(/(\d{3})/)?.[1];
-  /* Gemini saturado responde 503 con «high demand»: el texto dice más que el
-     número, que se leería como «en mantenimiento». */
+  /* El texto dice más que el número. Gemini saturado responde 503 con «high
+     demand», que por el código se leería como «en mantenimiento»; y una key
+     mal pegada responde 400 «API key not valid», que se leería como «el
+     mensaje es demasiado largo», justo lo primero que ve quien prueba el demo. */
   const porTexto=/high demand|overloaded|over capacity|congestion/i.test(msg)
-    &&ERROR_KEYWORDS.find(e=>e.keys.includes('high demand'));
+    ?ERROR_KEYWORDS.find(e=>e.keys.includes('high demand'))
+    :/api.?key|unauthori[sz]ed|permission denied/i.test(msg)
+    ?ERROR_KEYWORDS.find(e=>e.keys.includes('api_key')):null;
   if(porTexto)return`${porTexto.icon} ${porTexto.msg}\n\n<div class="err-detail"><span class="err-code">${escapeHtml(msg)}</span><span class="err-solution">💡 ${porTexto.solution}</span></div>`;
   const guide=ERROR_GUIDE[code];
   if(guide)return`${guide.icon} ${guide.msg}\n\n<div class="err-detail"><span class="err-code">Error ${code}</span><span class="err-solution">💡 ${guide.solution}</span></div>`;
@@ -8123,6 +8127,8 @@ function correrPruebas(){
       {nombre:'3.8 no baja de LOW',ok:razonamientoGemini('gemini-3.8-flash').thinkingLevel==='LOW'},
       {nombre:'nombre corto «3.5 Flash-Lite»',ok:nombreCortoDeModelo('gemini-3.5-flash-lite')==='3.5 Flash-Lite'},
       {nombre:'el texto de Gemini ignora las partes de pensamiento',ok:textoDeGemini({candidates:[{content:{parts:[{text:'pienso',thought:true},{text:'Va '},{text:'a 1.20 m'}]}}]})==='Va a 1.20 m'},
+      {nombre:'key mal pegada (400) se lee como clave inválida',ok:/autenticaci/.test(formatError(errorDeProveedor(400,{error:{message:'API key not valid. Please pass a valid API key.'}})))},
+      {nombre:'503 «high demand» se lee como saturado',ok:/saturado/.test(formatError(errorDeProveedor(503,{error:{message:'This model is currently experiencing high demand.'}})))},
       {nombre:'ningún texto visible dice «Config»',ok:!/\bConfig\b/.test(sinScripts.textContent+' '+textosDeError)},
       {nombre:'el CSP ya no abre la dirección de GitHub Models',ok:!/azure/.test(csp)&&/generativelanguage/.test(csp)},
       {nombre:'ningún modelo de la lista es un 2.x',ok:!PROVIDERS.gemini.chatModels.some(m=>/^gemini-[12]\./.test(m))},
