@@ -3862,9 +3862,17 @@ function certezaDe(texto){
 function sinLineaDeCerteza(texto){
   return(texto||'').replace(CERTEZA_RE,'').trim()
 }
+/* El prompt pide la frase «El manual no especifica [X]» y a veces el modelo
+   copia los corchetes: «no especifica [de qué color van los ganchos]». Los
+   demás corchetes (las citas [manual · pág. N]) se quedan como están. Mientras
+   se escribe, el corchete todavía no cierra y se quita solo el que abre. */
+function sinCorchetesDePlantilla(texto){
+  return(texto||'').replace(/(no\s+especifica\s+)\[([^\]\n]*)\]?/gi,
+    (_,antes,dentro)=>antes+(/^\s*x\s*$/i.test(dentro)?'ese dato':dentro));
+}
 
 function sanitizeFinalAnswer(final,question){
-  let text=sinLineaDeCerteza(final);
+  let text=sinCorchetesDePlantilla(sinLineaDeCerteza(final));
   if(!text)return'';
   if(!isCreatorQuestion(question)){
     text=text
@@ -3936,9 +3944,9 @@ function parseAIResponse(text){
 }
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
-  if(parsed.parsed&&parsed.final)return sinLineaDeCerteza(parsed.final);
+  if(parsed.parsed&&parsed.final)return sinCorchetesDePlantilla(sinLineaDeCerteza(parsed.final));
   const partial=streamedText.match(/\[RESPUESTA\s+FINAL[^\]]*\]([\s\S]*)$/i);
-  if(partial)return sinLineaDeCerteza(partial[1]);
+  if(partial)return sinCorchetesDePlantilla(sinLineaDeCerteza(partial[1]));
   return null;
 }
 
@@ -8045,6 +8053,10 @@ function correrPruebas(){
     {nombre:'la certeza no llega al texto visible',ok:!/CERTEZA/i.test(sanitizeFinalAnswer(conMarca,'¿pasillo?'))},
     {nombre:'una respuesta sin marca no inventa certeza',ok:certezaDe('Los pasillos son de 90 cm.')===null},
     {nombre:'la marca en negritas también se lee',ok:certezaDe('Texto.\n\n**CERTEZA: GAP**')==='GAP'},
+    {nombre:'«no especifica [X]» sale sin corchetes',ok:sanitizeFinalAnswer('El manual no especifica [de qué color van los ganchos].\n\nCERTEZA: GAP','¿color?')==='El manual no especifica de qué color van los ganchos.'},
+    {nombre:'la [X] literal se lee «ese dato»',ok:sanitizeFinalAnswer('El manual de 241 Trajes no especifica [X].','¿música?')==='El manual de 241 Trajes no especifica ese dato.'},
+    {nombre:'los corchetes de las citas se quedan',ok:sanitizeFinalAnswer('Va a 15 cm [Manual.pdf · pág. 6].','¿sensor?')==='Va a 15 cm [Manual.pdf · pág. 6].'},
+    {nombre:'mientras se escribe no asoma el corchete',ok:getStreamingDisplayText('[RESPUESTA FINAL AL ASESOR]\nEl manual no especifica [de qué col')==='El manual no especifica de qué col'},
   ];
   for(const p of pruebasCerteza)filas.push({tipo:'certeza',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
 
