@@ -5,3 +5,5 @@
 *.csv
 # El manual sintético de la demo sí va en el repo
 !docs/manual-demo.pdf
+# Respuestas del modo IA medidas en local (eval/modo-ia.mjs)
+eval/resultados/
