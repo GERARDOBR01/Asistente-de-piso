@@ -60,6 +60,29 @@ verificada a mano:
 El último renglón es el que más cuido. La misma pregunta tiene cifras distintas según la
 sección, y un dato de otra sección suena cierto aunque esté mal.
 
+### Y el modo razonado, con los mismos manuales
+
+El modo con API key también está medido, con `eval/modo-ia.mjs` dentro de la app real: 110
+preguntas de esos 30 manuales (60 de dato, dos por manual; 20 que su manual no contesta y
+30 trampas). A Google solo salen los fragmentos que la búsqueda elige para cada pregunta.
+
+| | Resultado |
+|---|---|
+| Trae el dato y cita una página donde está | **55/60** |
+| Dice «no está» en las que no están y en las trampas | **49/50** |
+| Respuestas con aviso de «no pude verificar» | 3 (las tres, falsas alarmas: «definir», «típicos», «smartwatch») |
+| Primer texto en pantalla, mediana / 95 % | **2.0 s** / 19.5 s |
+
+Durante toda la prueba Google tuvo `gemini-3.5-flash` saturado, así que 109 de 110 las
+contestó el respaldo automático, `gemini-3.5-flash-lite`. Es lo que habría visto un asesor
+ese día. La trampa que falló es la de siempre: «¿qué hago si se va la luz?» contestó con la
+luz como elemento de equilibrio de una exhibición. Con el manual demo
+(`eval/preguntas-demo.json`, 36 preguntas) sale 22/24 y 12/12.
+
+También probé quitarle las seis etapas para que la respuesta saliera mientras se escribe. El
+primer texto bajó a 0.9 s, pero acertó 51/60 en vez de 55: dos veces dijo «no está» cuando
+sí estaba. La regla era no perder más de un acierto a cambio de velocidad, así que no entró.
+
 ## En 37 segundos
 
 <p align="center">

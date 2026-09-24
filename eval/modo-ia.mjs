@@ -53,7 +53,9 @@ function tieneAlternativa(resp, alt) {
   return pal.filter(w => r.includes(w.slice(0, 5))).length >= Math.ceil(pal.length / 2);
 }
 const SIN_DATO = /no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:regla|dato|informaci[óo]n)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
-const paginasCitadas = t => [...(t || '').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+)/gi)].map(m => Number(m[1]));
+/* «pág. 14, 20» y «págs. 2 y 16» citan las dos páginas, no solo la primera. */
+const paginasCitadas = t => [...(t || '').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+(?:\s*(?:,|y|-|–)\s*\d+)*)/gi)]
+  .flatMap(m => m[1].match(/\d+/g).map(Number));
 
 function calificar(p, r) {
   const texto = r.cuerpo || '';
@@ -137,7 +139,9 @@ const leer = f => fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filt
 if (process.argv.includes('--resumen')) {
   const tabla = {};
   for (const f of fs.readdirSync(SALIDA).filter(f => f.endsWith('.jsonl')).sort())
-    tabla[f.replace('.jsonl', '')] = resumir(leer(path.join(SALIDA, f)));
+    /* Se vuelve a calificar con lo guardado: si el calificador cambia, los
+       números se rehacen sin volver a preguntar. */
+    tabla[f.replace('.jsonl', '')] = resumir(leer(path.join(SALIDA, f)).map(x => ({ ...x, ...calificar(x, x) })));
   console.table(tabla);
   process.exit(0);
 }
