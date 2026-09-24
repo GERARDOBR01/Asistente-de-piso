@@ -565,6 +565,19 @@ sistema dice más de él que la lista de lo que hace:
     por su cuenta gasta el tiempo en el sitio equivocado y, peor, esconde los fallos de
     verdad: los dos reales —"espacio de paso" y "lo rebajado"— estaban en la misma lista.
 
+17. **El proveedor de fábrica llevaba casi un año muerto, y la app culpaba a la señal.**
+    GitHub Models era la opción por defecto y la app llamaba a `models.inference.ai.azure.com`,
+    que dejó de existir en octubre de 2025; GitHub retiró el servicio entero en julio de 2026.
+    La petición fallaba antes de salir y el error se leía como *"Revisa tu conexión a
+    internet"*. Se quitó, y Gemini quedó por defecto. El que quedaba, `gemini-3.5-flash`, se
+    satura del lado de Google: seis reintentos (de 1 a 30 s) sumaban casi minuto y medio antes
+    del error. Ahora son tres, y a la segunda saturación contesta `gemini-3.5-flash-lite` y la
+    tarjeta lo dice; con todo saturado, el error sale en 8 s. El respaldo obvio era
+    `gemini-2.5-flash`, pero Google dejó los 2.5 solo a cuentas que ya los usaban: con una key
+    nueva —la de quien prueba el demo— el respaldo también habría fallado. Y lo de apagar el
+    pensamiento interno (hallazgo 8) no se pide igual en los 3.x: usan `thinkingLevel`, no
+    `thinkingBudget`, y lo más bajo es `MINIMAL`.
+
 ## Relación con Veristack
 
 Es la otra mitad del mismo problema. [Veristack](https://github.com/GERARDOBR01/veristack)
