@@ -9,18 +9,18 @@
 </p>
 
 <p align="center">
-  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-E8C872?style=for-the-badge&labelColor=0B0B0D"></a>
-  <a href="docs/video-linkedin.mp4"><img alt="Video" src="https://img.shields.io/badge/video-37%20s-B8860B?style=for-the-badge&labelColor=0B0B0D"></a>
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licencia-MIT-9A968E?style=for-the-badge&labelColor=0B0B0D"></a>
+  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-FF5A6E?style=for-the-badge&labelColor=0D0E12"></a>
+  <a href="docs/video-linkedin.mp4"><img alt="Video" src="https://img.shields.io/badge/video-37%20s-FF8A5B?style=for-the-badge&labelColor=0D0E12"></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licencia-MIT-B3B0B8?style=for-the-badge&labelColor=0D0E12"></a>
 </p>
 
 <p align="center">
-  <img alt="Un solo archivo HTML" src="https://img.shields.io/badge/1%20archivo-index.html-F5F1E8?labelColor=0B0B0D">
-  <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F5F1E8?labelColor=0B0B0D">
-  <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F5F1E8?labelColor=0B0B0D">
-  <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F5F1E8?labelColor=0B0B0D">
-  <img alt="Arnés interno" src="https://img.shields.io/badge/arn%C3%A9s-118%2F118-F5F1E8?labelColor=0B0B0D">
-  <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F5F1E8?labelColor=0B0B0D">
+  <img alt="Un solo archivo HTML" src="https://img.shields.io/badge/1%20archivo-index.html-F4F2F0?labelColor=0D0E12">
+  <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
+  <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
+  <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
+  <img alt="Arnés interno" src="https://img.shields.io/badge/arn%C3%A9s-118%2F118-F4F2F0?labelColor=0D0E12">
+  <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
 Asistente conversacional de una sola página para el personal de piso de una tienda:
