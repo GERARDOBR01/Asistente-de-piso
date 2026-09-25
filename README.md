@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-FF5A6E?style=for-the-badge&labelColor=0D0E12"></a>
-  <a href="docs/video-linkedin.mp4"><img alt="Video" src="https://img.shields.io/badge/video-37%20s-FF8A5B?style=for-the-badge&labelColor=0D0E12"></a>
+  <a href="docs/como-funciona.mp4"><img alt="Cómo funciona" src="https://img.shields.io/badge/c%C3%B3mo%20funciona-13%20s-FF8A5B?style=for-the-badge&labelColor=0D0E12"></a>
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licencia-MIT-B3B0B8?style=for-the-badge&labelColor=0D0E12"></a>
 </p>
 
@@ -91,14 +91,13 @@ Estos números son de antes de cambiar el orden de las láminas (arriba). Ese ca
 cuántas preguntas llevan el dato al modelo (182 de 186), pero sí el orden en que llega, así
 que falta volver a medirlo con una key.
 
-## En 37 segundos
+## Cómo funciona, en 13 segundos
 
 <p align="center">
-  <a href="docs/video-linkedin.mp4"><img src="docs/preview.gif" alt="Vista previa del video: problema → pregunta → evidencia → certeza → honestidad → números" width="420"></a>
+  <a href="docs/como-funciona.mp4"><img src="docs/preview.gif" alt="Animación: el manual entra al celular, se parte en láminas, llega una pregunta con faltas y sube la lámina que contesta, con su página" width="420"></a>
 </p>
 
-Video conceptual (motion graphics, no una grabación de la interfaz): **[ver en MP4 con audio](docs/video-linkedin.mp4)**.
-Música: "Voltaic" de Kevin MacLeod (incompetech.com), [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+Lee tu manual → lo parte en láminas → preguntas como hablas → responde con la página y la lámina. La pregunta, la lámina que gana, el texto y el dibujo salen del motor real corriendo sobre el manual de ejemplo: **[ver en MP4](docs/como-funciona.mp4)**.
 
 ## Qué resuelve
 
