@@ -7,3 +7,4 @@
 !docs/manual-demo.pdf
 # Respuestas del modo IA medidas en local (eval/modo-ia.mjs)
 eval/resultados/
+node_modules/

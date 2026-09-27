@@ -1,0 +1,28 @@
+# Corre el arnés de la app (index.html?test=1) en cada push a main y en cada
+# pull request. El repo no tiene package.json a propósito: Playwright se
+# instala solo aquí, sin guardarse.
+name: arnés
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  arnes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright y Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Arnés
+        run: node eval/arnes.mjs

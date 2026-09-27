@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <img alt="Arnés interno" src="https://img.shields.io/badge/arn%C3%A9s-118%2F118-F4F2F0?labelColor=0D0E12">
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 118 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20118%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -216,6 +216,12 @@ numérica, de láminas y de certeza. Reporta recall, cuánto ruido se atrapa y *
 caso más ajustado sobre el corte relativo `CTX_ALPHA`**, que es el número que hay que volver
 a mirar cada vez que se toca el vocabulario. Corre entero en el dispositivo, sin API y sin
 red, sobre las mismas funciones que usa el chat.
+
+**Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
+Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
+alguna de las 118 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
+Playwright).
 
 Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
 respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier
