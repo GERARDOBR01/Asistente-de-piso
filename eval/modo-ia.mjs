@@ -15,6 +15,8 @@
 //                        plan gratis (por defecto 7)
 //   --variante <nombre>  mide una variante del prompt de sistema (ver VARIANTES)
 //                        sin tocar la app; va con su propia --etiqueta
+//   --clave-en-pagina    con --vivo: la key ya está pegada en Ajustes de esa
+//                        página y el script no la lee ni la manda
 //
 // La key se lee de GEMINI_API_KEY o de ~/.config/asistente/gemini.key. No se
 // imprime ni se escribe en ningún archivo. Requiere playwright-core y Chromium:
@@ -102,7 +104,7 @@ const MEDIR = async ({ q, h, m, clave, modelo, variante }) => {
   /* El Chromium de Termux se reporta sin señal, y sin señal la app contesta en
      modo manual. */
   if (!navigator.onLine) Object.defineProperty(navigator, 'onLine', { get: () => true, configurable: true });
-  sessionStorage.setItem('ap_api_key_gemini', clave);
+  if (clave) sessionStorage.setItem('ap_api_key_gemini', clave);
   appState.provider = 'gemini'; appState.chatModel = modelo;
   if (variante) {
     const s = document.getElementById('system-prompt').value;
@@ -178,8 +180,11 @@ if (process.argv.includes('--resumen')) {
 
 /* ── Corrida ──────────────────────────────────────────────────────────────── */
 const archivoClave = path.join(os.homedir(), '.config/asistente/gemini.key');
-const CLAVE = (process.env.GEMINI_API_KEY || (fs.existsSync(archivoClave) ? fs.readFileSync(archivoClave, 'utf8') : '')).trim();
-if (CLAVE.length < 10) { console.error('Falta la key: GEMINI_API_KEY o ' + archivoClave); process.exit(1); }
+/* Con --clave-en-pagina la key ya la pegó el asesor en Ajustes de la página
+   que se mide (con --vivo) y no sale de ahí: aquí no se lee ni se manda. */
+const EN_PAGINA = process.argv.includes('--clave-en-pagina');
+const CLAVE = EN_PAGINA ? null : (process.env.GEMINI_API_KEY || (fs.existsSync(archivoClave) ? fs.readFileSync(archivoClave, 'utf8') : '')).trim();
+if (!EN_PAGINA && CLAVE.length < 10) { console.error('Falta la key: GEMINI_API_KEY o ' + archivoClave); process.exit(1); }
 
 const preguntas = JSON.parse(fs.readFileSync(PREGUNTAS, 'utf8'));
 fs.mkdirSync(SALIDA, { recursive: true });
