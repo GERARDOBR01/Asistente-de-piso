@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 118 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20118%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 119 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20119%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -94,7 +94,9 @@ respaldo 3.5 Flash-Lite): **22/24 y 12/12, igual que antes**, con el primer text
 mediana. De los dos que fallan, uno es del modelo y otro de la búsqueda. «La barra se ve muy
 llena» sí trae la lámina de SATURACIÓN, en primer lugar, pero el modelo contestó con la de
 alineación. «¿Qué reviso antes de que llegue la regional?» no traía nada, porque el CHECK
-LIST nunca escribe «revisar». Falta la medición con los 30 manuales.
+LIST nunca escribe «revisar». Ya lo trae: el diccionario lleva «reviso» al CHECK LIST, y de
+las 36 preguntas del demo es la única cuyo contexto cambia. Lo que conteste el modelo con eso
+está sin medir. Falta la medición con los 30 manuales.
 
 Hay una segunda prueba de velocidad, sin tocar la app: `eval/modo-ia.mjs --variante
 lectura-corta` cambia las seis etapas por un solo paso («ubica la página y el rótulo del
@@ -233,7 +235,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 118 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 119 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 
