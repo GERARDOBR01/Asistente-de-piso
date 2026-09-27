@@ -91,16 +91,19 @@ Los números de los 30 manuales son de antes de cambiar el orden de las láminas
 cambio no movió cuántas preguntas llevan el dato al modelo (182 de 186), pero sí el orden en
 que llega. **Con el manual demo ya está medido de nuevo** (26-sep, también todo por el
 respaldo 3.5 Flash-Lite): **22/24 y 12/12, igual que antes**, con el primer texto en 2.0 s de
-mediana. Los dos que fallan los pierde la búsqueda, no el modelo: «la barra se ve muy llena»
-no trae la lámina de saturación, y el CHECK LIST se queda fuera del corte relativo. Falta la
-medición con los 30 manuales.
+mediana. De los dos que fallan, uno es del modelo y otro de la búsqueda. «La barra se ve muy
+llena» sí trae la lámina de SATURACIÓN, en primer lugar, pero el modelo contestó con la de
+alineación. «¿Qué reviso antes de que llegue la regional?» no traía nada, porque el CHECK
+LIST nunca escribe «revisar». Falta la medición con los 30 manuales.
 
 Hay una segunda prueba de velocidad, sin tocar la app: `eval/modo-ia.mjs --variante
 lectura-corta` cambia las seis etapas por un solo paso («ubica la página y el rótulo del
 dato, o di que no está») antes de responder. Con el manual demo empata en aciertos (22/24,
 12/12) y con el mismo modelo tarda la mitad (1.0 s contra 2.0 s de mediana). Pero una
-respuesta nueva salió contradictoria: dice «el manual no especifica» y luego da la regla. No
-entra a la app hasta medirla con los 30 manuales reales.
+respuesta nueva salió contradictoria: dice «el manual no especifica» y luego da la regla. Para
+eso está `--variante lectura-corta-2`, que agrega una línea: si el contexto trae la regla,
+se contesta con ella. Está sin medir. Ninguna de las dos entra a la app hasta medirlas con los
+30 manuales reales.
 
 ## Cómo funciona, en 13 segundos
 

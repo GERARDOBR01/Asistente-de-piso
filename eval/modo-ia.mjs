@@ -60,6 +60,17 @@ LECTURA: una sola línea con la página y el rótulo del fragmento que trae el d
 `,
   },
 };
+/* La primera dio una respuesta que se contradice: «El manual no especifica si
+   el sensor puede ir al frente…, ya que… nunca atraviesa la tela del frente
+   (pág. 6)». Si la LECTURA encontró una regla que contesta, esa regla es la
+   respuesta. Sin medir todavía. */
+VARIANTES['lectura-corta-2'] = {
+  ...VARIANTES['lectura-corta'],
+  por: VARIANTES['lectura-corta'].por.replace(/\n\n$/, `
+Si la LECTURA encontró una regla que contesta la pregunta, aunque sea en negativo ("nunca", "no va"), la respuesta es esa regla con su página. "El manual no especifica" es solo para cuando la LECTURA dice "no está".
+
+`),
+};
 const VARIANTE = arg('variante', null);
 if (VARIANTE && !VARIANTES[VARIANTE]) { console.error('Variante desconocida: ' + VARIANTE); process.exit(1); }
 
