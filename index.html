@@ -1900,6 +1900,11 @@ const SYNONYMS={
      batería, y el hueco estaba aquí, no en la regla. */
   'porcentaje':['participacion','porciento','proporcion'],
   'saturacion':['capacidad','llena','lleno','apretado','holgura'],
+  /* «¿Qué reviso antes de que llegue la regional?» volvía con cero fragmentos:
+     la lámina que contesta se titula CHECK LIST y nunca escribe «revisar». Y la
+     derivación no va hacia el infinitivo (ver `variantes`), así que «reviso» no
+     llegaba ni a esta entrada: las formas que escribe el asesor van en la lista. */
+  'revisar':['check list','checklist','reviso','revisa','revisan','revision','checar','checo'],
   'planchar':['planchado','vaporera','eliminar arrugas'],
   'cambiar':['rotar','actualizar','renovar'],
   // ═══ CONCEPTOS VM MERCADEP ═══
@@ -8065,6 +8070,7 @@ function correrPruebas(){
     {nombre:'«cuelgo» alcanza COLGADO (la raíz cambia al conjugar)',ok:tiene('cuelgo','colgado')},
     {nombre:'«cierro» alcanza CERRADO',ok:tiene('cierro','cerrado')},
     {nombre:'«rebajado» alcanza «rebaja», que el diccionario lleva a LIQUIDACIÓN',ok:tiene('rebajado','rebaja')},
+    {nombre:'«reviso» llega al CHECK LIST por el diccionario',ok:variantes('reviso').some(v=>expandKeywords([v]).includes('check list'))},
     /* La derivación va en un solo sentido a propósito: al revés, «cambio»
        alcanzaba «cambiar» y una pregunta de coches volvía a ser contestable. */
     {nombre:'«cambio» NO alcanza el verbo «cambiar»',ok:!tiene('cambio','cambiar')},
