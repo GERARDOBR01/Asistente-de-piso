@@ -17,6 +17,9 @@
 //                        sin tocar la app; va con su propia --etiqueta
 //   --clave-en-pagina    con --vivo: la key ya está pegada en Ajustes de esa
 //                        página y el script no la lee ni la manda
+//   --motor <nombre>     clasico (el de siempre) o agente (el lector con
+//                        herramientas). Con agente, antes de preguntar se
+//                        prepara la ficha del manual con IA; va con su --etiqueta
 //
 // La key se lee de GEMINI_API_KEY o de ~/.config/asistente/gemini.key. No se
 // imprime ni se escribe en ningún archivo. Requiere playwright-core y Chromium:
@@ -40,6 +43,8 @@ const ETIQUETA = arg('etiqueta', 'base');
 const PREGUNTAS = arg('preguntas', path.join(RAIZ, 'eval/preguntas-demo.json'));
 const SALIDA = arg('salida', path.join(RAIZ, 'eval/resultados'));
 const VIVO = arg('vivo', null);
+const MOTOR = arg('motor', null);
+if (MOTOR && !['clasico', 'agente'].includes(MOTOR)) { console.error('Motor desconocido: ' + MOTOR); process.exit(1); }
 const PAUSA = Number(arg('pausa', 7)) * 1000;
 
 /* Variantes del prompt de sistema que se miden antes de tocar la app: dentro
@@ -111,12 +116,13 @@ function calificar(p, r) {
 /* Una pregunta en modo IA, igual que la haría el asesor, y lo que vio en
    pantalla. `tPrimer` es cuándo apareció el primer texto de la respuesta:
    con las seis etapas, lo que se escribe antes de [RESPUESTA FINAL] no se ve. */
-const MEDIR = async ({ q, h, m, clave, modelo, variante }) => {
+const MEDIR = async ({ q, h, m, clave, modelo, variante, motor, turnos }) => {
   /* El Chromium de Termux se reporta sin señal, y sin señal la app contesta en
      modo manual. */
   if (!navigator.onLine) Object.defineProperty(navigator, 'onLine', { get: () => true, configurable: true });
   if (clave) sessionStorage.setItem('ap_api_key_gemini', clave);
   appState.provider = 'gemini'; appState.chatModel = modelo;
+  if (motor) appState.motor = motor;
   if (variante) {
     const s = document.getElementById('system-prompt').value;
     const i = s.indexOf(variante.de), j = s.indexOf(variante.hasta);
@@ -132,6 +138,13 @@ const MEDIR = async ({ q, h, m, clave, modelo, variante }) => {
     cambiarSeccion(d.name);
   }
   history = []; clearChat();
+  /* Una conversación: los turnos previos se preguntan igual que el último,
+     pero solo se califica el último. «¿y en el clásico?» no significa nada
+     sin la pregunta de antes. */
+  for (const previa of turnos || []) {
+    document.getElementById('user-input').value = previa;
+    await sendMessage();
+  }
   const n = t => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const paginas = h ? [...new Set(docChunks.filter(c => n(c.heading).includes(n(h))).map(c => c.page))] : null;
   const box = document.getElementById('chat-messages');
@@ -154,7 +167,19 @@ const MEDIR = async ({ q, h, m, clave, modelo, variante }) => {
     aviso: el?.querySelector('.verify-warn')?.innerText || '',
     contesto: el?.querySelector('.msg-modelo')?.textContent || '',
     error: !!el?.querySelector('.err-detail'),
+    /* Lo que hizo el agente en la última pregunta (null con el motor clásico). */
+    agente: typeof ultimaTrazaAgente !== 'undefined' ? ultimaTrazaAgente : null,
   };
+};
+/* Con el motor agente, la ficha del manual se prepara una vez antes de
+   preguntar: es lo que el asesor tendría después de cargar su PDF con key. */
+const PREPARAR = async ({ clave }) => {
+  if (!navigator.onLine) Object.defineProperty(navigator, 'onLine', { get: () => true, configurable: true });
+  if (clave) sessionStorage.setItem('ap_api_key_gemini', clave);
+  appState.provider = 'gemini'; appState.apiKey = sessionStorage.getItem('ap_api_key_gemini') || '';
+  const r = [];
+  for (const d of docs) r.push({ doc: d.name, ...(await prepararFicha(d.name, { silencioso: true })) });
+  return r;
 };
 
 /* ── Resumen ──────────────────────────────────────────────────────────────── */
@@ -174,6 +199,14 @@ function resumir(filas) {
     errores: filas.filter(f => f.error).length,
     respaldo: filas.filter(f => /respaldo/.test(f.contesto || '')).length,
     primerTextoP50: seg(pct(primer, 0.5)), primerTextoP95: seg(pct(primer, 0.95)),
+    ...(() => {
+      const ag = sinError.map(f => f.agente).filter(Boolean);
+      if (!ag.length) return {};
+      const prom = k => (ag.reduce((s, a) => s + (a[k] || 0), 0) / ag.length).toFixed(1);
+      return { agente: `${ag.filter(a => a.motor === 'agente').length}/${sinError.length}`,
+        rondas: prom('rondas'), paginasLeidas: prom('paginas'), imagenes: prom('imagenes'),
+        tokensPorPregunta: Math.round(ag.reduce((s, a) => s + (a.tokens || 0), 0) / ag.length) };
+    })(),
     totalP50: seg(pct(total, 0.5)), totalP95: seg(pct(total, 0.95)),
   };
 }
@@ -217,6 +250,11 @@ if (VIVO) {
     if (r.startsWith('ERROR')) throw new Error(r);
     return JSON.parse(r);
   };
+  if (MOTOR === 'agente') {
+    const r = await post(`return await (${PREPARAR.toString()})(${JSON.stringify({ clave: CLAVE })})`);
+    if (r.startsWith('ERROR')) throw new Error(r);
+    console.log('ficha:', r);
+  }
 } else {
   const { chromium } = await import(process.env.PLAYWRIGHT_CORE ? pathToFileURL(process.env.PLAYWRIGHT_CORE).href : 'playwright-core');
   const port = 9500 + Math.floor(Math.random() * 100);
@@ -231,13 +269,14 @@ if (VIVO) {
   await p.setInputFiles('#file-input', { name: '140 CASUAL HOMBRE.pdf', mimeType: 'application/pdf', buffer: fs.readFileSync(path.join(RAIZ, 'docs/manual-demo.pdf')) });
   await p.waitForFunction(() => docs.length === 1 && document.getElementById('proc-wrap').style.display === 'none', null, { timeout: 120000 });
   preguntar = a => p.evaluate(MEDIR, a);
+  if (MOTOR === 'agente') console.log('ficha:', JSON.stringify(await p.evaluate(PREPARAR, { clave: CLAVE })));
 }
 
 try {
   const pendientes = preguntas.filter(x => !yaHecha.has((x.m ?? '') + '|' + x.q));
   console.log(`${MODELO} · ${ETIQUETA}: ${pendientes.length} por preguntar (${hechas.length} ya medidas)`);
   for (const [i, x] of pendientes.entries()) {
-    const r = await preguntar({ q: x.q, h: x.h || null, m: x.m ?? null, clave: CLAVE, modelo: MODELO, variante: VARIANTES[VARIANTE] || null });
+    const r = await preguntar({ q: x.q, h: x.h || null, m: x.m ?? null, clave: CLAVE, modelo: MODELO, variante: VARIANTES[VARIANTE] || null, motor: MOTOR, turnos: x.turnos || null });
     if (r.falta) { console.log('  sin manual:', x.m); continue; }
     const fila = { ...x, ...r, ...calificar(x, r), modeloPedido: MODELO, etiqueta: ETIQUETA, fecha: new Date().toISOString() };
     fs.appendFileSync(destino, JSON.stringify(fila) + '\n');
