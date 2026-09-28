@@ -2204,7 +2204,7 @@ function masParecida(w){
     if(enActivo(t)&&p>propiaP){propiaP=p;propia=t}
   }
   if(propia)return propia;
-  /* Letras cambiadas de lugar: «Koslitch» por «Kostlich». Con nombres de marca
+  /* Letras cambiadas de lugar: «Trevsik» por «Tresvik». Con nombres de marca
      es la errata más común —se escriben de memoria— y no la alcanzaba nada: la
      «t» se movió dos lugares, rompe la mitad de los trigramas (0.44) y suena a
      dos letras de distancia. Mismas letras, misma primera letra, seis o más:
@@ -6943,7 +6943,7 @@ function responderSinModelo(q){
 
    El motor clásico decide con BM25 qué fragmentos ve el modelo y le da
    órdenes según lo que encontró. Si la búsqueda falla —«contemporáneo» no
-   llega a «Contempo», «Koslitch» no llega a «Kostlich», las marcas están en
+   llega a «Contempo», «Trevsik» no llega a «Tresvik», las marcas están en
    un logo—, el modelo nunca ve la respuesta y obedece un «no está».
 
    Aquí el que decide es el modelo. Recibe el MAPA del manual (una línea por
@@ -6994,7 +6994,7 @@ TU FUENTE es el manual de «${seccion}». Está en el teléfono del asesor y lo 
 - buscar: búsqueda literal en el manual, útil para nombres raros o palabras exactas.${conOtras?`
 - buscar_en_otras_secciones: solo para señalar en qué otra sección cargada aparece algo que esta no trae.`:''}
 
-Abajo van el MAPA del manual (una línea por página) y el GLOSARIO de la sección. Úsalos para decidir qué leer. El asesor escribe como habla, con faltas y abreviaturas: «contemporáneo» puede ser «Contempo», «Koslitch» puede ser «Kostlich», «la alarma» es el sensor. Tú decides qué páginas leer; lee antes de contestar. Si la lectura anticipada ya trae la respuesta, contesta sin pedir más.
+Abajo van el MAPA del manual (una línea por página) y el GLOSARIO de la sección. Úsalos para decidir qué leer. El asesor escribe como habla, con faltas y abreviaturas: «contemporáneo» puede ser «Contempo», «Trevsik» puede ser «Tresvik», «la alarma» es el sensor. Tú decides qué páginas leer; lee antes de contestar. Si la lectura anticipada ya trae la respuesta, contesta sin pedir más.
 
 REGLAS:
 1. Solo cuenta lo que leíste en esta pregunta (lectura anticipada, leer_paginas o ver_lamina). El mapa y el glosario sirven para ubicar: no son el manual y no se citan.
@@ -7042,7 +7042,7 @@ function mapaDeSeccion(doc){
   return lineas.join('\n')
 }
 /* Las marcas, los mundos y las abreviaturas de toda la sección, juntos: es lo
-   que permite entender «Koslitch» o «contemporáneo» sin leer nada todavía. */
+   que permite entender «Trevsik» o «contemporáneo» sin leer nada todavía. */
 function glosarioDeSeccion(doc){
   const f=docFichas.get(doc);
   if(!f)return'';
@@ -9582,20 +9582,20 @@ function correrPruebasAisladas(){
 async function pruebasAgente(){
   const filas=[];
   const fila=(q,ok,detalle)=>filas.push({tipo:'agente',q,ok:!!ok,detalle:ok?'correcto':(detalle||'falla')});
-  const DOC='900 MESA FINA.pdf';
+  const DOC='900 VAJILLA DEMO.pdf';
   const pag=(page,titulo,texto)=>({page,titulo,blocks:[{text:texto,heading:titulo}]});
   docs=[{name:DOC}];
   docChunks=buildChunks([
-    pag(3,'CLASIFICACIÓN','Mesa Fina se divide principalmente en dos mundos CLÁSICO y CONTEMPO.'),
+    pag(3,'CLASIFICACIÓN','La sección se divide en dos mundos: CLÁSICO y CONTEMPO.'),
     pag(4,'CONTEMPO','Mundo Contempo: vajilla y cristal de diseño actual, en mesa al frente.'),
-    pag(6,'KOSTLICH','Kostlich se exhibe en bloque junto a Narrative, una caja por modelo.'),
+    pag(6,'TRESVIK','Tresvik se exhibe en bloque junto a Kalinde, una caja por modelo.'),
     pag(14,'CUBIERTOS','La cubertería se clasifica por estilos: Clásicos y Contemporáneos.'),
   ],DOC);
   docFigures=[];docPaginas=new Map();docFichas=new Map();
   appState.manualActivo=DOC;rebuildCorpus();
   const ficha={version:FICHA_VERSION,modelo:'prueba',fecha:0,paginas:{
-    4:limpiarFichaPagina({titulo:'CONTEMPO',resumen:'Qué va en el mundo Contempo.',temas:['mundo contempo'],marcas:['Kostlich','Narrative','Riedel'],
-      mundos:['Contempo'],texto_visual:'CONTEMPO: Kostlich, Narrative, Riedel',alias:['Contempo = contemporáneo'],preguntas:['¿Qué marcas van en Contempo?'],extra:'<script>'})}};
+    4:limpiarFichaPagina({titulo:'CONTEMPO',resumen:'Qué va en el mundo Contempo.',temas:['mundo contempo'],marcas:['Tresvik','Kalinde','Velmira'],
+      mundos:['Contempo'],texto_visual:'CONTEMPO: Tresvik, Kalinde, Velmira',alias:['Contempo = contemporáneo'],preguntas:['¿Qué marcas van en Contempo?'],extra:'<script>'})}};
 
   /* Ficha */
   const limpia=ficha.paginas[4];
@@ -9605,7 +9605,7 @@ async function pruebasAgente(){
   const rc=retrieve('¿qué marcas son del mundo contemporáneo?',{source:'pdf',limit:6,doc:DOC});
   fila('«contemporáneo» llega a la lámina CONTEMPO por la ficha',rc.some(r=>r.c.page===4&&!r.c.isFicha),'págs: '+rc.map(r=>r.c.page).join(','));
   fila('la ficha «índice» nunca sale como resultado',!rc.some(r=>r.c.isFicha==='indice'));
-  fila('«koslitch» (letras cambiadas) se corrige a «kostlich»',masParecida('koslitch')==='kostlich','quedó: '+masParecida('koslitch'));
+  fila('«trevsik» (letras cambiadas) se corrige a «tresvik»',masParecida('trevsik')==='tresvik','quedó: '+masParecida('trevsik'));
   const indice4=docChunks.find(c=>c.isFicha==='indice'&&c.page===4);
   fila('un acierto de la ficha mete UN fragmento de su página, no tres',paginasEnVezDeFicha([{c:indice4,score:5,hits:1,hitsSyn:0,hitsErrata:0}],weightedTerms('contempo')).length===1);
   /* Lo destapó un manual real: dos menciones de cruce a la sección vecina
@@ -9626,26 +9626,26 @@ async function pruebasAgente(){
   fila('herramienta que no existe → error, no excepción',/no existe/.test(ejecutarHerramienta({name:'borrar_todo',args:{}},est).texto));
   fila('argumentos basura → error',/Error/.test(ejecutarHerramienta({name:'leer_paginas',args:'x'},est).texto)&&/Error/.test(ejecutarHerramienta({name:'buscar',args:{texto:42}},est).texto));
   const leida=ejecutarHerramienta({name:'leer_paginas',args:{paginas:[4]}},est).texto;
-  fila('leer_paginas trae el texto y lo transcrito de la imagen',/diseño actual/.test(leida)&&/Riedel/.test(leida)&&/transcrito por IA/.test(leida));
+  fila('leer_paginas trae el texto y lo transcrito de la imagen',/diseño actual/.test(leida)&&/Velmira/.test(leida)&&/transcrito por IA/.test(leida));
   fila('ver_lamina sin imagen guardada contesta con el texto',/No tengo la imagen/.test(ejecutarHerramienta({name:'ver_lamina',args:{pagina:6}},est).texto));
   const tope=nuevoEstadoAgente(DOC);
   for(let i=0;i<5;i++)ejecutarHerramienta({name:'leer_paginas',args:{paginas:[3,4,6,14]}},tope);
   fila('las páginas leídas no pasan del tope',tope.leidas.size<=AGENTE_MAX_PAGINAS);
 
   /* Citas */
-  const c=camposDelAgente('ENTENDÍ: ¿Qué marcas van en Contempo?\nCORRECCIONES: Koslitch → Kostlich; contemporáneo → Contempo\nEVIDENCIA: pág. 4 · CONTEMPO · «CONTEMPO: Kostlich, Narrative, Riedel»\nEVIDENCIA: pág. 6 · KOSTLICH · «se exhibe en bloque junto a Narrative»\nOPCIONES: ¿Dónde va Contempo? | ¿Qué cubiertos son contemporáneos?');
-  fila('se leen ENTENDÍ, CORRECCIONES, EVIDENCIA y OPCIONES',c.entendi&&c.correcciones.length===2&&c.correcciones[0].manual==='Kostlich'&&c.evidencia.length===2&&c.evidencia[1].page===6&&c.opciones.length===2,JSON.stringify(c).slice(0,160));
+  const c=camposDelAgente('ENTENDÍ: ¿Qué marcas van en Contempo?\nCORRECCIONES: Trevsik → Tresvik; contemporáneo → Contempo\nEVIDENCIA: pág. 4 · CONTEMPO · «CONTEMPO: Tresvik, Kalinde, Velmira»\nEVIDENCIA: pág. 6 · TRESVIK · «se exhibe en bloque junto a Kalinde»\nOPCIONES: ¿Dónde va Contempo? | ¿Qué cubiertos son contemporáneos?');
+  fila('se leen ENTENDÍ, CORRECCIONES, EVIDENCIA y OPCIONES',c.entendi&&c.correcciones.length===2&&c.correcciones[0].manual==='Tresvik'&&c.evidencia.length===2&&c.evidencia[1].page===6&&c.opciones.length===2,JSON.stringify(c).slice(0,160));
   fila('«CORRECCIONES: ninguna» no es una corrección',camposDelAgente('CORRECCIONES: ninguna\nOPCIONES: ninguna').correcciones.length===0);
   const e2=nuevoEstadoAgente(DOC);leerPaginaAgente(e2,4);leerPaginaAgente(e2,6);
   const vc=(cita,page)=>verificarCitas([{page,cita}],e2).malas;
-  fila('cita literal en su página → vale',vc('Kostlich, Narrative, Riedel',4).length===0);
-  fila('cita inventada → se señala',vc('Kostlich, Nordika, Soltera y Riedel van juntos',4).length===1);
-  fila('cita de otra página → se señala con la página buena',/pág\. 6/.test((vc('se exhibe en bloque junto a Narrative',4)[0]||{}).motivo||''));
+  fila('cita literal en su página → vale',vc('Tresvik, Kalinde, Velmira',4).length===0);
+  fila('cita inventada → se señala',vc('Tresvik, Nordika, Soltera y Velmira van juntos',4).length===1);
+  fila('cita de otra página → se señala con la página buena',/pág\. 6/.test((vc('se exhibe en bloque junto a Kalinde',4)[0]||{}).motivo||''));
   fila('cita de una página que no leyó → se señala',/no la leyó/.test((vc('clasifica por estilos',14)[0]||{}).motivo||''));
 
   /* Historial */
-  history=[{role:'user',content:'marcas'},{role:'assistant',content:'[MESA FINA · pág. 5]\n'+'Marca '.repeat(300),modo:'manual'},
-    {role:'user',content:'¿qué marcas van en contempo?'},{role:'assistant',content:'Kostlich (pág. 4).',entendi:'¿Qué marcas van en Contempo?'}];
+  history=[{role:'user',content:'marcas'},{role:'assistant',content:'[VAJILLA DEMO · pág. 5]\n'+'Marca '.repeat(300),modo:'manual'},
+    {role:'user',content:'¿qué marcas van en contempo?'},{role:'assistant',content:'Tresvik (pág. 4).',entendi:'¿Qué marcas van en Contempo?'}];
   const h=historialParaModelo(6);
   fila('lo del modo manual no vuelve al modelo como fragmentos',h[1].content.length<120);
   fila('lo que entendió el agente sí vuelve',/Entendí: ¿Qué marcas van en Contempo/.test(h[3].content));
@@ -9686,10 +9686,10 @@ async function pruebasAgente(){
   err=null;try{await ejecutarAgente({q:'¿dónde va contempo?',provider:mudo,key:'x',model:'m'})}catch(e){err=e}
   fila('un agente que no contesta nada también cae al clásico',!!err);
   /* Medición con examen */
-  const ex=validarExamen({preguntas:[{q:'¿a qué altura?',tipo:'dato',seccion:'900 MESA FINA',k:['15 cm'],p:['6',99,'x'],extra:1},
+  const ex=validarExamen({preguntas:[{q:'¿a qué altura?',tipo:'dato',seccion:'900 VAJILLA DEMO',k:['15 cm'],p:['6',99,'x'],extra:1},
     {q:'x',tipo:'inventado'},{tipo:'dato'},{q:'¿hay luz?',tipo:'trampa',turnos:['uno',7]}]});
   fila('el examen solo toma preguntas y campos válidos',ex.length===2&&ex[0].p.join()==='6,99'&&!('extra'in ex[0])&&ex[1].turnos.join()==='uno');
-  fila('la sección del examen se encuentra por nombre o por código',docDeSeccion('900 MESA FINA')===DOC&&docDeSeccion('900')===DOC&&docDeSeccion('777 OTRA')===null);
+  fila('la sección del examen se encuentra por nombre o por código',docDeSeccion('900 VAJILLA DEMO')===DOC&&docDeSeccion('900')===DOC&&docDeSeccion('777 OTRA')===null);
   const cal=(x,cuerpo,etiqueta)=>calificarMedicion({k:[],minK:1,p:[],otra:'',...x},{cuerpo,etiqueta:etiqueta||''});
   fila('calificación: dato con su página → bien',cal({tipo:'dato',k:['15 cm'],p:[6]},'Va a 15 cm de la bastilla (pág. 6).').ok);
   fila('calificación: dato sin la página esperada → mal',!cal({tipo:'dato',k:['15 cm'],p:[6]},'Va a 15 cm (pág. 9).').ok);

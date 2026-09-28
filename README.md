@@ -141,9 +141,9 @@ pregunta, lo dice — no rellena con la sección más cercana.
 
 En el motor clásico la búsqueda local decide qué fragmentos ve el modelo, y le da órdenes según
 lo que encontró. Cuando la búsqueda falla —«contemporáneo» no llega a una lámina que dice
-«Contempo», «Koslitch» no llega a «Kostlich», las marcas vienen en logos que el PDF no trae
+«Contempo», «Trevsik» no llega a «Tresvik», las marcas vienen en logos que el PDF no trae
 como texto—, el modelo nunca ve la respuesta y contesta «no está». Eso pasó en una
-conversación real con el manual de Mesa Fina.
+conversación real del piso.
 
 El agente invierte los papeles:
 
@@ -159,7 +159,7 @@ El agente invierte los papeles:
    (la imagen de la página), `buscar` y, con varios manuales, `buscar_en_otras_secciones`, que
    solo dice dónde está algo y nunca devuelve su contenido.
 3. **Contesta** con lo que entendió, lo que corrigió de lo escrito y la evidencia literal con
-   su página. En pantalla sale «Entendí **Kostlich** (escribiste «Koslitch»)», qué páginas leyó
+   su página. En pantalla sale «Entendí **Tresvik** (escribiste «Trevsik»)», qué páginas leyó
    y qué lámina miró, y botones para seguir: «¿Quisiste decir…?», o las preguntas que sí
    contestan las láminas que leyó.
 
@@ -200,9 +200,9 @@ donde se quedó. Las preguntas del examen no entran al tablero del equipo.
 
 ```json
 {"examen": "mis manuales", "preguntas": [
-  {"seccion": "101 MUEBLES", "q": "¿cuántos cojines lleva el sofá?", "tipo": "dato", "k": ["4 cojines"], "p": [22]},
-  {"seccion": "101 MUEBLES", "q": "¿qué hago si se va la luz?", "tipo": "trampa"},
-  {"seccion": "101 MUEBLES", "q": "¿y en uno de 10?", "turnos": ["¿cuántos servicios pongo en un comedor de 4 sillas?"], "tipo": "dato", "k": ["6 servicios"]}
+  {"seccion": "140 CASUAL HOMBRE", "q": "¿a qué altura va el sensor?", "tipo": "dato", "k": ["15 cm"], "p": [6]},
+  {"seccion": "140 CASUAL HOMBRE", "q": "¿qué hago si se va la luz?", "tipo": "trampa"},
+  {"seccion": "140 CASUAL HOMBRE", "q": "¿y en el clásico?", "turnos": ["¿qué marcas van en el mundo contemporáneo?"], "tipo": "dato", "k": ["Brastow", "Ondera"], "minK": 2}
 ]}
 ```
 
