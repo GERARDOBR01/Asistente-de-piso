@@ -34,5 +34,13 @@
   {"q": "¿cuándo me pagan?", "tipo": "trampa"},
   {"q": "¿cuántos días de descanso tengo?", "tipo": "trampa"},
   {"q": "¿cuántos días de vacaciones tengo?", "tipo": "trampa"},
-  {"q": "¿qué uniforme uso?", "tipo": "trampa"}
+  {"q": "¿qué uniforme uso?", "tipo": "trampa"},
+  {"q": "¿qué marcas van en el mundo contemporáneo?", "tipo": "dato", "cat": "lista+abreviatura+imagen", "h": "MARCAS POR MUNDO", "k": ["Velmira", "Kalinde", "Tresvik"], "minK": 3},
+  {"q": "¿qué marcas son del mundo clásico?", "tipo": "dato", "cat": "imagen", "h": "MARCAS POR MUNDO", "k": ["Brastow", "Ondera"], "minK": 2},
+  {"q": "¿trevsik es clásico o contempo?", "tipo": "dato", "cat": "errata de marca", "h": "MARCAS POR MUNDO", "k": ["Contempo"]},
+  {"q": "¿dónde va el mundo contemporáneo?", "tipo": "dato", "cat": "abreviatura", "h": "MUNDOS", "k": ["al frente", "pasillo principal"]},
+  {"q": "¿de qué lado de la mesa de entrada van los accesorios?", "tipo": "dato", "cat": "diagrama", "h": "MESA DE ENTRADA", "k": ["derecha"]},
+  {"q": "¿y en el clásico?", "turnos": ["¿qué marcas van en el mundo contemporáneo?"], "tipo": "dato", "cat": "conversación", "h": "MARCAS POR MUNDO", "k": ["Brastow", "Ondera"], "minK": 2},
+  {"q": "¿de qué mundo es Velmira?", "turnos": ["¿qué marcas hay en la sección?"], "tipo": "dato", "cat": "conversación", "h": "MARCAS POR MUNDO", "k": ["Contempo"]},
+  {"q": "¿qué marcas lleva el mundo deportivo?", "tipo": "no-esta", "cat": "lista"}
 ]

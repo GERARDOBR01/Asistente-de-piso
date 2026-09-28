@@ -165,6 +165,40 @@ p{font-size:17px;line-height:1.5;margin-bottom:10px}
   </svg>
 </section>
 
+<!-- Las marcas de esta lámina solo existen como IMAGEN (un canvas, que el PDF
+     guarda como mapa de bits): así vienen los logos en los manuales reales, y
+     es lo que la capa de texto del PDF no puede leer. Los nombres son inventados. -->
+<section class="lam">
+  <div class="franja"></div><div class="nombre">Mundos y marcas</div>
+  <div class="col c1">
+    <h2>MUNDOS</h2>
+    <p>La sección se divide en dos mundos: CLÁSICO y CONTEMPO. Cada marca vive en un solo mundo y no se mezcla con las del otro en la misma mesa.</p>
+    <p>El mundo Contempo va al frente, junto al pasillo principal; el Clásico, al fondo de la sección.</p>
+  </div>
+  <div class="col c2">
+    <h2>MARCAS POR MUNDO</h2>
+    <p>Así se reparten las marcas en cada mundo:</p>
+  </div>
+  <canvas id="logos" class="fig" style="left:660px;top:230px" width="560" height="400"></canvas>
+  <script>
+  (function(){
+    const c=document.getElementById('logos').getContext('2d');
+    c.fillStyle='#fff';c.fillRect(0,0,560,400);
+    const grupo=(x,titulo,marcas)=>{
+      c.fillStyle='#1d1d1f';c.fillRect(x,0,260,54);
+      c.fillStyle='#f3ede0';c.font='bold 26px DejaVu Sans, Arial';c.textAlign='center';c.fillText(titulo,x+130,37);
+      marcas.forEach((m,i)=>{
+        const y=80+i*104;
+        c.strokeStyle='#6b5418';c.lineWidth=3;c.strokeRect(x+10,y,240,80);
+        c.fillStyle='#6b5418';c.font='italic bold 30px DejaVu Serif, Georgia';c.fillText(m,x+130,y+52);
+      });
+    };
+    grupo(0,'CLÁSICO',['Brastow','Ondera']);
+    grupo(300,'CONTEMPO',['Velmira','Kalinde','Tresvik']);
+  })();
+  </script>
+</section>
+
 <section class="lam">
   <div class="franja"></div><div class="nombre">Check list de montaje</div>
   <div class="col c1" style="width:1100px">
