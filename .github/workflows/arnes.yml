@@ -26,3 +26,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Arnés
         run: node eval/arnes.mjs
+      - name: Agente lector contra proveedores simulados
+        run: node eval/agente-simulado.mjs

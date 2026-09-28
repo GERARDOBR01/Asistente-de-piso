@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 119 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20119%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 148 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20148%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -34,8 +34,8 @@ asistente nació de ese problema, visto todos los días desde el piso. Más cont
 [mi perfil](https://github.com/GERARDOBR01).
 
 > **Demo con conocimiento 100 % sintético.** El cliente (*Mercadep*), las marcas
-> (`MarcaDemoA`–`MarcaDemoL`), los mundos, los porcentajes de piso y los números de manual
-> son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
+> (`MarcaDemoA`–`MarcaDemoL`, y las cinco de la lámina de logos del manual demo), los mundos,
+> los porcentajes de piso y los números de manual son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
 > este repositorio ni en su historial.
 
 **[▶ Abrir el demo](https://gerardobr01.github.io/Asistente-de-piso/)** · sin API key funciona en modo manual; con tu propia key (Google AI Studio u OpenAI) activa el modo razonado.
@@ -69,6 +69,7 @@ sección, y un dato de otra sección suena cierto aunque esté mal.
 El modo con API key también está medido, con `eval/modo-ia.mjs` dentro de la app real: 110
 preguntas de esos 30 manuales (60 de dato, dos por manual; 20 que su manual no contesta y
 30 trampas). A Google solo salen los fragmentos que la búsqueda elige para cada pregunta.
+Esos números son del motor clásico; el agente lector (abajo) está sin medir.
 
 | | Resultado |
 |---|---|
@@ -126,15 +127,65 @@ pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de di
 
 | | **Modo manual** (sin API key) | **Modo razonado** (con API key) |
 |---|---|---|
-| Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Responde interpretando, en 6 etapas: intención → expansión → retrieval → razonamiento → certeza → respuesta |
-| Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | El retrieval en tu dispositivo; la interpretación en el proveedor que elijas |
-| Sale a la red | **No.** Ni una petición | Sí: la pregunta y el contexto recuperado van a Google AI Studio o a OpenAI |
-| Qué cuesta | Nada | Tu propia key y tus propios tokens |
+| Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Dos motores, a elegir en Ajustes. **Agente lector**: la IA lee el manual con herramientas —páginas, láminas, búsqueda— y contesta citando lo que leyó. **Clásico**: la búsqueda local elige los fragmentos y el modelo responde en 6 etapas |
+| Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | Las herramientas corren en tu dispositivo; la lectura y la respuesta, en el proveedor que elijas |
+| Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
+| Qué cuesta | Nada | Tu propia key y tus propios tokens. Preparar un manual de 25 láminas con Gemini Flash-Lite: unos 5 centavos de dólar, una vez |
 
 El modo manual existe porque un demo que primero te pide una API key no es un demo. Pero
 sobre todo existe porque **declara su límite en vez de disimularlo**: dice "sin modelo
 conectado, nadie interpretó esto" y entrega la fuente. Y si nada del manual coincide con la
 pregunta, lo dice — no rellena con la sección más cercana.
+
+## El agente lector: la IA lee el manual, el código la vigila
+
+En el motor clásico la búsqueda local decide qué fragmentos ve el modelo, y le da órdenes según
+lo que encontró. Cuando la búsqueda falla —«contemporáneo» no llega a una lámina que dice
+«Contempo», «Koslitch» no llega a «Kostlich», las marcas vienen en logos que el PDF no trae
+como texto—, el modelo nunca ve la respuesta y contesta «no está». Eso pasó en una
+conversación real con el manual de Mesa Fina.
+
+El agente invierte los papeles:
+
+1. **Al preparar el manual**, la IA lee cada página una sola vez (texto e imagen) y escribe su
+   ficha: de qué trata, qué marcas y mundos nombra, lo que se lee en la imagen y no está en el
+   texto, abreviaturas («Contempo = contemporáneo») y cómo lo preguntaría el piso. Se guarda
+   en el teléfono. La ficha **ubica**, no contesta: en la búsqueda, un acierto en la ficha se
+   cambia por los fragmentos reales de esa página. Lo único de la ficha que puede sostener un
+   dato es lo que la IA copió literal de la imagen, y va rotulado como tal.
+2. **En cada pregunta**, el modelo recibe el mapa del manual (una línea por página, de la
+   ficha), el glosario de la sección y dos páginas que la búsqueda local le adelanta. Con
+   herramientas que corren en el teléfono decide qué leer: `leer_paginas`, `ver_lamina`
+   (la imagen de la página), `buscar` y, con varios manuales, `buscar_en_otras_secciones`, que
+   solo dice dónde está algo y nunca devuelve su contenido.
+3. **Contesta** con lo que entendió, lo que corrigió de lo escrito y la evidencia literal con
+   su página. En pantalla sale «Entendí **Kostlich** (escribiste «Koslitch»)», qué páginas leyó
+   y qué lámina miró, y botones para seguir: «¿Quisiste decir…?», o las preguntas que sí
+   contestan las láminas que leyó.
+
+El código es el guardián, no el que decide. Pone tope a las vueltas (4, la última sin
+herramientas), a las páginas (8), a las láminas (2) y a las llamadas por vuelta (6). Valida cada
+argumento: una página que no existe o una herramienta inventada vuelven al modelo como error,
+nunca como excepción. Comprueba que **cada cita esté literal en una página que el agente
+leyó**; si no, la certeza baja de ALTA a MEDIA y lo dice. Y si el ciclo falla por lo que sea
+—error del proveedor, respuesta vacía—, la misma pregunta la contesta el motor clásico. Con
+Gemini 3, las firmas de pensamiento que acompañan cada llamada a herramienta se devuelven
+intactas en la siguiente vuelta, como exige la API.
+
+**Estado:** probado de punta a punta contra un Gemini y un OpenAI simulados
+(`eval/agente-simulado.mjs`, que también corre en el CI: protocolo, topes, citas inventadas,
+imagen rechazada, caída al clásico) y con 29 pruebas nuevas en el arnés. **Sin medir contra un modelo real**: por eso el motor de fábrica sigue siendo el clásico.
+Para medirlo con el manual demo, que ahora trae una lámina con las marcas solo como imagen:
+
+```
+node eval/modo-ia.mjs --motor clasico --etiqueta clasico
+node eval/modo-ia.mjs --motor agente  --etiqueta agente
+node eval/modo-ia.mjs --resumen
+```
+
+El set del demo suma ocho preguntas de las que fallaban en el piso: listas («¿qué marcas van en
+el mundo contemporáneo?»), abreviaturas, marcas con errata, datos que solo están en una
+imagen, un diagrama y dos conversaciones de varios turnos.
 
 ## Cómo está hecho
 
@@ -235,7 +286,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 119 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 148 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 
