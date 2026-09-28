@@ -8415,7 +8415,7 @@ function nombresSinRespaldo(respuesta,contexto){
 }
 
 function verificarContraContexto(respuesta,contexto){
-  const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set()};
+  const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set(),atadas:[]};
   if(!respuesta||!contexto)return vacio;
 
   const texto=respuesta
@@ -8468,26 +8468,198 @@ function verificarContraContexto(respuesta,contexto){
   const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
 
   return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,
-    nombres:nombresSinRespaldo(respuesta,contexto),citadas}
+    nombres:nombresSinRespaldo(respuesta,contexto),citadas,
+    atadas:verificarAtadura(respuesta,contexto)}
 }
 
+/* ── LA CIFRA PEGADA A OTRA COSA ──────────────────
+   Medido con un manual real: en la tabla de participación de una sección,
+   «20% de participación» es de TENIS CASUAL y «30%» de SNEAKERS. «Sneakers
+   lleva el 20%» pasaba limpio, porque el 20% sí está en el contexto: se
+   comprobaba que la cifra existiera, no a qué iba pegada.
+   Aquí cada cifra dicha se compara por su VECINDAD —el título de su fragmento
+   y su tramo de renglón— con las demás cifras de la misma unidad. Solo se
+   marca con evidencia positiva: otra cifra está más pegada al sujeto de la
+   respuesta que la dicha. Una paráfrasis sin rival no se marca: «deja 80 cm de
+   pasillo» contra «dejando 80 cm entre muebles» no tiene con qué contradecirse,
+   y un aviso falso enseña al asesor a ignorar los avisos. */
+const ATADURA_RELLENO=new Set(['participacion','porcentaje','porcentajes','seccion','manual','pagina','lamina','total','indica','senala','dice','segun','debe','deben','lleva','llevan','colocar','coloca','coloque','coloquen','poner','usar','exhibicion','exhibir','asigna','asignado','asignada','corresponde','corresponden','representa','aproximadamente','cerca','menos','hasta','minimo','maximo','medida','cifra','dato','siempre','nunca','tambien','cada','respuesta','certeza','alta','media','centimetros','centimetro','milimetros','metros','metro','piezas','pieza','dias','semanas','meses','horas','minutos','ciento']);
+function palabrasDeSujeto(t){
+  return normalizeText(t||'').split(/\s+/).filter(w=>w.length>=4&&!/\d/.test(w)&&!STOPWORDS.has(w)&&!ATADURA_RELLENO.has(w)&&!UNIDADES.has(w))
+}
+function cifrasDeTexto(t){
+  const out=[];
+  /* «de 2 a 4 piezas», «10-15 cm»: el rango es un solo dato con dos extremos, y
+     cualquiera de los dos es suyo. */
+  for(const m of(t||'').matchAll(UNIDAD_RE)){
+    const valor=m[1].replace(',','.');
+    const antes=t.slice(Math.max(0,m.index-12),m.index).match(/(\d+(?:[.,]\d+)?)\s*(?:a|o|ó|y|al|-|–)\s*$/i);
+    out.push({valor,valores:antes?[antes[1].replace(',','.'),valor]:[valor],familia:familiaUnidad(m[2]),i:m.index,fin:m.index+m[0].length,txt:m[0].trim()});
+  }
+  for(const m of(t||'').matchAll(/(?<![\d.,])\d{6,}(?![\d])/g))
+    out.push({valor:m[0],valores:[m[0]],familia:'sku',i:m.index,fin:m.index+m[0].length,txt:m[0]});
+  return out.sort((a,b)=>a.i-b.i)
+}
+/* El tramo que le toca a cada cifra de un renglón o una frase. Con una sola
+   cifra es todo el texto. Con varias se corta por comas (no la decimal), punto
+   y coma, viñetas y « y »: «Tenis casual 20% y Sneakers 30%» son dos tramos.
+   Si el tramo de una cifra se queda sin palabras propias —«20% de»—, hereda
+   las del texto que no son de otra cifra, y se avisa con `propias:false`. */
+function tramosDeCifras(t){
+  const cifras=cifrasDeTexto(t);
+  if(!cifras.length)return[];
+  if(cifras.length===1){
+    const pal=palabrasDeSujeto(t.slice(0,cifras[0].i)+' '+t.slice(cifras[0].fin));
+    return[{...cifras[0],palabras:pal,propias:pal.length>0,tramo:t}];
+  }
+  const cortes=[0];
+  for(const m of t.matchAll(/,(?!\d)|;|·|•|\||\s(?:y|e)\s/g))cortes.push(m.index);
+  cortes.push(t.length);
+  const tramoDe=c=>{for(let k=0;k<cortes.length-1;k++)if(c.i>=cortes[k]&&c.i<cortes[k+1])return[cortes[k],cortes[k+1]];return[0,t.length]};
+  const propios=cifras.map(c=>{const[a,b]=tramoDe(c);const txt=t.slice(a,b);return{txt,pal:palabrasDeSujeto(txt.replace(c.txt,' '))}});
+  const ocupadas=new Set(propios.flatMap(p=>p.pal));
+  const sueltas=palabrasDeSujeto(t).filter(w=>!ocupadas.has(w));
+  return cifras.map((c,k)=>{
+    const pal=propios[k].pal;
+    return{...c,palabras:pal.length?pal:sueltas,propias:pal.length>0,tramo:propios[k].txt}
+  })
+}
+function verificarAtadura(respuesta,contexto){
+  if(!respuesta||!contexto)return[];
+  /* El nombre de la sección no ata nada: toda la página es de esa sección. */
+  const ajenas=new Set(docs.flatMap(d=>palabrasDeSujeto(nombreDeSeccion(d.name)+' '+d.name.replace(/\.pdf$/i,''))));
+  const sujeto=ws=>ws.filter(w=>!ajenas.has(w));
+  const ocurrencias=[];
+  const esRotulo=l=>/^\s*\[.*\]\s*$/.test(l||'');
+  const esCorte=l=>/^\s*(===|---)/.test(l||'');
+  /* El PDF corta donde cortó la maqueta: «◆ 40% en el flujo» / «principal del
+     cliente» es una sola frase. Se vuelve a unir, con la misma regla que las
+     tarjetas del modo manual, antes de decidir qué va pegado a qué. */
+  const lineas=[];
+  for(const l of contexto.split('\n')){
+    const prev=lineas[lineas.length-1];
+    if(prev!=null&&!esRotulo(prev)&&!esCorte(prev)&&!esRotulo(l)&&!esCorte(l)&&prev.trim()&&!/[.:;!?]\s*$/.test(prev)&&/^\s*[a-záéíóúñü(]/.test(l))
+      lineas[lineas.length-1]=prev.replace(/\s+$/,'')+' '+l.trim();
+    else lineas.push(l);
+  }
+  let titulo=[],tituloTxt='',pagina=null;
+  for(let i=0;i<lineas.length;i++){
+    const l=lineas[i];
+    if(esRotulo(l)){
+      const partes=l.trim().slice(1,-1).split(' · ');
+      pagina=null;const tit=[];
+      for(const p of partes.slice(1)){
+        const m=p.match(/^p[áa]g\.\s*(\d+)$/i);
+        if(m)pagina=m[1];else if(!/por IA/.test(p))tit.push(p);
+      }
+      tituloTxt=tit.join(' · ');titulo=sujeto(palabrasDeSujeto(tituloTxt));
+      continue
+    }
+    if(esCorte(l)){titulo=[];tituloTxt='';pagina=null;continue}
+    const tramos=tramosDeCifras(l);
+    for(const c of tramos){
+      const propias=c.propias?sujeto(c.palabras):[];
+      const cerca=[];
+      if(!c.propias)for(const j of[i-1,i+1]){
+        const v=lineas[j];
+        if(v&&!esRotulo(v)&&!esCorte(v)&&!cifrasDeTexto(v).length)cerca.push(...sujeto(palabrasDeSujeto(v)));
+      }
+      /* Rótulo: la cifra va con un nombre corto —una celda, un elemento de
+         lista—, no dentro de una oración. «Sneakers 35%, Casual 15%» ata;
+         «las mesas miden 90 cm» no ata el 90 a las mesas de otra frase. */
+      const resto=c.tramo.replace(c.txt,' ').split(/\s+/).filter(w=>/\p{L}/u.test(w));
+      const rotulo=(tramos.length>1&&c.tramo.trim()!==l.trim())||resto.length<=3;
+      ocurrencias.push({valor:c.valor,valores:c.valores,familia:c.familia,txt:c.txt,pagina,titulo:tituloTxt,tit:titulo,propias,cerca,rotulo});
+    }
+  }
+  if(!ocurrencias.length)return[];
+  const toca=(ws,S)=>S.filter(s=>ws.some(v=>mismaCosa(s,v)));
+  /* Asimétrico a propósito: la cifra dicha cuenta a su favor cualquier palabra
+     de su vecindad; la rival solo lo que la ata por estructura —su título o su
+     rótulo—. Y la rival gana solo si explica TODO lo que explica la dicha y algo
+     más: en un planograma, «flujo principal» puede rotular un 40% y «etapa» el
+     50%+20% de la respuesta; ninguna explica a la otra, y eso no es evidencia
+     de nada. «Tenis casual 15%» sí se marca: el 15% solo explica «casual» y el
+     20% explica «tenis casual». */
+  const aFavor=(o,S)=>[...new Set([...toca(o.tit,S),...toca([...o.propias,...o.cerca],S)])];
+  const enContra=(o,S)=>[...new Set([...toca(o.tit,S),...(o.rotulo?toca(o.propias,S):[])])];
+  const comparten=(a,b)=>a.valores.some(v=>b.valores.includes(v));
+  const texto=respuesta.replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?/gi,' ').replace(/[*_`#>]/g,' ');
+  const frases=texto.split(/\n+|(?<=[.!?])\s+/);
+  const out=[],vistas=new Set();
+  for(const f of frases){
+    for(const c of tramosDeCifras(f)){
+      const S=[...new Set(sujeto(c.palabras))];
+      if(!S.length)continue;
+      const propias=ocurrencias.filter(o=>o.familia===c.familia&&comparten(o,c));
+      if(!propias.length)continue;       // eso ya lo marca el cotejo de cifras
+      let mejor=propias[0],favor=[];
+      for(const o of propias){const f=aFavor(o,S);if(f.length>favor.length||o===propias[0]){if(f.length>=favor.length){favor=f;mejor=o}}}
+      let rival=null,ganan=favor;
+      for(const o of ocurrencias){
+        if(o.familia!==c.familia||comparten(o,c))continue;
+        const e=enContra(o,S);
+        /* Y tiene que cubrir al menos la mitad del sujeto: con «deja 80 cm de
+           pasillo entre mesas», una rival que solo comparte «mesas» no basta. */
+        if(e.length>ganan.length&&favor.every(x=>e.includes(x))&&e.length*2>=S.length){rival=o;ganan=e}
+      }
+      if(!rival)continue;
+      /* El sujeto se enseña como lo escribió la respuesta, no normalizado. */
+      const originales=c.tramo.split(/\s+/).map(w=>w.replace(/[^\p{L}\p{N}-]/gu,'')).filter(w=>w&&ganan.some(g=>mismaCosa(normalizeText(w),g)));
+      const clave=c.txt+'|'+ganan.join(' ');
+      if(vistas.has(clave))continue;vistas.add(clave);
+      out.push({cifra:c.txt,sujeto:[...new Set(originales)].join(' ')||ganan.join(' '),
+        pagina:mejor.pagina,pegadaA:mejor.titulo,rival:rival.txt,paginaRival:rival.pagina});
+    }
+  }
+  return out
+}
+
+/* La página entera como lámina, para cuando la página que hay que mirar no
+   trae un recorte detectado. Sale de la imagen que se guardó al cargar el PDF;
+   sin ella no hay nada honesto que enseñar. */
+function paginaComoLamina(fragmentos,pagina){
+  if(!pagina)return null;
+  const c=(fragmentos||[]).find(x=>x.source==='pdf'&&String(x.page)===String(pagina));
+  if(!c)return null;
+  const p=(docPaginas.get(c.docName)||[]).find(x=>String(x.page)===String(pagina));
+  if(!p||!p.imagen)return null;
+  return{id:`${c.docName}#pagina-${pagina}`,docName:c.docName,page:Number(pagina),heading:p.titulo||c.heading||'',caption:'',dataUrl:p.imagen,firma:''}
+}
 function renderAvisoVerificacion(res){
-  if(!res||(!res.cifras.length&&!res.paginas.length&&!(res.nombres||[]).length))return null;
+  const atadas=(res&&res.atadas)||[];
+  if(!res||(!res.cifras.length&&!res.paginas.length&&!(res.nombres||[]).length&&!atadas.length))return null;
   const el=document.createElement('div');
   el.className='verify-warn';
+  const frases=[];
+  for(const a of atadas.slice(0,3)){
+    const donde=a.pagina?` está en la pág. ${escapeHtml(a.pagina)}`:' está en el manual';
+    const junto=a.pegadaA?` junto a <strong>${escapeHtml(a.pegadaA)}</strong>`:', pero pegado a otra cosa';
+    frases.push(`⚠ El <strong>${escapeHtml(a.cifra)}</strong> que dice para <em>${escapeHtml(a.sujeto)}</em>${donde}${junto}; para <em>${escapeHtml(a.sujeto)}</em> el manual dice <strong>${escapeHtml(a.rival)}</strong>${a.paginaRival?` (pág. ${escapeHtml(a.paginaRival)})`:''}.`);
+  }
   const partes=[];
   if(res.cifras.length)partes.push(`${res.cifras.length===1?'el dato':'los datos'} <strong>${res.cifras.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   if((res.nombres||[]).length)partes.push(`${res.nombres.length===1?'el nombre':'los nombres'} <strong>${res.nombres.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
   if(res.paginas.length)partes.push(`${res.paginas.length===1?'la página citada':'las páginas citadas'} <strong>${res.paginas.slice(0,4).map(escapeHtml).join(', ')}</strong>`);
-  el.innerHTML=`⚠ No pude verificar ${partes.join(' ni ')} en los fragmentos que se consultaron. Contrasta contra el manual antes de aplicarlo.`;
+  if(partes.length)frases.push(`⚠ No pude verificar ${partes.join(' ni ')} en los fragmentos que se consultaron.`);
+  el.innerHTML=frases.join('<br>')+` Contrasta contra el manual antes de aplicarlo${res.certezaBajada?'; por eso la certeza quedó en media':''}.`;
+  if(atadas.length)el.dataset.atadura=String(atadas.length);
   return el
 }
 
 const CERTEZA_ROTULO={ALTA:{txt:'certeza alta',cls:'alta'},MEDIA:{txt:'certeza media',cls:'media'},GAP:{txt:'no está en el manual',cls:'gap'}};
 function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
   const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
-  const certeza=certezaDe(final);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
+  const verif=verificarContraContexto(cleanFinal,contextoEnviado);
+  /* La certeza la declara el modelo, pero no puede ser ALTA con un dato que la
+     app no pudo comprobar en lo que el modelo tenía delante —o que encontró
+     pegado a otra cosa—. Un «certeza alta» encima de un aviso amarillo le dice
+     al asesor que el aviso sobra. */
+  let certeza=certezaDe(final);
+  if(certeza==='ALTA'&&(verif.cifras.length||verif.paginas.length||(verif.nombres||[]).length||(verif.atadas||[]).length)){
+    certeza='MEDIA';verif.certezaBajada=true;
+  }
   const msgBody=loaderEl.querySelector('.msg-body');
   const msgLabel=loaderEl.querySelector('.msg-label');
   loaderEl.classList.remove('loading');
@@ -8505,12 +8677,20 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     loaderEl.insertBefore(corte,msgBody);
   }
 
-  const verif=verificarContraContexto(cleanFinal,contextoEnviado);
   const alerta=renderAvisoVerificacion(verif);
   /* El aviso va ARRIBA del cuerpo. Colgado debajo, el asesor ya había leído —y
      en el piso, ejecutado— el dato que el aviso venía a poner en duda. */
   if(alerta)loaderEl.insertBefore(alerta,msgBody);
-  const figsApi=contextoEnviado?figurasDeFragmentos(ultimosFragmentos,verif.citadas,cleanFinal,certeza):[];
+  if(verif.certezaBajada)loaderEl.dataset.certezaBajada='1';
+  /* Una cifra pegada a otra cosa se resuelve mirando la lámina: su página entra
+     en la tira de evidencia aunque la respuesta no la citara. */
+  const citadasFig=new Set(verif.citadas);
+  for(const a of verif.atadas||[]){if(a.pagina)citadasFig.add(String(a.pagina));if(a.paginaRival)citadasFig.add(String(a.paginaRival))}
+  let figsApi=contextoEnviado?figurasDeFragmentos(ultimosFragmentos,citadasFig,cleanFinal,certeza):[];
+  if(contextoEnviado&&!figsApi.length&&(verif.atadas||[]).length){
+    const pag=paginaComoLamina(ultimosFragmentos,verif.atadas[0].pagina||verif.atadas[0].paginaRival);
+    if(pag){figsApi=[pag];figsApi.origen='pagina'}
+  }
   if(contextoEnviado)renderEvidencia(loaderEl,figsApi);
   /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
      manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */
@@ -9662,6 +9842,54 @@ function pruebasRobustez(){
     const bl3=bloquesDeLineas(sueltos.map(l=>({...l})));
     fila('lectura','dos rótulos que no titulan nada no se unen',bl3.length===2,'quedó: '+bl3.map(b=>b.heading).join(' | '));
     fila('lectura','un manual guardado con la lectura 1 pide releerse',lecturaVieja({name:'x.pdf'})&&!lecturaVieja({name:'x.pdf',lectura:LECTURA_VERSION}));
+  }
+  /* Atadura: la cifra dicha tiene que ir con lo que el manual le pega. */
+  {
+    const D='900 CALZADO DEMO.pdf';
+    const bloque=(pag,tit,txt)=>`[${D} · pág. ${pag} · ${tit}]\n${txt}\n\n`;
+    const ctx='=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n'
+      +bloque(18,'VESTIR','10% de\nparticipación')+bloque(18,'CASUAL','15% de\nparticipación')
+      +bloque(18,'TENIS CASUAL','20% de\nparticipación')+bloque(18,'SNEAKERS','30% de\nparticipación')
+      +bloque(9,'ALINEACIÓN','Distribuye el mobiliario dejando 80 cm entre muebles.\nLas mesas miden 90 cm de alto.')
+      +bloque(6,'SENSORES','El sensor va oculto a 15 cm de la\nbastilla, por dentro.');
+    const at=r=>verificarAtadura(r,ctx);
+    const a1=at('Para **Sneakers** va el 20% de participación (pág. 18).');
+    fila('atadura','«Sneakers 20%» se marca: el 20% es de TENIS CASUAL',a1.length===1&&a1[0].rival==='30%'&&/TENIS CASUAL/.test(a1[0].pegadaA),JSON.stringify(a1));
+    const a2=at('Tenis casual lleva el 15% de participación.');
+    fila('atadura','«Tenis casual 15%» se marca: el manual le da 20%',a2.length===1&&a2[0].rival==='20%',JSON.stringify(a2));
+    fila('atadura','«Tenis casual 20%» no se marca',!at('Tenis casual lleva el 20% (pág. 18).').length);
+    fila('atadura','una lista bien dicha no se marca',!at('Vestir 10%, Casual 15%, Tenis casual 20% y Sneakers 30%.').length);
+    fila('atadura','«deja 80 cm de pasillo entre mesas» no se marca por las mesas de 90 cm',!at('Deja 80 cm de pasillo entre mesas (pág. 9).').length);
+    fila('atadura','«15 cm de la bastilla» no se marca',!at('El sensor va a **15 cm** de la bastilla (pág. 6).').length);
+    const lista='[Manual interno · CLASIFICACIÓN]\nZAPATOS: Sneakers 35%, Tenis Casual 20%, Casual 15%, Vestir 10%.\n';
+    fila('atadura','en una lista del manual, «Tenis casual 20%» no se marca',!verificarAtadura('Tenis casual va al 20%.',lista).length);
+    fila('atadura','y «Sneakers 20%» sí',verificarAtadura('Sneakers va al 20%.',lista).length===1);
+    const v=verificarContraContexto('Para Sneakers va el 20% (pág. 18).',ctx);
+    fila('atadura','la verificación trae las atadas',v.atadas.length===1&&v.cifras.length===0);
+    const aviso=renderAvisoVerificacion(v);
+    fila('atadura','el aviso dice qué cifra da el manual',!!aviso&&/30%/.test(aviso.textContent)&&aviso.dataset.atadura==='1',aviso&&aviso.textContent);
+    /* De punta a punta en la burbuja: certeza, aviso y la página como lámina. */
+    const gM=midiendo,gU=ultimosFragmentos,gP=docPaginas.get(D),gF=docFigures;
+    try{
+      midiendo=true;docFigures=[];
+      ultimosFragmentos=[{source:'pdf',docName:D,page:18,heading:'TENIS CASUAL',text:'20% de\nparticipación'}];
+      docPaginas.set(D,[{page:18,titulo:'Planograma',imagen:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]);
+      const burbuja=resp=>{
+        const el=document.createElement('div');el.innerHTML='<div class="msg-label"></div><div class="msg-body"></div>';
+        renderAssistantMessage(el,'[PENSAMIENTO INTERNO]\nx\n[RESPUESTA FINAL]\n'+resp+'\nCERTEZA: ALTA',100,'¿qué porcentaje es?',ctx);
+        return{certeza:el.querySelector('.msg-label').textContent,bajada:el.dataset.certezaBajada==='1',laminas:el.querySelectorAll('.evidencia-fig').length}
+      };
+      const mal=burbuja('Para Sneakers va el 20% de participación (pág. 18).');
+      fila('atadura','con la cifra mal atada, «certeza alta» pasa a media',/media/.test(mal.certeza)&&mal.bajada,mal.certeza);
+      fila('atadura','y se enseña la página donde está la cifra',mal.laminas===1,'láminas: '+mal.laminas);
+      const bien=burbuja('Tenis casual lleva el 20% de participación (pág. 18).');
+      fila('atadura','bien atada, la certeza alta se queda',/alta/.test(bien.certeza)&&!bien.bajada,bien.certeza);
+      const sinDato=burbuja('Tenis casual lleva el 25% de participación (pág. 18).');
+      fila('atadura','una cifra que no está en el contexto también baja la certeza',/media/.test(sinDato.certeza),sinDato.certeza);
+    }finally{
+      midiendo=gM;ultimosFragmentos=gU;docFigures=gF;
+      if(gP)docPaginas.set(D,gP);else docPaginas.delete(D);
+    }
   }
   return out
 }
