@@ -296,6 +296,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .doc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:12px}
 .doc-size{font-size:10.5px;color:var(--text3);flex-shrink:0}
 .doc-chunks{font-size:9.5px;color:var(--text3);flex-shrink:0;padding:2px 6px;border-radius:4px;background:var(--s2);border:1px solid var(--border)}
+.doc-releer{color:var(--amber);font-weight:600}
 .doc-tag{font-size:9px;padding:2px 7px;border-radius:10px;background:var(--gdim);color:var(--gold);border:1px solid rgba(255,90,110,0.2);letter-spacing:1px;text-transform:uppercase}
 .doc-remove{background:none;border:none;cursor:pointer;color:var(--text4);font-size:13px;padding:3px 5px;border-radius:4px;transition:all .15s;flex-shrink:0}
 .doc-remove:hover{color:var(--red);background:rgba(224,82,82,0.08)}
@@ -4757,6 +4758,7 @@ function linesToBlocks(lines){
     else blocks.push({
       lines:esTitulo?[]:[ln.text],heading:esTitulo?ln.text:'',
       hx0:esTitulo?ln.x0:null,hx1:esTitulo?ln.x1:null,hy1:esTitulo?ln.yBot:null,
+      hy0:esTitulo?ln.yTop:null,hh:esTitulo?ln.h:null,
       x0:ln.x0,x1:ln.x1,yTop:ln.yTop,yBot:ln.yBot,
       lastX0:ln.x0,lastX1:ln.x1,lastYBot:ln.yBot,lastH:ln.h
     });
@@ -4778,6 +4780,48 @@ function orderBlocks(blocks){
   const out=[];
   for(const band of bands){band.items.sort((a,b)=>a.x0-b.x0);out.push(...band.items)}
   return out
+}
+
+/* Un encabezado de tabla que no cabe en su celda se parte en dos renglones:
+   «TENIS» arriba y «CASUAL» abajo. Como cada renglón en mayúsculas abre su
+   bloque, el cuerpo —«20% de participación»— quedaba bajo «CASUAL», igual que
+   el de la columna vecina, y el contexto traía dos CASUAL con cifras distintas:
+   el modelo no tenía cómo saber cuál era el de tenis. Se unen solo si:
+   el de arriba está solo (sin cuerpo y sin otro título pegado encima), el de
+   abajo sí titula algo, van pegados, en la misma columna y con la misma letra.
+   Una lista de rótulos en mayúsculas no se une: son tres o más apilados, o
+   ninguno titula nada. */
+const TITULO_APILADO_GAP=0.8;   // hueco máximo entre los dos renglones, en alturas de letra
+const TITULO_APILADO_MAX=40;
+function unirTitulosApilados(blocks){
+  const solape=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0);
+  const pegado=(a,b)=>{
+    const h=Math.max(a.hh,b.hh);
+    const gap=b.hy0-a.hy1;
+    if(gap<-h*0.3||gap>h*TITULO_APILADO_GAP)return false;
+    if(Math.abs(a.hh-b.hh)>0.2*h)return false;
+    return solape(a.hx0,a.hx1,b.hx0,b.hx1)>=0.5*Math.min(a.hx1-a.hx0,b.hx1-b.hx0)
+  };
+  const titulos=blocks.filter(b=>b.heading&&b.hy0!=null&&b.hh);
+  if(titulos.length<2)return blocks;
+  const tituloSolo=b=>!b.lines.length;
+  const titulaAlgo=b=>b.lines.length>0||blocks.some(c=>!c.heading&&c.lines.length&&
+    c.yTop>=b.hy1-2&&c.yTop-b.hy1<=b.hh*6&&solape(c.x0,c.x1,b.hx0,b.hx1)>0);
+  const quitar=new Set();
+  for(const a of titulos){
+    if(!tituloSolo(a)||quitar.has(a))continue;
+    if(titulos.some(o=>o!==a&&tituloSolo(o)&&pegado(o,a)))continue;   // tercero de una pila
+    const b=titulos.find(o=>o!==a&&!quitar.has(o)&&pegado(a,o));
+    if(!b||!titulaAlgo(b))continue;
+    if(titulos.some(o=>o!==b&&o!==a&&pegado(b,o)))continue;          // b está a media pila
+    const unido=a.heading.trim()+' '+b.heading.trim();
+    if(unido.length>TITULO_APILADO_MAX)continue;
+    b.heading=unido;
+    b.hx0=Math.min(a.hx0,b.hx0);b.hx1=Math.max(a.hx1,b.hx1);b.hy0=a.hy0;
+    b.x0=Math.min(a.x0,b.x0);b.x1=Math.max(a.x1,b.x1);b.yTop=Math.min(a.yTop,b.yTop);
+    quitar.add(a);
+  }
+  return quitar.size?blocks.filter(b=>!quitar.has(b)):blocks
 }
 
 function isHeadingText(t){
@@ -4849,15 +4893,18 @@ function pageToBlocks(content,vp,pageNum){
      rodea a una foto, esa unión se traga la foto y la página se queda sin nada
      que detectar. */
   const textBoxes=lines.map(l=>({x0:l.x0,y0:l.yTop,x1:l.x1,y1:l.yBot}));
-  const blocks=orderBlocks(linesToBlocks(lines));
-  const finales=assignHeadings(blocks.map(b=>({
+  const finales=bloquesDeLineas(lines);
+  return{page:pageNum,textBoxes,blocks:finales,titulo:tituloDePagina(finales,vp.height)}
+}
+function bloquesDeLineas(lines){
+  const blocks=orderBlocks(unirTitulosApilados(linesToBlocks(lines)));
+  return assignHeadings(blocks.map(b=>({
     text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
     heading:b.heading,
     isHeading:!b.lines.length&&!!b.heading,
     hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
     x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
-  })).filter(b=>b.text));
-  return{page:pageNum,textBoxes,blocks:finales,titulo:tituloDePagina(finales,vp.height)}
+  })).filter(b=>b.text))
 }
 
 /* ════════════════════════════════════════════════
@@ -5401,6 +5448,24 @@ function txDB(modo,fn){
   }))
 }
 
+/* La lectura del PDF mejora con el tiempo: la 2 une los títulos de tabla de
+   dos renglones («TENIS / CASUAL»). Un manual guardado con una lectura anterior
+   se restaura tal cual al abrir la app —el PDF no se guarda, no hay de dónde
+   releerlo—, pero al volver a elegir el archivo se relee en vez de reusar lo
+   guardado. La ficha y las descripciones de láminas, que costaron llamadas,
+   pasan a la lectura nueva. */
+const LECTURA_VERSION=2;
+const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
+function heredarDescripciones(nuevas,viejas){
+  let n=0;
+  for(const f of nuevas){
+    if(f.vlmDescription)continue;
+    const v=(viejas||[]).find(o=>o.vlmDescription&&o.page===f.page&&distanciaVisual(o.firma,f.firma)<=FIG_DIST_IGUAL);
+    if(v){f.vlmDescription=v.vlmDescription;n++}
+  }
+  return n
+}
+
 async function hashArchivo(file){
   const buf=await file.arrayBuffer();
   const digest=await crypto.subtle.digest('SHA-256',buf);
@@ -5939,7 +6004,7 @@ async function handleFiles(fileList){
       continue;
     }
     const guardado=hash?await leerManual(hash):null;
-    if(guardado&&guardado.chunks&&guardado.chunks.length){
+    if(guardado&&guardado.chunks&&guardado.chunks.length&&!lecturaVieja(guardado.doc)){
       docChunks.push(...guardado.chunks.map(indexChunk));
       restaurarExtrasDeManual(guardado.doc.name,guardado);
       const restauradas=guardado.figuras||[];
@@ -5969,17 +6034,25 @@ async function handleFiles(fileList){
       continue;
     }
     const figuras=result.figures||[];
-    const doc={name:file.name,hash,size:(file.size/1024).toFixed(0)+' KB',chunkCount:chunks.length,pageCount:result.pages.length,figureCount:figuras.length};
+    const doc={name:file.name,hash,size:(file.size/1024).toFixed(0)+' KB',chunkCount:chunks.length,pageCount:result.pages.length,figureCount:figuras.length,lectura:LECTURA_VERSION};
     const paginas=result.pages.filter(p=>p.imagen).map(p=>({page:p.page,titulo:p.titulo||'',imagen:p.imagen}));
+    /* Releído porque lo guardado era de una lectura anterior: lo que ya pagó
+       una llamada —descripciones de láminas y ficha— se conserva. */
+    const releido=!!(guardado&&guardado.chunks&&guardado.chunks.length);
+    if(releido)heredarDescripciones(figuras,guardado.figuras);
     docChunks.push(...chunks);
+    for(const f of figuras)if(f.vlmDescription)docChunks.push(chunkDeFigura(f));
     docFigures.push(...figuras);
     docs.push(doc);
     if(paginas.length)docPaginas.set(file.name,paginas);
+    if(releido)restaurarExtrasDeManual(file.name,{paginas:[],ficha:guardado.ficha});
     rebuildCorpus();
-    showToast(`✓ "${file.name}" procesado — ${result.pages.length} páginas, ${chunks.length} fragmentos, ${figuras.length} figuras`, 'success', 3000);
+    showToast(releido
+      ?`✓ "${file.name}" releído con la lectura nueva de tablas y títulos`
+      :`✓ "${file.name}" procesado — ${result.pages.length} páginas, ${chunks.length} fragmentos, ${figuras.length} figuras`, 'success', 3000);
     /* Guardar no debe poder tumbar la carga: si el dispositivo no tiene cuota
        o bloquea IndexedDB, el manual ya está usable en esta sesión. */
-    if(hash)guardarManual(hash,doc,chunks,figuras,{paginas,ficha:null}).catch(e=>{
+    if(hash)guardarManual(hash,doc,chunks,figuras,{paginas,ficha:docFichas.get(file.name)||null}).catch(e=>{
       console.warn('guardarManual',e);
       showToast(`"${file.name}" se puede usar ahora, pero no cupo en el almacenamiento del teléfono: la próxima vez habrá que volver a cargarlo.`,'warn',6000);
     });
@@ -6018,7 +6091,7 @@ function renderDocs(){
       <div class="doc-icon">📄</div>
       <span class="doc-name">${escapeHtml(d.name)}</span>
       <span class="doc-size">${escapeHtml(d.size)}</span>
-      <span class="doc-chunks">${d.pageCount?d.pageCount+' pág. · ':''}${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}${estadoDeFicha(d.name)}</span>
+      <span class="doc-chunks">${d.pageCount?d.pageCount+' pág. · ':''}${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}${estadoDeFicha(d.name)}${lecturaVieja(d)?' · <span class="doc-releer" title="Se guardó con una lectura anterior del PDF">↻ vuelve a elegir el PDF para leer mejor sus tablas</span>':''}</span>
       <button class="doc-remove" onclick="removeDoc(${i})">✕</button>
     </div>`).join('');
   list.innerHTML=builtinHTML+userHTML;
@@ -9534,7 +9607,10 @@ function correrPruebas(){
     for(const p of pruebasProveedor)filas.push({tipo:'proveedor',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
   }
 
+  const robustez=pruebasRobustez();
+  filas.push(...robustez);
   const resumen={
+    robustez:`${robustez.filter(f=>f.ok).length}/${robustez.length}`,
     recall:`${recallOk}/${recallTot}`,
     ruido:`${ruidoOk}/${ruidoTot}`,
     verificacion:`${verifOk}/${TEST_VERIF.length}`,
@@ -9555,6 +9631,39 @@ function correrPruebas(){
     corpus:corpus.length+' fragmentos ('+docChunks.length+' de PDF)',
   };
   return{resumen,filas};
+}
+
+/* Robustez del piso: lo que se arregló después de medir con manuales reales.
+   Cada grupo trae su propio escenario inventado (marcas y cifras de demo) y
+   deja el estado como lo encontró. */
+function pruebasRobustez(){
+  const out=[];
+  const fila=(tipo,nombre,ok,detalle)=>out.push({tipo,q:nombre,ok:!!ok,detalle:ok?'correcto':(detalle||'falla')});
+  /* Títulos de tabla de dos renglones. Coordenadas como las de pdf.js: una
+     fila de encabezados de 10 pt con «TENIS / CASUAL» partido en dos. */
+  {
+    const ln=(text,x0,x1,yTop)=>({text,x0,x1,yTop,yBot:yTop+10,h:10});
+    const tabla=[
+      ln('VESTIR',40,75,178),ln('CASUAL',203,244,178),ln('TENIS',375,405,172),ln('CASUAL',370,410,184),
+      ln('10% de',45,75,212),ln('participación',40,90,222),
+      ln('15% de',205,240,212),ln('participación',200,250,222),
+      ln('20% de',375,410,212),ln('participación',370,420,222),
+    ];
+    const bl=bloquesDeLineas(tabla.map(l=>({...l})));
+    const de=t=>(bl.find(b=>b.text.startsWith(t))||{}).heading;
+    fila('lectura','«TENIS / CASUAL» en dos renglones titula su columna como TENIS CASUAL',de('20% de')==='TENIS CASUAL','quedó: '+de('20% de'));
+    fila('lectura','la columna vecina sigue siendo CASUAL',de('15% de')==='CASUAL','quedó: '+de('15% de'));
+    fila('lectura','y la primera, VESTIR',de('10% de')==='VESTIR','quedó: '+de('10% de'));
+    const lista=[ln('VESTIR',40,90,100),ln('CONFORT',40,95,112),ln('CASUAL',40,90,124),ln('Texto de la regla',40,160,140)];
+    const bl2=bloquesDeLineas(lista.map(l=>({...l})));
+    const hs=bl2.map(b=>b.heading);
+    fila('lectura','una pila de tres rótulos no se une',!hs.some(h=>/ /.test(h||'')),'quedó: '+hs.join(' | '));
+    const sueltos=[ln('PASILLO',40,90,100),ln('PRINCIPAL',40,100,112)];
+    const bl3=bloquesDeLineas(sueltos.map(l=>({...l})));
+    fila('lectura','dos rótulos que no titulan nada no se unen',bl3.length===2,'quedó: '+bl3.map(b=>b.heading).join(' | '));
+    fila('lectura','un manual guardado con la lectura 1 pide releerse',lecturaVieja({name:'x.pdf'})&&!lecturaVieja({name:'x.pdf',lectura:LECTURA_VERSION}));
+  }
+  return out
 }
 
 /* Las pruebas cambian el estado real —docs, fragmentos, sección activa,
