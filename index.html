@@ -584,6 +584,11 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .ref-general:disabled{opacity:.55;cursor:default}
 
 /* Arnés de medición (?test=1) — no se carga en el uso normal. */
+#medicion-panel{position:fixed;inset:24px;z-index:9998;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:'Geist',system-ui,sans-serif}
+.med-controles{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
+.med-controles label{display:flex;align-items:center;gap:5px}
+.med-nota{width:100%;font-size:11.5px;color:var(--text3);line-height:1.5}
+@media(max-width:640px){#medicion-panel{inset:0;border-radius:0}}
 #test-panel{position:fixed;inset:24px;z-index:9999;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:'Geist',system-ui,sans-serif}
 .test-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
 .test-head button{margin-left:auto;background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer}
@@ -1105,7 +1110,7 @@ header::after{display:none}
 .toast.error{background:var(--solido);border-color:rgba(255,107,107,0.4);color:var(--text)}
 .toast.success{background:var(--solido);border-color:rgba(74,222,154,0.4);color:var(--text)}
 .toast.warn{background:var(--solido);border-color:rgba(255,114,130,0.4);color:var(--text)}
-#test-panel{background:var(--solido)}
+#test-panel,#medicion-panel{background:var(--solido)}
 footer{font-size:11px;letter-spacing:.02em;text-transform:none;color:var(--text3)}
 footer span{color:var(--text2);opacity:1}
 
@@ -1241,6 +1246,8 @@ body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10
     <span class="docs-nota" id="docs-nota"></span>
     <span class="docs-btns">
       <button class="docs-describir" id="btn-ficha" onclick="botonFicha()" style="display:none"></button>
+      <button class="docs-describir" id="btn-medir" onclick="abrirMedicion()" style="display:none">🧪 Medir el modo IA con un examen</button>
+      <input type="file" id="examen-input" accept=".json,application/json" style="display:none" onchange="cargarExamen(this)"/>
       <button class="docs-describir" id="btn-describir" onclick="describirFiguras()" style="display:none"></button>
       <button class="docs-borrar" onclick="borrarManualesGuardados()">Borrar manuales guardados</button>
     </span>
@@ -4370,6 +4377,8 @@ function guardarTablero(){try{localStorage.setItem(TABLERO_KEY,JSON.stringify(ta
    manual. Cuenta como no explicada hasta que alguien diga con 👍 que sí le
    sirvió: quien preguntó sabe mejor que el buscador si «espacio» era «pasillo». */
 function registrarConsulta(q,encontro,chunk,modo,dudoso){
+  /* Las preguntas del examen no son dudas del equipo: no van al tablero. */
+  if(midiendo)return null;
   const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),
     q:String(q).slice(0,200),sec:seccionActiva(),ok:!!encontro,modo,voto:null};
   if(dudoso)r.dudoso=true;
@@ -5507,6 +5516,8 @@ async function renderAccionesDocs(){
       btnFicha.textContent=`📖 Preparar ${sinLeer} manual${sinLeer>1?'es':''} para el modo IA`;
     }else btnFicha.style.display='none';
   }
+  const btnMedir=document.getElementById('btn-medir');
+  if(btnMedir)btnMedir.style.display=docs.length&&conKey?'':'none';
   const pendientes=docFigures.filter(f=>!f.vlmDescription).length;
   if(btn){
     if(describiendo){btn.style.display='';btn.textContent='■ Detener descripción'}
@@ -5518,7 +5529,7 @@ async function renderAccionesDocs(){
 
   let guardados=[];
   try{guardados=await listarManuales()||[]}catch{}
-  if(!guardados.length&&!(btn&&btn.style.display==='')&&!(btnFicha&&btnFicha.style.display===''))
+  if(!guardados.length&&!(btn&&btn.style.display==='')&&!(btnFicha&&btnFicha.style.display==='')&&!(btnMedir&&btnMedir.style.display===''))
     {wrap.style.display='none';return}
   const figs=guardados.reduce((n,g)=>n+(g.figuras?g.figuras.length:0),0);
   nota.textContent=guardados.length
@@ -8651,6 +8662,303 @@ function sugerenciasDeFicha(doc,paginas,q,max=3){
 }
 
 /* ════════════════════════════════════════════════
+   MEDIR EL MODO IA CON TUS MANUALES
+
+   El motor del modo IA solo se puede juzgar con manuales reales y un modelo
+   real, y ninguno de los dos debería viajar: los manuales son de la empresa y
+   la key es del asesor. Así que la medición corre aquí, en su teléfono o su
+   computadora, con lo que ya tiene cargado. Se le da un EXAMEN (un JSON con
+   preguntas de piso y lo que debe traer cada respuesta), la app pregunta con
+   cada motor como lo haría el asesor, califica igual que eval/modo-ia.mjs y
+   entrega un archivo de resultados para compartir. La key nunca entra en ese
+   archivo, y la medición no deja rastro en el tablero ni en la memoria.
+════════════════════════════════════════════════ */
+const MEDICION_KEY='ap_medicion_v1';
+const MEDICION_PAUSA_MS=6000;          // el plan gratis de Gemini corta por minuto
+const MEDICION_TIPOS=new Set(['dato','no-esta','trampa','otra']);
+let midiendo=false,medicionDetener=false,medicionActual=null;
+
+function abrirMedicion(){
+  if(midiendo){mostrarPanelMedicion();return}
+  document.getElementById('examen-input').click();
+}
+/* El examen viene de fuera: solo se toman los campos conocidos, como texto,
+   con tope. Un JSON raro no puede meter nada más. */
+function validarExamen(ex){
+  const lista=Array.isArray(ex)?ex:ex&&Array.isArray(ex.preguntas)?ex.preguntas:[];
+  const txt=(v,n)=>typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,n):'';
+  const out=[];
+  for(const x of lista.slice(0,400)){
+    if(!x||typeof x!=='object')continue;
+    const q=txt(x.q,300),tipo=MEDICION_TIPOS.has(x.tipo)?x.tipo:null,seccion=txt(x.seccion,120);
+    if(!q||!tipo)continue;
+    out.push({q,tipo,seccion,cat:txt(x.cat,40),otra:txt(x.otra,120),
+      k:Array.isArray(x.k)?x.k.map(v=>txt(v,120)).filter(Boolean).slice(0,12):[],
+      minK:Math.max(1,Math.min(12,parseInt(x.minK,10)||1)),
+      p:Array.isArray(x.p)?x.p.map(n=>parseInt(n,10)).filter(Number.isFinite).slice(0,12):[],
+      turnos:Array.isArray(x.turnos)?x.turnos.map(v=>txt(v,300)).filter(Boolean).slice(0,4):[]});
+  }
+  return out
+}
+/* La sección del examen se busca por el nombre que la app le da al manual
+   («101 MUEBLES»), no por el archivo: cada quien lo descarga con otro nombre. */
+function docDeSeccion(seccion){
+  if(!seccion)return appState.manualActivo||(docs.length===1?docs[0].name:null);
+  const n=s=>normalizeText(s).replace(/\s+/g,' ').trim();
+  const buscada=n(seccion);
+  const exacto=docs.find(d=>n(nombreDeSeccion(d.name))===buscada);
+  if(exacto)return exacto.name;
+  const codigo=(buscada.match(/^\d{2,4}/)||[])[0];
+  const porCodigo=codigo&&docs.filter(d=>n(nombreDeSeccion(d.name)).startsWith(codigo+' '));
+  if(porCodigo&&porCodigo.length===1)return porCodigo[0].name;
+  const parcial=docs.filter(d=>n(nombreDeSeccion(d.name)).includes(buscada)||buscada.includes(n(nombreDeSeccion(d.name))));
+  return parcial.length===1?parcial[0].name:null
+}
+
+/* ── Calificación: la misma regla que eval/modo-ia.mjs ── */
+const normMed=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/(\d)\s*[x×]\s*(\d)/g,'$1 x $2').replace(/(\d)\s*(cm|m)\b/g,'$1 $2').replace(/\s+/g,' ');
+function tieneAlternativaMed(resp,alt){
+  const r=normMed(resp),a=normMed(alt);
+  if(r.includes(a))return true;
+  const nums=a.match(/\d+(?:[.,]\d+)?/g)||[];
+  if(!nums.every(n=>new RegExp('(?<![\\d.,])'+n.replace(/[.,]/,'[.,]')+'(?![\\d])').test(r)))return false;
+  const pal=a.split(/[^a-zñ]+/).filter(w=>w.length>=4);
+  if(!pal.length)return nums.length>0;
+  return pal.filter(w=>r.includes(w.slice(0,5))).length>=Math.ceil(pal.length/2)
+}
+const SIN_DATO_MED=/no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:regla|dato|informaci[óo]n)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
+const paginasCitadasMed=t=>[...(t||'').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+(?:\s*(?:,|y|-|–)\s*\d+)*)/gi)].flatMap(m=>m[1].match(/\d+/g).map(Number));
+function calificarMedicion(x,r){
+  const texto=r.cuerpo||'';
+  const dijoNoEsta=/no está en el manual/i.test(r.etiqueta||'')||SIN_DATO_MED.test(texto);
+  const base={dijoNoEsta,sinRespaldo:!!(r.avisos||'').trim(),error:!!r.error};
+  if(x.tipo==='otra'){
+    /* Bien si dice dónde está: la sección vecina en el texto o en el botón. */
+    const pal=normMed(x.otra).split(/[^a-zñ]+/).filter(w=>w.length>=5);
+    const dondeEsta=pal.length>0&&pal.some(w=>normMed(texto+' '+(r.botones||'')).includes(w));
+    return{...base,ok:!r.error&&dondeEsta}
+  }
+  if(x.tipo!=='dato')return{...base,ok:!r.error&&dijoNoEsta};
+  const dato=x.k.filter(k=>tieneAlternativaMed(texto,k)).length>=x.minK;
+  const pagina=!x.p.length||paginasCitadasMed(texto).some(n=>x.p.includes(n));
+  return{...base,dato,pagina,ok:!r.error&&dato&&pagina&&!dijoNoEsta}
+}
+function resumenMedicion(filas){
+  const pct=(xs,q)=>{if(!xs.length)return null;const s=[...xs].sort((a,b)=>a-b);return s[Math.min(s.length-1,Math.floor(q*s.length))]};
+  const seg=ms=>ms==null?'—':(ms/1000).toFixed(1)+' s';
+  const out={};
+  for(const motor of[...new Set(filas.map(f=>f.motor))]){
+    const fm=filas.filter(f=>f.motor===motor);
+    const datos=fm.filter(f=>f.tipo==='dato'),huecos=fm.filter(f=>f.tipo==='no-esta'||f.tipo==='trampa'),otras=fm.filter(f=>f.tipo==='otra');
+    const sinError=fm.filter(f=>!f.error);
+    const ag=fm.map(f=>f.agente).filter(a=>a&&a.motor==='agente');
+    const porCat={};
+    for(const f of datos){const c=f.cat||'—';porCat[c]=porCat[c]||[0,0];porCat[c][1]++;if(f.ok)porCat[c][0]++}
+    out[motor]={
+      aciertos:`${datos.filter(f=>f.ok).length}/${datos.length}`,
+      datoCorrecto:`${datos.filter(f=>f.dato).length}/${datos.length}`,
+      paginaCorrecta:`${datos.filter(f=>f.pagina).length}/${datos.length}`,
+      noEstaBienDicho:`${huecos.filter(f=>f.ok).length}/${huecos.length}`,
+      otraSeccion:`${otras.filter(f=>f.ok).length}/${otras.length}`,
+      avisosSinRespaldo:fm.filter(f=>f.sinRespaldo).length,
+      errores:fm.filter(f=>f.error).length,
+      primerTextoP50:seg(pct(sinError.map(f=>f.tPrimer),0.5)),totalP50:seg(pct(sinError.map(f=>f.tTotal),0.5)),
+      ...(motor==='agente'?{contestoElAgente:`${ag.length}/${fm.length}`,
+        tokensPorPregunta:ag.length?Math.round(ag.reduce((s,a)=>s+(a.tokens||0),0)/ag.length):0}:{}),
+      porCategoria:Object.fromEntries(Object.entries(porCat).map(([c,[a,b]])=>[c,`${a}/${b}`]))
+    };
+  }
+  return out
+}
+
+/* ── Una pregunta, como la haría el asesor ── */
+function limpiarChatSilencioso(){
+  history=[];
+  document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"></div>`;
+}
+async function medirPregunta(x,motor,doc){
+  const motorPrevio=appState.motor;
+  appState.motor=motor;
+  appState.manualActivo=doc;refrescarVocabularioManual();
+  limpiarChatSilencioso();
+  try{
+    for(const t of x.turnos){
+      if(medicionDetener)break;
+      document.getElementById('user-input').value=t;sessionTokens=0;
+      await sendMessage();
+    }
+    const box=document.getElementById('chat-messages');
+    const t0=performance.now();let tPrimer=null;
+    const iv=setInterval(()=>{
+      const el=[...box.querySelectorAll('.msg.assistant')].pop();
+      if(tPrimer===null&&el&&!el.classList.contains('loading')&&(el.querySelector('.msg-body')?.textContent||'').trim())tPrimer=performance.now()-t0;
+    },50);
+    ultimaTrazaAgente=null;
+    document.getElementById('user-input').value=x.q;sessionTokens=0;
+    try{await sendMessage()}finally{clearInterval(iv)}
+    const tTotal=performance.now()-t0;
+    const el=[...box.querySelectorAll('.msg.assistant')].pop();
+    return{tPrimer:tPrimer===null?tTotal:tPrimer,tTotal,
+      cuerpo:el?.querySelector('.msg-body')?.innerText||'',
+      etiqueta:el?.querySelector('.msg-label')?.innerText||'',
+      avisos:[...(el?.querySelectorAll('.verify-warn')||[])].map(w=>w.innerText).join(' | '),
+      botones:[...(el?.querySelectorAll('.ref-general')||[])].map(b=>b.textContent).join(' | '),
+      entendi:el?.querySelector('.entendi')?.innerText||'',
+      traza:el?.querySelector('.msg-traza')?.innerText||'',
+      contesto:el?.querySelector('.msg-modelo')?.textContent||'',
+      error:!!el?.querySelector('.err-detail'),
+      agente:ultimaTrazaAgente};
+  }finally{appState.motor=motorPrevio}
+}
+
+/* ── La tanda completa: fichas, preguntas, progreso guardado ── */
+function claveDeExamen(ex,preguntas){
+  let h=0;for(const ch of(ex&&ex.examen||'')+preguntas.map(x=>x.seccion+x.q).join('|'))h=(h*31+ch.charCodeAt(0))|0;
+  return MEDICION_KEY+':'+(h>>>0).toString(36)
+}
+async function cargarExamen(input){
+  const f=input.files&&input.files[0];
+  input.value='';
+  if(!f)return;
+  let ex;
+  try{ex=JSON.parse(await f.text())}catch{showToast('Ese archivo no es un examen: no se pudo leer como JSON.','error',5000);return}
+  const preguntas=validarExamen(ex);
+  if(!preguntas.length){showToast('El examen no trae preguntas que se puedan medir.','error',5000);return}
+  let guardado=null;
+  const clave=claveDeExamen(ex,preguntas);
+  try{guardado=JSON.parse(localStorage.getItem(clave)||'null')}catch{}
+  medicionActual={nombre:(ex&&ex.examen)||f.name,clave,preguntas,filas:guardado&&Array.isArray(guardado.filas)?guardado.filas:[],
+    motores:guardado&&guardado.motores||['clasico','agente'],estado:'listo'};
+  mostrarPanelMedicion();
+}
+async function correrMedicion(){
+  const m=medicionActual;
+  if(!m||midiendo)return;
+  try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
+  if(!hayKeyParaIA()){showToast('Conecta tu API key en Ajustes: la medición pregunta al modelo desde este teléfono.','warn',5000);return}
+  const faltan=[...new Set(m.preguntas.map(x=>x.seccion))].filter(s=>!docDeSeccion(s));
+  if(faltan.length&&!confirm(`No encuentro cargadas estas secciones: ${faltan.join(', ')}. Sus preguntas se saltan. ¿Seguir?`))return;
+  m.motores=['clasico','agente'].filter(k=>document.getElementById('med-'+k)?.checked);
+  if(!m.motores.length){showToast('Elige al menos un motor.','warn',3000);return}
+  midiendo=true;medicionDetener=false;m.estado='corriendo';
+  const activoPrevio=appState.manualActivo,historialPrevio=history;
+  let cerrojo=null;
+  try{cerrojo=await navigator.wakeLock?.request('screen')}catch{}
+  try{
+    if(m.motores.includes('agente')){
+      const secciones=[...new Set(m.preguntas.map(x=>docDeSeccion(x.seccion)).filter(Boolean))].filter(d=>paginasSinFicha(d).length);
+      for(const d of secciones){
+        if(medicionDetener)break;
+        m.estado=`preparando la ficha de ${nombreDeSeccion(d)}`;pintarMedicion();
+        await prepararFicha(d,{silencioso:true});
+      }
+    }
+    const hechas=new Set(m.filas.map(f=>f.motor+'|'+f.seccion+'|'+f.q));
+    const tanda=[];
+    for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(motor+'|'+x.seccion+'|'+x.q))tanda.push({x,motor});
+    for(const[i,{x,motor}]of tanda.entries()){
+      if(medicionDetener)break;
+      const doc=docDeSeccion(x.seccion);
+      if(!doc)continue;
+      m.estado=`${motor} · ${i+1} de ${tanda.length} · ${x.q.slice(0,60)}`;pintarMedicion();
+      const r=await medirPregunta(x,motor,doc);
+      const fila={...x,motor,...r,...calificarMedicion(x,r),modelo:appState.chatModel,fecha:new Date().toISOString()};
+      m.filas.push(fila);
+      try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores}))}catch{}
+      pintarMedicion();
+      /* Lo que cortó la cuota del día no es un resultado: se quita, y mañana
+         se retoma desde aquí con el mismo examen. */
+      if(r.error&&/quota|per day|resource.?exhausted|cuota/i.test(r.cuerpo)){
+        m.filas.pop();
+        try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores}))}catch{}
+        showToast('Se acabó la cuota del día de tu key. Vuelve a abrir el mismo examen mañana: sigue donde se quedó.','warn',9000);
+        break;
+      }
+      if(i<tanda.length-1&&!medicionDetener)await new Promise(ok=>setTimeout(ok,MEDICION_PAUSA_MS));
+    }
+  }finally{
+    midiendo=false;
+    m.estado=medicionDetener?'detenida':'terminada';
+    appState.manualActivo=activoPrevio;refrescarVocabularioManual();renderSelectorSeccion();
+    limpiarChatSilencioso();history=historialPrevio;saveChatHistory();
+    try{await cerrojo?.release()}catch{}
+    pintarMedicion();
+  }
+}
+function resultadoMedicion(){
+  const m=medicionActual;
+  return{examen:m.nombre,fecha:new Date().toISOString(),proveedor:appState.provider,modelo:appState.chatModel,
+    manuales:docs.map(d=>({seccion:nombreDeSeccion(d.name),paginas:d.pageCount||null,ficha:estadoDeFicha(d.name).replace(/^ · /,'')||'sin ficha'})),
+    resumen:resumenMedicion(m.filas),resultados:m.filas}
+}
+async function compartirMedicion(soloDescargar){
+  const nombre=`medicion-modo-ia-${new Date().toISOString().slice(0,10)}.json`;
+  const blob=new Blob([JSON.stringify(resultadoMedicion(),null,1)],{type:'application/json'});
+  const archivo=new File([blob],nombre,{type:'application/json'});
+  if(!soloDescargar&&navigator.canShare&&navigator.canShare({files:[archivo]})){
+    try{await navigator.share({files:[archivo],title:'Medición del modo IA'});return}catch(e){if(e.name==='AbortError')return}
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function borrarMedicion(){
+  const m=medicionActual;
+  if(!m||midiendo||!confirm('¿Borrar el avance de esta medición?'))return;
+  try{localStorage.removeItem(m.clave)}catch{}
+  m.filas=[];m.estado='listo';pintarMedicion();
+}
+function mostrarPanelMedicion(){
+  let p=document.getElementById('medicion-panel');
+  if(!p){
+    p=document.createElement('div');p.id='medicion-panel';p.className='test-panel-like';
+    document.body.appendChild(p);
+  }
+  pintarMedicion();
+}
+function cerrarPanelMedicion(){
+  if(midiendo&&!confirm('La medición sigue corriendo. ¿Detenerla y cerrar?'))return;
+  medicionDetener=true;
+  document.getElementById('medicion-panel')?.remove();
+}
+function pintarMedicion(){
+  const p=document.getElementById('medicion-panel'),m=medicionActual;
+  if(!p||!m)return;
+  const res=resumenMedicion(m.filas);
+  const total=m.preguntas.length*m.motores.length;
+  const secciones=[...new Set(m.preguntas.map(x=>x.seccion))];
+  const faltan=secciones.filter(s=>!docDeSeccion(s));
+  const minutos=Math.ceil((total-m.filas.length)*(MEDICION_PAUSA_MS/1000+12)/60);
+  p.innerHTML=`
+    <div class="test-head">
+      <strong>Medir el modo IA</strong>
+      <span class="test-veredicto ${midiendo?'mal':'bien'}">${escapeHtml(m.estado)}</span>
+      <button onclick="cerrarPanelMedicion()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="med-controles">
+      <div class="med-nota">${escapeHtml(m.nombre)} · ${m.preguntas.length} preguntas de ${secciones.length} secciones${faltan.length?` · <b>sin cargar:</b> ${faltan.map(escapeHtml).join(', ')}`:''}.
+        Corre con tu key desde este teléfono; la key no entra en el archivo de resultados. Quedan ~${minutos} min: deja la pantalla encendida.</div>
+      <label><input type="checkbox" id="med-clasico" ${m.motores.includes('clasico')?'checked':''} ${midiendo?'disabled':''}> Motor clásico</label>
+      <label><input type="checkbox" id="med-agente" ${m.motores.includes('agente')?'checked':''} ${midiendo?'disabled':''}> Agente lector</label>
+      ${midiendo?'<button class="ref-general" onclick="medicionDetener=true;this.disabled=true">■ Detener</button>'
+        :`<button class="ref-general" onclick="correrMedicion()">${m.filas.length?'▶ Seguir':'▶ Empezar'}</button>`}
+      ${m.filas.length&&!midiendo?`<button class="ref-general" onclick="compartirMedicion(false)">📤 Compartir resultados</button>
+        <button class="ref-general" onclick="compartirMedicion(true)">⬇ Descargar</button>
+        <button class="ref-general" onclick="borrarMedicion()">Borrar avance</button>`:''}
+    </div>
+    <div class="test-resumen">${Object.entries(res).map(([motor,r])=>`<span><b>${motor}</b> datos ${r.aciertos} · no está ${r.noEstaBienDicho} · otra sección ${r.otraSeccion} · 1er texto ${r.primerTextoP50}${r.contestoElAgente?` · contestó el agente ${r.contestoElAgente}`:''}</span>`).join('')||'<span>Sin resultados todavía.</span>'}<span><b>avance</b> ${m.filas.length}/${total}</span></div>
+    <div class="test-scroll"><table class="test-tabla"><tbody>${m.filas.slice().reverse().map(f=>`
+      <tr class="${f.ok?'ok':'no'}">
+        <td>${f.ok?'✓':'✕'}</td>
+        <td class="test-tipo">${escapeHtml(f.motor)} · ${escapeHtml(f.tipo)}</td>
+        <td>${escapeHtml(f.q)}<div class="test-nota">${escapeHtml(f.seccion)}${f.cat?' · '+escapeHtml(f.cat):''}</div></td>
+        <td class="test-det">${escapeHtml((f.cuerpo||'').slice(0,220))}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
+/* ════════════════════════════════════════════════
    TEMA (dark / light)
 ══════════════════════════════════════════════ */
 function toggleTheme() {
@@ -9377,6 +9685,16 @@ async function pruebasAgente(){
   const mudo=falso(()=>({texto:'',llamadas:[],tokens:0}));
   err=null;try{await ejecutarAgente({q:'¿dónde va contempo?',provider:mudo,key:'x',model:'m'})}catch(e){err=e}
   fila('un agente que no contesta nada también cae al clásico',!!err);
+  /* Medición con examen */
+  const ex=validarExamen({preguntas:[{q:'¿a qué altura?',tipo:'dato',seccion:'900 MESA FINA',k:['15 cm'],p:['6',99,'x'],extra:1},
+    {q:'x',tipo:'inventado'},{tipo:'dato'},{q:'¿hay luz?',tipo:'trampa',turnos:['uno',7]}]});
+  fila('el examen solo toma preguntas y campos válidos',ex.length===2&&ex[0].p.join()==='6,99'&&!('extra'in ex[0])&&ex[1].turnos.join()==='uno');
+  fila('la sección del examen se encuentra por nombre o por código',docDeSeccion('900 MESA FINA')===DOC&&docDeSeccion('900')===DOC&&docDeSeccion('777 OTRA')===null);
+  const cal=(x,cuerpo,etiqueta)=>calificarMedicion({k:[],minK:1,p:[],otra:'',...x},{cuerpo,etiqueta:etiqueta||''});
+  fila('calificación: dato con su página → bien',cal({tipo:'dato',k:['15 cm'],p:[6]},'Va a 15 cm de la bastilla (pág. 6).').ok);
+  fila('calificación: dato sin la página esperada → mal',!cal({tipo:'dato',k:['15 cm'],p:[6]},'Va a 15 cm (pág. 9).').ok);
+  fila('calificación: «no especifica» en una trampa → bien',cal({tipo:'trampa'},'El manual no especifica eso.').ok);
+  fila('calificación: otra sección nombrada → bien',cal({tipo:'otra',otra:'101 MUEBLES'},'Eso aparece en 101 MUEBLES, cambia de sección.').ok);
   const gm=appState.motor;appState.motor='agente';
   fila('el saludo y las preguntas sobre la app no usan el agente',!motorAgenteDisponible('hola')&&!motorAgenteDisponible('¿qué manuales tengo cargados?')&&motorAgenteDisponible('¿qué marcas van en contempo?'));
   appState.motor='clasico';

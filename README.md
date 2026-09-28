@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 150 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20150%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 156 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20156%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -174,7 +174,7 @@ intactas en la siguiente vuelta, como exige la API.
 
 **Estado:** probado de punta a punta contra un Gemini y un OpenAI simulados
 (`eval/agente-simulado.mjs`, que también corre en el CI: protocolo, topes, citas inventadas,
-imagen rechazada, caída al clásico) y con 31 pruebas nuevas en el arnés. **Sin medir contra un modelo real**: por eso el motor de fábrica sigue siendo el clásico.
+imagen rechazada, caída al clásico) y con 37 pruebas nuevas en el arnés. **Sin medir contra un modelo real**: por eso el motor de fábrica sigue siendo el clásico.
 Para medirlo con el manual demo, que ahora trae una lámina con las marcas solo como imagen:
 
 ```
@@ -186,6 +186,29 @@ node eval/modo-ia.mjs --resumen
 El set del demo suma ocho preguntas de las que fallaban en el piso: listas («¿qué marcas van en
 el mundo contemporáneo?»), abreviaturas, marcas con errata, datos que solo están en una
 imagen, un diagrama y dos conversaciones de varios turnos.
+
+### Medir con tus manuales, sin compartir la key
+
+Los manuales reales no pueden estar en el repositorio y la key es de quien la usa, así que la
+medición corre en la propia app. En **Manuales → «🧪 Medir el modo IA con un examen»** se
+elige un examen (un JSON con preguntas de piso, la sección de cada una, lo que debe traer la
+respuesta y su página). La app prepara la ficha de las secciones que falten, pregunta con el
+motor clásico y con el agente como lo haría el asesor, califica con la misma regla que
+`eval/modo-ia.mjs` y al final **comparte o descarga un archivo de resultados**, que no incluye
+la key. Guarda el avance: si se acaba la cuota del día, al volver a abrir el mismo examen sigue
+donde se quedó. Las preguntas del examen no entran al tablero del equipo.
+
+```json
+{"examen": "mis manuales", "preguntas": [
+  {"seccion": "101 MUEBLES", "q": "¿cuántos cojines lleva el sofá?", "tipo": "dato", "k": ["4 cojines"], "p": [22]},
+  {"seccion": "101 MUEBLES", "q": "¿qué hago si se va la luz?", "tipo": "trampa"},
+  {"seccion": "101 MUEBLES", "q": "¿y en uno de 10?", "turnos": ["¿cuántos servicios pongo en un comedor de 4 sillas?"], "tipo": "dato", "k": ["6 servicios"]}
+]}
+```
+
+`tipo` es `dato` (debe traer alguna de `k` —o `minK` de ellas— y citar una página de `p`),
+`no-esta` o `trampa` (debe decir que el manual no lo especifica) u `otra` (debe decir en qué
+sección, `otra`, está).
 
 ## Cómo está hecho
 
@@ -286,7 +309,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 150 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 156 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 

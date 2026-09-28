@@ -140,6 +140,26 @@ try {
   u = await ultimo();
   revisa(/15 cm/.test(u.cuerpo) && u.agente?.motor === 'clasico', 'si el agente falla, contesta el motor clásico en la misma pregunta');
 
+  /* 7 · Medición con examen: corre los dos motores, califica y exporta sin la key */
+  guion = (body) => body.tools
+    ? [parte('[PENSAMIENTO INTERNO]\nEVIDENCIA: pág. 6 · SENSORES · «el sensor va oculto a 15 cm de la bastilla»\n[RESPUESTA FINAL]\nVa a **15 cm** de la bastilla (pág. 6).\nCERTEZA: ALTA')]
+    : [parte('[PENSAMIENTO INTERNO]\nETAPA 1\n[RESPUESTA FINAL]\nEl manual no especifica eso.\nCERTEZA: GAP')];
+  const med = await p.evaluate(async () => {
+    history = [{ role: 'user', content: 'pregunta del asesor' }, { role: 'assistant', content: 'respuesta' }];
+    const antes = (JSON.parse(localStorage.getItem('ap_tablero_v1') || '[]')).length;
+    medicionActual = { nombre: 'examen simulado', clave: 'ap_medicion_prueba', motores: ['clasico', 'agente'], estado: 'listo', filas: [],
+      preguntas: validarExamen([{ q: '¿a qué altura va el sensor?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] }]) };
+    mostrarPanelMedicion();
+    await correrMedicion();
+    const out = resultadoMedicion();
+    return { filas: out.resultados.map(f => f.motor + ':' + f.ok), resumen: out.resumen, json: JSON.stringify(out),
+      tablero: (JSON.parse(localStorage.getItem('ap_tablero_v1') || '[]')).length - antes, historia: history.length, panel: !!document.getElementById('medicion-panel') };
+  });
+  revisa(med.filas.join() === 'clasico:false,agente:true', 'la medición corre los dos motores y califica cada uno', med.filas.join());
+  revisa(!/AIza-simulada/.test(med.json), 'la key no entra en el archivo de resultados');
+  revisa(med.tablero === 0 && med.historia === 2, 'la medición no toca el tablero y devuelve el historial del asesor', JSON.stringify({ t: med.tablero, h: med.historia }));
+  await p.evaluate(() => { cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba'); });
+
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
   await p.route('https://api.openai.com/**', r => {
