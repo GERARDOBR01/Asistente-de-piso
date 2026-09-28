@@ -2360,6 +2360,12 @@ function seccionEnTexto(docName){
   for(const c of docChunks){
     if(c.docName!==docName)continue;
     for(const m of (c.text||'').matchAll(MENCION_SECCION)){
+      /* «Realiza cruce con producto de la sección 110 DECORACIÓN TEXTIL»,
+         «puede colindar con la sección 111 COLCHONES»: eso nombra a una
+         vecina, no a la sección del manual. Con el manual real de Decoración
+         Hogar las dos menciones de cruce empataban con las dos propias y el
+         desempate por largo lo bautizaba «110 DECORACIÓN TEXTIL». */
+      if(/\b(?:cruce|colind\w*|vecin\w*|complement\w*|juntos?|cerca)\b/i.test((c.text||'').slice(Math.max(0,m.index-50),m.index)))continue;
       const n=m[1].replace(/\s+/g,' ').replace(/(?:\s+(?:Y|DE))+$/,'').trim();
       if(!/[A-ZÁÉÍÓÚÑ]{3,}/.test(n))continue;
       cuenta.set(n,(cuenta.get(n)||0)+1);
@@ -2892,7 +2898,7 @@ function retrieve(query,opts){
     out.push({c,score,hits,hitsSyn,hitsErrata,exigidos});
   }
   out.sort((a,b)=>b.score-a.score||b.hits-a.hits);
-  return(out.some(r=>r.c.isFicha==='indice')?paginasEnVezDeFicha(out):out).slice(0,limit)
+  return(out.some(r=>r.c.isFicha==='indice')?paginasEnVezDeFicha(out,terms):out).slice(0,limit)
 }
 /* La ficha que escribió la IA dice que ESA página habla de lo preguntado, pero
    no es el manual: en su lugar entran los fragmentos reales de la página, con
@@ -2912,12 +2918,23 @@ function fragmentosDePagina(docName,page){
   }
   return fragmentosPorPagina.get(docName+'|'+page)||[]
 }
-function paginasEnVezDeFicha(resultados){
+/* Entra UN fragmento de la página, el que más se parece a la pregunta. Con los
+   tres primeros, medido con dos manuales reales, 23 de 51 respuestas del modo
+   manual salían con las tres tarjetas de la misma página, y la que sí traía la
+   respuesta quedaba fuera. Los demás fragmentos de la página siguen compitiendo
+   con su propia puntuación. */
+function paginasEnVezDeFicha(resultados,terms){
   const vistos=new Set(),salida=[];
   const meter=r=>{if(!vistos.has(r.c)){vistos.add(r.c);salida.push(r)}};
   for(const r of resultados){
     if(r.c.isFicha!=='indice'){meter(r);continue}
-    for(const c of fragmentosDePagina(r.c.docName,r.c.page).slice(0,CTX_MAX_POR_PAGINA))meter({...r,c});
+    let mejor=null,mejorP=-1;
+    for(const c of fragmentosDePagina(r.c.docName,r.c.page)){
+      if(vistos.has(c))continue;
+      const p=terms?bm25Score(c,terms):0;
+      if(p>mejorP){mejorP=p;mejor=c}
+    }
+    if(mejor)meter({...r,c:mejor});
   }
   return salida
 }
@@ -9281,6 +9298,19 @@ async function pruebasAgente(){
   fila('«contemporáneo» llega a la lámina CONTEMPO por la ficha',rc.some(r=>r.c.page===4&&!r.c.isFicha),'págs: '+rc.map(r=>r.c.page).join(','));
   fila('la ficha «índice» nunca sale como resultado',!rc.some(r=>r.c.isFicha==='indice'));
   fila('«koslitch» (letras cambiadas) se corrige a «kostlich»',masParecida('koslitch')==='kostlich','quedó: '+masParecida('koslitch'));
+  const indice4=docChunks.find(c=>c.isFicha==='indice'&&c.page===4);
+  fila('un acierto de la ficha mete UN fragmento de su página, no tres',paginasEnVezDeFicha([{c:indice4,score:5,hits:1,hitsSyn:0,hitsErrata:0}],weightedTerms('contempo')).length===1);
+  /* Lo destapó un manual real: dos menciones de cruce a la sección vecina
+     empataban con las propias y el manual tomaba el nombre de la vecina. */
+  const NOM='nombre-prueba.pdf';
+  const guardaNombres=nombresEnTexto;nombresEnTexto=null;
+  docChunks.push(...buildChunks([
+    pag(1,'','El cliente de la sección 900 DECORACIÓN HOGAR busca piezas para su casa.'),
+    pag(2,'','La sección 900 DECORACIÓN HOGAR ordena el producto por clasificación.'),
+    pag(3,'','Si hace falta, realiza cruce con producto de la sección 910 DECORACIÓN TEXTIL.'),
+    pag(4,'','Cruce de producto con la sección 910 DECORACIÓN TEXTIL en perímetro.')],NOM));
+  fila('el nombre de la sección no lo toma de la vecina con la que se hace cruce',nombreDeSeccion(NOM)==='900 DECORACIÓN HOGAR','quedó: '+nombreDeSeccion(NOM));
+  docChunks=docChunks.filter(c=>c.docName!==NOM);nombresEnTexto=guardaNombres;
 
   /* Herramientas */
   const est=nuevoEstadoAgente(DOC);
