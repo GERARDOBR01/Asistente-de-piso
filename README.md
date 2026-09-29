@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 156 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20156%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 197 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20197%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -187,6 +187,58 @@ El set del demo suma ocho preguntas de las que fallaban en el piso: listas («¿
 el mundo contemporáneo?»), abreviaturas, marcas con errata, datos que solo están en una
 imagen, un diagrama y dos conversaciones de varios turnos.
 
+### Con muchos manuales, la sección la elige la pregunta
+
+Con varios manuales cargados y el selector en «Todos», cada pregunta se buscaba en todos a la
+vez. El agente no corría (lee una sola sección), el modo manual mezclaba tarjetas de varias
+secciones y hasta del manual interno de demostración, y el clásico le mandaba al modelo
+fragmentos de tres secciones con un aviso. Ahora la app elige la sección **para esa pregunta**,
+sin tocar el selector:
+
+1. la que eligió el asesor arriba, si eligió;
+2. la que la pregunta nombra («¿qué va en el POS de muebles?»);
+3. la de la conversación, si es un seguimiento («¿y sandalias?») o si esa sección responde con
+   evidencia sólida;
+4. la única que responde con evidencia clara;
+5. si dos o más responden igual de bien («¿cuánto pasillo dejo?» sale igual en tres manuales),
+   **no adivina: pregunta «¿en cuál estás?»** con un botón por sección, sin gastar una llamada.
+
+La respuesta dice de dónde salió y por qué («📕 Busqué en … (por tu pregunta)»), con un botón a
+la otra sección si también tenía con qué responder.
+
+Medido con 5 manuales reales cargados a la vez y 102 preguntas de piso (fuera del repo),
+haciendo las preguntas de cada sección en orden y sin elegir sección:
+
+| | Antes | Ahora |
+|---|---|---|
+| Sección elegida bien | — (buscaba en todas) | 83/86 · 2 toques de botón en 102 preguntas |
+| Clásico: preguntas con fragmentos de otra sección | 64 | 3 |
+| Modo manual: tarjetas de otra sección | 41 | 3 |
+| Modo manual: tarjetas del manual interno de demostración | 9 | 0 |
+| Modo manual: la página correcta entre las 3 tarjetas | 64/86 | 70/86 |
+| Agente: el dato está en lo que lee | no corría | 80/86 |
+
+### La cifra tiene que ir pegada a lo que dice el manual
+
+La verificación comprobaba que cada cifra de la respuesta **existiera** en lo consultado, no a
+qué iba pegada. En la tabla de participación de una sección de calzado cada columna trae su
+porcentaje, y una respuesta que le daba a SNEAKERS el de la columna TENIS CASUAL pasaba limpia,
+porque esa cifra sí estaba en lo consultado. Ahora cada
+cifra dicha se compara, por su vecindad (el título de su fragmento y su tramo de renglón), con
+las demás cifras de la misma unidad. Solo se marca con evidencia de estructura: otra cifra
+pegada por título o rótulo que explica todo lo que explica la dicha y algo más. Con manuales
+reales: **0 de 21 respuestas correctas marcadas, 60 de 77 con la cifra cambiada marcadas.**
+
+Y la certeza ya no puede quedar en ALTA con un dato que la app no pudo comprobar (una cifra, un
+nombre o una página sin respaldo, o una cifra mal atada): baja a MEDIA, el aviso lo dice y se
+enseña la lámina —o la página entera— donde está la cifra.
+
+El caso de esa tabla tenía además un error de lectura: el encabezado «TENIS / CASUAL» venía en
+dos renglones y su porcentaje quedaba titulado «CASUAL», igual que la columna vecina. La lectura del
+PDF une ahora los títulos de tabla apilados. Un manual guardado con la lectura anterior se
+marca en la lista («↻ vuelve a elegir el PDF») y se relee al volver a elegirlo, sin perder su
+ficha ni las descripciones de láminas.
+
 ### Medir con tus manuales, sin compartir la key
 
 Los manuales reales no pueden estar en el repositorio y la key es de quien la usa, así que la
@@ -209,6 +261,21 @@ donde se quedó. Las preguntas del examen no entran al tablero del equipo.
 `tipo` es `dato` (debe traer alguna de `k` —o `minK` de ellas— y citar una página de `p`),
 `no-esta` o `trampa` (debe decir que el manual no lo especifica) u `otra` (debe decir en qué
 sección, `otra`, está).
+
+En el panel se eligen los motores —clásico, agente y **modo manual, que se mide sin key**— y
+si se mide **«como el asesor: sin elegir sección»**. En ese modo la app elige la sección de cada
+pregunta y se califica también si la eligió bien; si hay empate, se toca la sección del examen y
+se cuenta el toque. El resumen dice además cuántas veces avisó de una cifra mal atada y cuántas
+de esas en respuestas que estaban bien (las falsas alarmas), y cuántas veces bajó la certeza.
+
+Medido así el modo manual, con los 5 manuales reales y las 102 preguntas: 56/86 datos con la
+sección elegida y 52/86 sin elegirla, preguntando cada una suelta (sección bien 92/102, con 20
+toques).
+
+**Las preguntas de verdad hacen mejor examen** que las escritas leyendo el manual, que usan sus
+palabras. En el **Tablero → «⬇ Preguntas para examen»** se exportan las dudas del equipo con el
+formato del examen, sin repetir, con lo que la app encontró y la nota de cada 👎 como pista.
+Falta anotar en cada una el dato y la página esperados.
 
 ## Cómo está hecho
 
@@ -309,7 +376,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 156 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 197 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 

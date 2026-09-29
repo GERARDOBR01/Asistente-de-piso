@@ -160,6 +160,21 @@ try {
   revisa(med.tablero === 0 && med.historia === 2, 'la medición no toca el tablero y devuelve el historial del asesor', JSON.stringify({ t: med.tablero, h: med.historia }));
   await p.evaluate(() => { cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba'); });
 
+  /* 8 · Medición del modo manual «como el asesor»: sin sección elegida, sin gastar llamadas */
+  vistas = [];
+  const medM = await p.evaluate(async () => {
+    medicionActual = { nombre: 'examen manual', clave: 'ap_medicion_prueba_m', motores: ['manual'], libre: true, estado: 'listo', filas: [],
+      preguntas: validarExamen([{ q: '¿a qué altura va el sensor?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] }]) };
+    mostrarPanelMedicion();
+    await correrMedicion();
+    const f = medicionActual.filas[0] || {};
+    const out = { motor: f.motor, libre: f.libre, ok: f.ok, seccionOk: f.seccionOk, ruta: f.ruta, resumen: resumenMedicion(medicionActual.filas) };
+    cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba_m');
+    return out;
+  });
+  revisa(medM.motor === 'manual' && medM.libre && medM.ok && medM.seccionOk && vistas.length === 0,
+    'el modo manual se mide «como el asesor» sin llamar al modelo y dice qué sección eligió', JSON.stringify(medM));
+
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
   await p.route('https://api.openai.com/**', r => {

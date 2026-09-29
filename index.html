@@ -4523,8 +4523,9 @@ function guardarTablero(){try{localStorage.setItem(TABLERO_KEY,JSON.stringify(ta
 function registrarConsulta(q,encontro,chunk,modo,dudoso){
   /* Las preguntas del examen no son dudas del equipo: no van al tablero. */
   if(midiendo)return null;
+  const ruta=rutaActual&&rutaActual.q===q&&rutaActual.doc?nombreDeSeccion(rutaActual.doc):null;
   const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),
-    q:String(q).slice(0,200),sec:seccionActiva(),ok:!!encontro,modo,voto:null};
+    q:String(q).slice(0,200),sec:seccionActiva()||ruta,ok:!!encontro,modo,voto:null};
   if(dudoso)r.dudoso=true;
   if((encontro||dudoso)&&chunk){
     if(chunk.source==='pdf')r.sec=nombreDeSeccion(chunk.docName);
@@ -4541,9 +4542,12 @@ function registrarConsulta(q,encontro,chunk,modo,dudoso){
   if(document.getElementById('panel-memory').classList.contains('active'))renderTablero();
   return r.id
 }
-function votarConsulta(id,voto){
+function votarConsulta(id,voto,nota){
   const r=tablero.find(x=>x.id===id);if(!r)return;
   r.voto=voto;
+  /* La nota del 👎 es lo más valioso que deja el piso: dice qué esperaba.
+     Antes solo iba a la memoria del modelo; aquí viaja con la pregunta. */
+  if(voto==='mal'&&nota)r.nota=String(nota).slice(0,300);
   if(r.dudoso)r.ok=voto==='bien';
   guardarTablero();
 }
@@ -4716,8 +4720,10 @@ function renderTablero(){
   const acc=el('div','tb-acciones');
   const comp=el('button','tb-btn primario','📤 Compartir resumen');comp.type='button';comp.onclick=compartirResumen;
   const imp=el('button','tb-btn','🖨 Imprimir');imp.type='button';imp.onclick=()=>window.print();
+  const exa=el('button','tb-btn','⬇ Preguntas para examen');exa.type='button';exa.onclick=()=>exportarPreguntasReales();
+  exa.title='Las dudas reales del equipo, en el formato del examen de medición: falta anotar la respuesta correcta de cada una.';
   const bor=el('button','tb-btn borrar','Borrar registro');bor.type='button';bor.onclick=borrarTablero;
-  acc.append(comp,imp,bor);
+  acc.append(comp,exa,imp,bor);
   cont.appendChild(acc);
 }
 function textoResumen(){
@@ -4747,6 +4753,41 @@ async function compartirResumen(){
   }catch{
     showToast('No se pudo copiar el resumen en este navegador.','error',4000);
   }
+}
+/* Las preguntas de verdad —como las escribe el piso, con sus faltas— son el
+   mejor examen: las que se escriben leyendo el manual usan sus palabras y
+   salen más fáciles. Se exportan con el formato del examen, sin respuesta:
+   la página y el dato esperados se anotan después, contra el manual. Lo que
+   la app vio (su página, si sirvió, la nota del 👎) va aparte, como pista. */
+function preguntasRealesParaExamen(regs){
+  const vistas=new Map();
+  for(const r of regs){
+    const k=normalizeText(r.q).replace(/\s+/g,' ').trim();
+    if(!k)continue;
+    const v=vistas.get(k);
+    if(v){v.visto.veces++;if(r.nota&&!v.visto.nota)v.visto.nota=r.nota;if(r.voto==='mal')v.visto.noSirvio=true;continue}
+    vistas.set(k,{q:r.q,seccion:r.sec||'',tipo:'dato',cat:'piso-real',k:[],p:r.p?[r.p]:[],
+      visto:{veces:1,encontro:!!r.ok,pagina:r.p||null,titulo:r.h||null,modo:r.modo||null,
+        noSirvio:r.voto==='mal',nota:r.nota||null,fecha:new Date(r.t).toISOString().slice(0,10)}});
+  }
+  return[...vistas.values()]
+}
+async function exportarPreguntasReales(){
+  const preguntas=preguntasRealesParaExamen(consultasDelPeriodo());
+  if(!preguntas.length){showToast('Todavía no hay dudas anotadas en este periodo.','warn',3000);return}
+  const ex={examen:`Preguntas del piso ${new Date().toISOString().slice(0,10)}`,
+    nota:'Preguntas reales del equipo. Falta anotar en cada una el dato esperado (k) y su página (p), o cambiar tipo a «no-esta» si el manual no lo trae. «visto» es lo que la app encontró: pista, no respuesta.',
+    preguntas};
+  const nombre=`preguntas-del-piso-${new Date().toISOString().slice(0,10)}.json`;
+  const blob=new Blob([JSON.stringify(ex,null,1)],{type:'application/json'});
+  const archivo=new File([blob],nombre,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[archivo]})){
+    try{await navigator.share({files:[archivo],title:'Preguntas del piso'});return}catch(e){if(e.name==='AbortError')return}
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function borrarTablero(){
   if(!confirm('¿Borrar todas las dudas anotadas en este teléfono? No se puede deshacer.'))return;
@@ -4927,7 +4968,7 @@ function orderBlocks(blocks){
 
 /* Un encabezado de tabla que no cabe en su celda se parte en dos renglones:
    «TENIS» arriba y «CASUAL» abajo. Como cada renglón en mayúsculas abre su
-   bloque, el cuerpo —«20% de participación»— quedaba bajo «CASUAL», igual que
+   bloque, el cuerpo —«N % de participación»— quedaba bajo «CASUAL», igual que
    el de la columna vecina, y el contexto traía dos CASUAL con cifras distintas:
    el modelo no tenía cómo saber cuál era el de tenis. Se unen solo si:
    el de arriba está solo (sin cuerpo y sin otro título pegado encima), el de
@@ -5725,7 +5766,8 @@ async function renderAccionesDocs(){
     }else btnFicha.style.display='none';
   }
   const btnMedir=document.getElementById('btn-medir');
-  if(btnMedir)btnMedir.style.display=docs.length&&conKey?'':'none';
+  /* Sin key también: el modo manual se mide sin preguntarle a nadie. */
+  if(btnMedir){btnMedir.style.display=docs.length?'':'none';btnMedir.textContent=conKey?'🧪 Medir el modo IA con un examen':'🧪 Medir el modo manual con un examen'}
   const pendientes=docFigures.filter(f=>!f.vlmDescription).length;
   if(btn){
     if(describiendo){btn.style.display='';btn.textContent='■ Detener descripción'}
@@ -8640,9 +8682,9 @@ function verificarContraContexto(respuesta,contexto){
 }
 
 /* ── LA CIFRA PEGADA A OTRA COSA ──────────────────
-   Medido con un manual real: en la tabla de participación de una sección,
-   «20% de participación» es de TENIS CASUAL y «30%» de SNEAKERS. «Sneakers
-   lleva el 20%» pasaba limpio, porque el 20% sí está en el contexto: se
+   Medido con un manual real: en una tabla de participación cada columna trae
+   su porcentaje, y una respuesta que le daba a SNEAKERS el de la columna TENIS
+   CASUAL pasaba limpia, porque esa cifra sí está en el contexto: se
    comprobaba que la cifra existiera, no a qué iba pegada.
    Aquí cada cifra dicha se compara por su VECINDAD —el título de su fragmento
    y su tramo de renglón— con las demás cifras de la misma unidad. Solo se
@@ -8669,8 +8711,8 @@ function cifrasDeTexto(t){
 }
 /* El tramo que le toca a cada cifra de un renglón o una frase. Con una sola
    cifra es todo el texto. Con varias se corta por comas (no la decimal), punto
-   y coma, viñetas y « y »: «Tenis casual 20% y Sneakers 30%» son dos tramos.
-   Si el tramo de una cifra se queda sin palabras propias —«20% de»—, hereda
+   y coma, viñetas y « y »: «Tenis casual 25% y Sneakers 35%» son dos tramos.
+   Si el tramo de una cifra se queda sin palabras propias —«25% de»—, hereda
    las del texto que no son de otra cifra, y se avisa con `propias:false`. */
 function tramosDeCifras(t){
   const cifras=cifrasDeTexto(t);
@@ -8699,7 +8741,7 @@ function verificarAtadura(respuesta,contexto){
   const ocurrencias=[];
   const esRotulo=l=>/^\s*\[.*\]\s*$/.test(l||'');
   const esCorte=l=>/^\s*(===|---)/.test(l||'');
-  /* El PDF corta donde cortó la maqueta: «◆ 40% en el flujo» / «principal del
+  /* El PDF corta donde cortó la maqueta: «◆ N % en el flujo» / «principal del
      cliente» es una sola frase. Se vuelve a unir, con la misma regla que las
      tarjetas del modo manual, antes de decidir qué va pegado a qué. */
   const lineas=[];
@@ -8744,10 +8786,10 @@ function verificarAtadura(respuesta,contexto){
   /* Asimétrico a propósito: la cifra dicha cuenta a su favor cualquier palabra
      de su vecindad; la rival solo lo que la ata por estructura —su título o su
      rótulo—. Y la rival gana solo si explica TODO lo que explica la dicha y algo
-     más: en un planograma, «flujo principal» puede rotular un 40% y «etapa» el
-     50%+20% de la respuesta; ninguna explica a la otra, y eso no es evidencia
-     de nada. «Tenis casual 15%» sí se marca: el 15% solo explica «casual» y el
-     20% explica «tenis casual». */
+     más: en un planograma, «flujo principal» puede rotular una cifra y «etapa»
+     la de la respuesta; ninguna explica a la otra, y eso no es evidencia de
+     nada. «Tenis casual 18%» sí se marca si el 18% solo explica «casual» y otra
+     cifra explica «tenis casual». */
   const aFavor=(o,S)=>[...new Set([...toca(o.tit,S),...toca([...o.propias,...o.cerca],S)])];
   const enContra=(o,S)=>[...new Set([...toca(o.tit,S),...(o.rotulo?toca(o.propias,S):[])])];
   const comparten=(a,b)=>a.valores.some(v=>b.valores.includes(v));
@@ -8968,7 +9010,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
     addMemoryFail(originalQuestion,cleanFinal,noteEl.value.trim());
-    if(idConsulta)votarConsulta(idConsulta,'mal');
+    if(idConsulta)votarConsulta(idConsulta,'mal',noteEl.value.trim());
     showToast('✓ Feedback registrado en memoria', 'success', 1800);
   };
 
@@ -9147,12 +9189,15 @@ function tieneAlternativaMed(resp,alt){
   if(!pal.length)return nums.length>0;
   return pal.filter(w=>r.includes(w.slice(0,5))).length>=Math.ceil(pal.length/2)
 }
-const SIN_DATO_MED=/no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:regla|dato|informaci[óo]n)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
+const SIN_DATO_MED=/nada(?:\s+de\s+esta\s+secci[óo]n|\s+del\s+manual)?\s+coincide|no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:regla|dato|informaci[óo]n)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
 const paginasCitadasMed=t=>[...(t||'').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+(?:\s*(?:,|y|-|–)\s*\d+)*)/gi)].flatMap(m=>m[1].match(/\d+/g).map(Number));
 function calificarMedicion(x,r){
   const texto=r.cuerpo||'';
   const dijoNoEsta=/no está en el manual/i.test(r.etiqueta||'')||SIN_DATO_MED.test(texto);
   const base={dijoNoEsta,sinRespaldo:!!(r.avisos||'').trim(),error:!!r.error};
+  /* «Como el asesor»: además, ¿eligió bien la sección? En «no está» también
+     vale no elegir ninguna. */
+  if(r.ruta)base.seccionOk=r.ruta.seccion===r.esperado||((x.tipo==='no-esta'||x.tipo==='trampa')&&!r.ruta.seccion);
   if(x.tipo==='otra'){
     /* Bien si dice dónde está: la sección vecina en el texto o en el botón. */
     const pal=normMed(x.otra).split(/[^a-zñ]+/).filter(w=>w.length>=5);
@@ -9168,8 +9213,10 @@ function resumenMedicion(filas){
   const pct=(xs,q)=>{if(!xs.length)return null;const s=[...xs].sort((a,b)=>a-b);return s[Math.min(s.length-1,Math.floor(q*s.length))]};
   const seg=ms=>ms==null?'—':(ms/1000).toFixed(1)+' s';
   const out={};
-  for(const motor of[...new Set(filas.map(f=>f.motor))]){
-    const fm=filas.filter(f=>f.motor===motor);
+  const grupo=f=>f.motor+(f.libre?' · sin sección':'');
+  for(const motor of[...new Set(filas.map(grupo))]){
+    const fm=filas.filter(f=>grupo(f)===motor);
+    const conRuta=fm.filter(f=>f.ruta);
     const datos=fm.filter(f=>f.tipo==='dato'),huecos=fm.filter(f=>f.tipo==='no-esta'||f.tipo==='trampa'),otras=fm.filter(f=>f.tipo==='otra');
     const sinError=fm.filter(f=>!f.error);
     const ag=fm.map(f=>f.agente).filter(a=>a&&a.motor==='agente');
@@ -9184,8 +9231,15 @@ function resumenMedicion(filas){
       avisosSinRespaldo:fm.filter(f=>f.sinRespaldo).length,
       errores:fm.filter(f=>f.error).length,
       primerTextoP50:seg(pct(sinError.map(f=>f.tPrimer),0.5)),totalP50:seg(pct(sinError.map(f=>f.tTotal),0.5)),
-      ...(motor==='agente'?{contestoElAgente:`${ag.length}/${fm.length}`,
+      ...(motor.startsWith('agente')?{contestoElAgente:`${ag.length}/${fm.length}`,
         tokensPorPregunta:ag.length?Math.round(ag.reduce((s,a)=>s+(a.tokens||0),0)/ag.length):0}:{}),
+      ...(conRuta.length?{seccionElegidaBien:`${conRuta.filter(f=>f.seccionOk).length}/${conRuta.length}`,
+        toquesDeEmpate:fm.filter(f=>f.toque).length}:{}),
+      /* Cuántas veces avisó de una cifra mal atada, y cuántas de esas en una
+         respuesta que estaba bien: esa segunda cifra es la de falsas alarmas. */
+      avisosDeAtadura:fm.filter(f=>f.atadura).length,
+      atadurasEnRespuestasBien:fm.filter(f=>f.atadura&&f.ok).length,
+      certezaBajada:fm.filter(f=>f.certezaBajada).length,
       porCategoria:Object.fromEntries(Object.entries(porCat).map(([c,[a,b]])=>[c,`${a}/${b}`]))
     };
   }
@@ -9197,16 +9251,35 @@ function limpiarChatSilencioso(){
   history=[];
   document.getElementById('chat-messages').innerHTML=`<div class="chat-empty" id="chat-empty"></div>`;
 }
-async function medirPregunta(x,motor,doc){
+async function medirPregunta(x,motor,doc,opc={}){
   const motorPrevio=appState.motor;
-  appState.motor=motor;
-  appState.manualActivo=doc;refrescarVocabularioManual();
+  const libre=!!opc.libre;
+  if(motor!=='manual')appState.motor=motor;
+  /* «Como el asesor»: sin sección elegida, que la elija la pregunta. */
+  appState.manualActivo=libre?null:doc;refrescarVocabularioManual();
   limpiarChatSilencioso();
+  let toque=false;
+  /* En un empate la app pregunta «¿en cuál estás?»; el asesor tocaría la suya.
+     Se toca por él —la sección del examen— y se cuenta el toque. */
+  const preparar=(q,contar)=>{
+    rutaActual=null;rutaForzada=null;
+    if(!libre)return;
+    const r=enrutarSeccion(q);
+    if(r.motivo==='empate'&&opc.esperadoDoc&&r.alternativas.includes(opc.esperadoDoc)){
+      rutaForzada={q,doc:opc.esperadoDoc};if(contar)toque=true;
+    }
+    rutaActual=null;
+  };
+  const preguntar=async(q,contar)=>{
+    preparar(q,contar);
+    if(motor==='manual'){responderSinModelo(q);return}
+    document.getElementById('user-input').value=q;sessionTokens=0;
+    await sendMessage();
+  };
   try{
     for(const t of x.turnos){
       if(medicionDetener)break;
-      document.getElementById('user-input').value=t;sessionTokens=0;
-      await sendMessage();
+      await preguntar(t,false);
     }
     const box=document.getElementById('chat-messages');
     const t0=performance.now();let tPrimer=null;
@@ -9215,11 +9288,14 @@ async function medirPregunta(x,motor,doc){
       if(tPrimer===null&&el&&!el.classList.contains('loading')&&(el.querySelector('.msg-body')?.textContent||'').trim())tPrimer=performance.now()-t0;
     },50);
     ultimaTrazaAgente=null;
-    document.getElementById('user-input').value=x.q;sessionTokens=0;
-    try{await sendMessage()}finally{clearInterval(iv)}
+    try{await preguntar(x.q,true)}finally{clearInterval(iv)}
     const tTotal=performance.now()-t0;
     const el=[...box.querySelectorAll('.msg.assistant')].pop();
-    return{tPrimer:tPrimer===null?tTotal:tPrimer,tTotal,
+    const ruta=libre&&rutaActual&&rutaActual.q===x.q
+      ?{seccion:rutaActual.doc?nombreDeSeccion(rutaActual.doc):null,motivo:rutaActual.motivo}:null;
+    return{tPrimer:tPrimer===null?tTotal:tPrimer,tTotal,ruta,toque,
+      atadura:Number(el?.querySelector('.verify-warn[data-atadura]')?.dataset.atadura||0),
+      certezaBajada:el?.dataset.certezaBajada==='1',
       cuerpo:el?.querySelector('.msg-body')?.innerText||'',
       etiqueta:el?.querySelector('.msg-label')?.innerText||'',
       avisos:[...(el?.querySelectorAll('.verify-warn')||[])].map(w=>w.innerText).join(' | '),
@@ -9229,7 +9305,7 @@ async function medirPregunta(x,motor,doc){
       contesto:el?.querySelector('.msg-modelo')?.textContent||'',
       error:!!el?.querySelector('.err-detail'),
       agente:ultimaTrazaAgente};
-  }finally{appState.motor=motorPrevio}
+  }finally{appState.motor=motorPrevio;rutaForzada=null}
 }
 
 /* ── La tanda completa: fichas, preguntas, progreso guardado ── */
@@ -9249,18 +9325,22 @@ async function cargarExamen(input){
   const clave=claveDeExamen(ex,preguntas);
   try{guardado=JSON.parse(localStorage.getItem(clave)||'null')}catch{}
   medicionActual={nombre:(ex&&ex.examen)||f.name,clave,preguntas,filas:guardado&&Array.isArray(guardado.filas)?guardado.filas:[],
-    motores:guardado&&guardado.motores||['clasico','agente'],estado:'listo'};
+    motores:guardado&&guardado.motores||['clasico','agente'],libre:!!(guardado&&guardado.libre),estado:'listo'};
   mostrarPanelMedicion();
 }
 async function correrMedicion(){
   const m=medicionActual;
   if(!m||midiendo)return;
   try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
-  if(!hayKeyParaIA()){showToast('Conecta tu API key en Ajustes: la medición pregunta al modelo desde este teléfono.','warn',5000);return}
+  m.motores=['clasico','agente','manual'].filter(k=>document.getElementById('med-'+k)?.checked);
+  m.libre=!!document.getElementById('med-libre')?.checked;
+  if(!m.motores.length){showToast('Elige al menos un motor.','warn',3000);return}
+  /* El modo manual no pregunta a nadie: se mide sin key. */
+  if(m.motores.some(k=>k!=='manual')&&!hayKeyParaIA()){showToast('Conecta tu API key en Ajustes: la medición pregunta al modelo desde este teléfono. El modo manual sí se puede medir sin key.','warn',6000);return}
   const faltan=[...new Set(m.preguntas.map(x=>x.seccion))].filter(s=>!docDeSeccion(s));
   if(faltan.length&&!confirm(`No encuentro cargadas estas secciones: ${faltan.join(', ')}. Sus preguntas se saltan. ¿Seguir?`))return;
-  m.motores=['clasico','agente'].filter(k=>document.getElementById('med-'+k)?.checked);
-  if(!m.motores.length){showToast('Elige al menos un motor.','warn',3000);return}
+  const viejos=docs.filter(lecturaVieja);
+  if(viejos.length&&!confirm(`${viejos.length===1?'Este manual se leyó':'Estos manuales se leyeron'} con la lectura anterior del PDF: ${viejos.map(d=>nombreDeSeccion(d.name)).join(', ')}. Para medir la lectura nueva, vuelve a elegir sus PDF en Manuales. ¿Medir así de todos modos?`))return;
   midiendo=true;medicionDetener=false;m.estado='corriendo';
   const activoPrevio=appState.manualActivo,historialPrevio=history;
   let cerrojo=null;
@@ -9274,28 +9354,33 @@ async function correrMedicion(){
         await prepararFicha(d,{silencioso:true});
       }
     }
-    const hechas=new Set(m.filas.map(f=>f.motor+'|'+f.seccion+'|'+f.q));
+    const claveFila=(motor,libre,x)=>motor+'|'+(libre?1:0)+'|'+x.seccion+'|'+x.q;
+    const hechas=new Set(m.filas.map(f=>claveFila(f.motor,f.libre,f)));
     const tanda=[];
-    for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(motor+'|'+x.seccion+'|'+x.q))tanda.push({x,motor});
+    for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(claveFila(motor,m.libre,x)))tanda.push({x,motor});
+    const guardar=()=>{try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores,libre:m.libre}))}catch{}};
     for(const[i,{x,motor}]of tanda.entries()){
       if(medicionDetener)break;
       const doc=docDeSeccion(x.seccion);
       if(!doc)continue;
-      m.estado=`${motor} · ${i+1} de ${tanda.length} · ${x.q.slice(0,60)}`;pintarMedicion();
-      const r=await medirPregunta(x,motor,doc);
-      const fila={...x,motor,...r,...calificarMedicion(x,r),modelo:appState.chatModel,fecha:new Date().toISOString()};
+      const esperadoDoc=x.tipo==='otra'?docDeSeccion(x.otra):doc;
+      m.estado=`${motor}${m.libre?' sin sección':''} · ${i+1} de ${tanda.length} · ${x.q.slice(0,60)}`;pintarMedicion();
+      const r=await medirPregunta(x,motor,doc,{libre:m.libre,esperadoDoc});
+      r.esperado=esperadoDoc?nombreDeSeccion(esperadoDoc):null;
+      const fila={...x,motor,libre:m.libre,...r,...calificarMedicion(x,r),modelo:motor==='manual'?'sin modelo':appState.chatModel,fecha:new Date().toISOString()};
       m.filas.push(fila);
-      try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores}))}catch{}
+      guardar();
       pintarMedicion();
       /* Lo que cortó la cuota del día no es un resultado: se quita, y mañana
          se retoma desde aquí con el mismo examen. */
       if(r.error&&/quota|per day|resource.?exhausted|cuota/i.test(r.cuerpo)){
         m.filas.pop();
-        try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores}))}catch{}
+        guardar();
         showToast('Se acabó la cuota del día de tu key. Vuelve a abrir el mismo examen mañana: sigue donde se quedó.','warn',9000);
         break;
       }
-      if(i<tanda.length-1&&!medicionDetener)await new Promise(ok=>setTimeout(ok,MEDICION_PAUSA_MS));
+      /* La pausa es por la cuota por minuto del proveedor: el modo manual no la gasta. */
+      if(motor!=='manual'&&i<tanda.length-1&&!medicionDetener)await new Promise(ok=>setTimeout(ok,MEDICION_PAUSA_MS));
     }
   }finally{
     midiendo=false;
@@ -9350,7 +9435,8 @@ function pintarMedicion(){
   const total=m.preguntas.length*m.motores.length;
   const secciones=[...new Set(m.preguntas.map(x=>x.seccion))];
   const faltan=secciones.filter(s=>!docDeSeccion(s));
-  const minutos=Math.ceil((total-m.filas.length)*(MEDICION_PAUSA_MS/1000+12)/60);
+  const conModelo=m.motores.filter(k=>k!=='manual').length;
+  const minutos=Math.ceil(Math.max(0,m.preguntas.length*conModelo-m.filas.filter(f=>f.motor!=='manual').length)*(MEDICION_PAUSA_MS/1000+12)/60);
   p.innerHTML=`
     <div class="test-head">
       <strong>Medir el modo IA</strong>
@@ -9362,18 +9448,20 @@ function pintarMedicion(){
         Corre con tu key desde este teléfono; la key no entra en el archivo de resultados. Quedan ~${minutos} min: deja la pantalla encendida.</div>
       <label><input type="checkbox" id="med-clasico" ${m.motores.includes('clasico')?'checked':''} ${midiendo?'disabled':''}> Motor clásico</label>
       <label><input type="checkbox" id="med-agente" ${m.motores.includes('agente')?'checked':''} ${midiendo?'disabled':''}> Agente lector</label>
+      <label><input type="checkbox" id="med-manual" ${m.motores.includes('manual')?'checked':''} ${midiendo?'disabled':''}> Modo manual (sin key)</label>
+      <label title="Sin sección elegida, como pregunta el asesor: la app elige la sección de cada pregunta y, si dos empatan, se toca la del examen."><input type="checkbox" id="med-libre" ${m.libre?'checked':''} ${midiendo?'disabled':''}> Como el asesor: sin elegir sección</label>
       ${midiendo?'<button class="ref-general" onclick="medicionDetener=true;this.disabled=true">■ Detener</button>'
         :`<button class="ref-general" onclick="correrMedicion()">${m.filas.length?'▶ Seguir':'▶ Empezar'}</button>`}
       ${m.filas.length&&!midiendo?`<button class="ref-general" onclick="compartirMedicion(false)">📤 Compartir resultados</button>
         <button class="ref-general" onclick="compartirMedicion(true)">⬇ Descargar</button>
         <button class="ref-general" onclick="borrarMedicion()">Borrar avance</button>`:''}
     </div>
-    <div class="test-resumen">${Object.entries(res).map(([motor,r])=>`<span><b>${motor}</b> datos ${r.aciertos} · no está ${r.noEstaBienDicho} · otra sección ${r.otraSeccion} · 1er texto ${r.primerTextoP50}${r.contestoElAgente?` · contestó el agente ${r.contestoElAgente}`:''}</span>`).join('')||'<span>Sin resultados todavía.</span>'}<span><b>avance</b> ${m.filas.length}/${total}</span></div>
+    <div class="test-resumen">${Object.entries(res).map(([motor,r])=>`<span><b>${escapeHtml(motor)}</b> datos ${r.aciertos} · no está ${r.noEstaBienDicho} · otra sección ${r.otraSeccion} · 1er texto ${r.primerTextoP50}${r.contestoElAgente?` · contestó el agente ${r.contestoElAgente}`:''}${r.seccionElegidaBien?` · sección bien ${r.seccionElegidaBien}${r.toquesDeEmpate?` (${r.toquesDeEmpate} toques)`:''}`:''}${r.avisosDeAtadura?` · cifra mal atada ${r.avisosDeAtadura}`:''}</span>`).join('')||'<span>Sin resultados todavía.</span>'}<span><b>avance</b> ${m.filas.length}/${total}</span></div>
     <div class="test-scroll"><table class="test-tabla"><tbody>${m.filas.slice().reverse().map(f=>`
       <tr class="${f.ok?'ok':'no'}">
         <td>${f.ok?'✓':'✕'}</td>
-        <td class="test-tipo">${escapeHtml(f.motor)} · ${escapeHtml(f.tipo)}</td>
-        <td>${escapeHtml(f.q)}<div class="test-nota">${escapeHtml(f.seccion)}${f.cat?' · '+escapeHtml(f.cat):''}</div></td>
+        <td class="test-tipo">${escapeHtml(f.motor)}${f.libre?' · sin sección':''} · ${escapeHtml(f.tipo)}</td>
+        <td>${escapeHtml(f.q)}<div class="test-nota">${escapeHtml(f.seccion)}${f.cat?' · '+escapeHtml(f.cat):''}${f.ruta?` · eligió ${escapeHtml(f.ruta.seccion||'ninguna')}${f.seccionOk?'':' ✕'}`:''}</div></td>
         <td class="test-det">${escapeHtml((f.cuerpo||'').slice(0,220))}</td>
       </tr>`).join('')}</tbody></table></div>`;
 }
@@ -9992,15 +10080,15 @@ function pruebasRobustez(){
     const ln=(text,x0,x1,yTop)=>({text,x0,x1,yTop,yBot:yTop+10,h:10});
     const tabla=[
       ln('VESTIR',40,75,178),ln('CASUAL',203,244,178),ln('TENIS',375,405,172),ln('CASUAL',370,410,184),
-      ln('10% de',45,75,212),ln('participación',40,90,222),
-      ln('15% de',205,240,212),ln('participación',200,250,222),
-      ln('20% de',375,410,212),ln('participación',370,420,222),
+      ln('12% de',45,75,212),ln('participación',40,90,222),
+      ln('18% de',205,240,212),ln('participación',200,250,222),
+      ln('25% de',375,410,212),ln('participación',370,420,222),
     ];
     const bl=bloquesDeLineas(tabla.map(l=>({...l})));
     const de=t=>(bl.find(b=>b.text.startsWith(t))||{}).heading;
-    fila('lectura','«TENIS / CASUAL» en dos renglones titula su columna como TENIS CASUAL',de('20% de')==='TENIS CASUAL','quedó: '+de('20% de'));
-    fila('lectura','la columna vecina sigue siendo CASUAL',de('15% de')==='CASUAL','quedó: '+de('15% de'));
-    fila('lectura','y la primera, VESTIR',de('10% de')==='VESTIR','quedó: '+de('10% de'));
+    fila('lectura','«TENIS / CASUAL» en dos renglones titula su columna como TENIS CASUAL',de('25% de')==='TENIS CASUAL','quedó: '+de('25% de'));
+    fila('lectura','la columna vecina sigue siendo CASUAL',de('18% de')==='CASUAL','quedó: '+de('18% de'));
+    fila('lectura','y la primera, VESTIR',de('12% de')==='VESTIR','quedó: '+de('12% de'));
     const lista=[ln('VESTIR',40,90,100),ln('CONFORT',40,95,112),ln('CASUAL',40,90,124),ln('Texto de la regla',40,160,140)];
     const bl2=bloquesDeLineas(lista.map(l=>({...l})));
     const hs=bl2.map(b=>b.heading);
@@ -10015,48 +10103,79 @@ function pruebasRobustez(){
     const D='900 CALZADO DEMO.pdf';
     const bloque=(pag,tit,txt)=>`[${D} · pág. ${pag} · ${tit}]\n${txt}\n\n`;
     const ctx='=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n'
-      +bloque(18,'VESTIR','10% de\nparticipación')+bloque(18,'CASUAL','15% de\nparticipación')
-      +bloque(18,'TENIS CASUAL','20% de\nparticipación')+bloque(18,'SNEAKERS','30% de\nparticipación')
+      +bloque(12,'VESTIR','12% de\nparticipación')+bloque(12,'CASUAL','18% de\nparticipación')
+      +bloque(12,'TENIS CASUAL','25% de\nparticipación')+bloque(12,'SNEAKERS','35% de\nparticipación')
       +bloque(9,'ALINEACIÓN','Distribuye el mobiliario dejando 80 cm entre muebles.\nLas mesas miden 90 cm de alto.')
       +bloque(6,'SENSORES','El sensor va oculto a 15 cm de la\nbastilla, por dentro.');
     const at=r=>verificarAtadura(r,ctx);
-    const a1=at('Para **Sneakers** va el 20% de participación (pág. 18).');
-    fila('atadura','«Sneakers 20%» se marca: el 20% es de TENIS CASUAL',a1.length===1&&a1[0].rival==='30%'&&/TENIS CASUAL/.test(a1[0].pegadaA),JSON.stringify(a1));
-    const a2=at('Tenis casual lleva el 15% de participación.');
-    fila('atadura','«Tenis casual 15%» se marca: el manual le da 20%',a2.length===1&&a2[0].rival==='20%',JSON.stringify(a2));
-    fila('atadura','«Tenis casual 20%» no se marca',!at('Tenis casual lleva el 20% (pág. 18).').length);
-    fila('atadura','una lista bien dicha no se marca',!at('Vestir 10%, Casual 15%, Tenis casual 20% y Sneakers 30%.').length);
+    const a1=at('Para **Sneakers** va el 25% de participación (pág. 12).');
+    fila('atadura','«Sneakers 25%» se marca: el 25% es de TENIS CASUAL',a1.length===1&&a1[0].rival==='35%'&&/TENIS CASUAL/.test(a1[0].pegadaA),JSON.stringify(a1));
+    const a2=at('Tenis casual lleva el 18% de participación.');
+    fila('atadura','«Tenis casual 18%» se marca: el manual le da 25%',a2.length===1&&a2[0].rival==='25%',JSON.stringify(a2));
+    fila('atadura','«Tenis casual 25%» no se marca',!at('Tenis casual lleva el 25% (pág. 12).').length);
+    fila('atadura','una lista bien dicha no se marca',!at('Vestir 12%, Casual 18%, Tenis casual 25% y Sneakers 35%.').length);
     fila('atadura','«deja 80 cm de pasillo entre mesas» no se marca por las mesas de 90 cm',!at('Deja 80 cm de pasillo entre mesas (pág. 9).').length);
     fila('atadura','«15 cm de la bastilla» no se marca',!at('El sensor va a **15 cm** de la bastilla (pág. 6).').length);
-    const lista='[Manual interno · CLASIFICACIÓN]\nZAPATOS: Sneakers 35%, Tenis Casual 20%, Casual 15%, Vestir 10%.\n';
-    fila('atadura','en una lista del manual, «Tenis casual 20%» no se marca',!verificarAtadura('Tenis casual va al 20%.',lista).length);
-    fila('atadura','y «Sneakers 20%» sí',verificarAtadura('Sneakers va al 20%.',lista).length===1);
-    const v=verificarContraContexto('Para Sneakers va el 20% (pág. 18).',ctx);
+    const lista='[Manual interno · CLASIFICACIÓN]\nCALZADO: Sneakers 40%, Tenis Casual 25%, Casual 18%, Vestir 12%.\n';
+    fila('atadura','en una lista del manual, «Tenis casual 25%» no se marca',!verificarAtadura('Tenis casual va al 25%.',lista).length);
+    fila('atadura','y «Sneakers 25%» sí',verificarAtadura('Sneakers va al 25%.',lista).length===1);
+    const v=verificarContraContexto('Para Sneakers va el 25% (pág. 12).',ctx);
     fila('atadura','la verificación trae las atadas',v.atadas.length===1&&v.cifras.length===0);
     const aviso=renderAvisoVerificacion(v);
-    fila('atadura','el aviso dice qué cifra da el manual',!!aviso&&/30%/.test(aviso.textContent)&&aviso.dataset.atadura==='1',aviso&&aviso.textContent);
+    fila('atadura','el aviso dice qué cifra da el manual',!!aviso&&/35%/.test(aviso.textContent)&&aviso.dataset.atadura==='1',aviso&&aviso.textContent);
     /* De punta a punta en la burbuja: certeza, aviso y la página como lámina. */
     const gM=midiendo,gU=ultimosFragmentos,gP=docPaginas.get(D),gF=docFigures;
     try{
       midiendo=true;docFigures=[];
-      ultimosFragmentos=[{source:'pdf',docName:D,page:18,heading:'TENIS CASUAL',text:'20% de\nparticipación'}];
-      docPaginas.set(D,[{page:18,titulo:'Planograma',imagen:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]);
+      ultimosFragmentos=[{source:'pdf',docName:D,page:12,heading:'TENIS CASUAL',text:'25% de\nparticipación'}];
+      docPaginas.set(D,[{page:12,titulo:'Planograma',imagen:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]);
       const burbuja=resp=>{
         const el=document.createElement('div');el.innerHTML='<div class="msg-label"></div><div class="msg-body"></div>';
         renderAssistantMessage(el,'[PENSAMIENTO INTERNO]\nx\n[RESPUESTA FINAL]\n'+resp+'\nCERTEZA: ALTA',100,'¿qué porcentaje es?',ctx);
         return{certeza:el.querySelector('.msg-label').textContent,bajada:el.dataset.certezaBajada==='1',laminas:el.querySelectorAll('.evidencia-fig').length}
       };
-      const mal=burbuja('Para Sneakers va el 20% de participación (pág. 18).');
+      const mal=burbuja('Para Sneakers va el 25% de participación (pág. 12).');
       fila('atadura','con la cifra mal atada, «certeza alta» pasa a media',/media/.test(mal.certeza)&&mal.bajada,mal.certeza);
       fila('atadura','y se enseña la página donde está la cifra',mal.laminas===1,'láminas: '+mal.laminas);
-      const bien=burbuja('Tenis casual lleva el 20% de participación (pág. 18).');
+      const bien=burbuja('Tenis casual lleva el 25% de participación (pág. 12).');
       fila('atadura','bien atada, la certeza alta se queda',/alta/.test(bien.certeza)&&!bien.bajada,bien.certeza);
-      const sinDato=burbuja('Tenis casual lleva el 25% de participación (pág. 18).');
+      const sinDato=burbuja('Tenis casual lleva el 27% de participación (pág. 12).');
       fila('atadura','una cifra que no está en el contexto también baja la certeza',/media/.test(sinDato.certeza),sinDato.certeza);
     }finally{
       midiendo=gM;ultimosFragmentos=gU;docFigures=gF;
       if(gP)docPaginas.set(D,gP);else docPaginas.delete(D);
     }
+  }
+  /* Medición de mañana: «como el asesor», el modo manual y las preguntas reales. */
+  {
+    const x={q:'¿qué porcentaje es sneakers?',tipo:'dato',seccion:'920 ZAPATOS',k:['35%'],minK:1,p:[12],otra:''};
+    const c1=calificarMedicion(x,{cuerpo:'Sneakers: 35% (pág. 12).',etiqueta:'',ruta:{seccion:'920 ZAPATOS',motivo:'evidencia'},esperado:'920 ZAPATOS'});
+    const c2=calificarMedicion(x,{cuerpo:'Sneakers: 35% (pág. 12).',etiqueta:'',ruta:{seccion:'910 MUEBLES',motivo:'evidencia'},esperado:'920 ZAPATOS'});
+    fila('medición','«como el asesor» califica también la sección elegida',c1.ok&&c1.seccionOk===true&&c2.seccionOk===false);
+    const c3=calificarMedicion({...x,tipo:'no-esta',k:[],p:[]},{cuerpo:'Nada del manual coincide con esa pregunta.',etiqueta:'',ruta:{seccion:null,motivo:'ninguna'},esperado:'920 ZAPATOS'});
+    fila('medición','el «nada coincide» del modo manual cuenta como «no está», sin sección elegida',c3.ok&&c3.seccionOk);
+    const res=resumenMedicion([
+      {motor:'manual',libre:true,tipo:'dato',ok:true,dato:true,pagina:true,ruta:{seccion:'A'},seccionOk:true,toque:true,tPrimer:5,tTotal:5},
+      {motor:'manual',tipo:'dato',ok:false,dato:false,pagina:false,tPrimer:5,tTotal:5},
+      {motor:'clasico',tipo:'dato',ok:true,dato:true,pagina:true,atadura:1,certezaBajada:true,tPrimer:900,tTotal:2000}]);
+    fila('medición','el resumen separa «sin sección» y cuenta toques y avisos de atadura',
+      res['manual · sin sección']?.seccionElegidaBien==='1/1'&&res['manual · sin sección'].toquesDeEmpate===1&&res.manual?.aciertos==='0/1'
+      &&res.clasico?.avisosDeAtadura===1&&res.clasico.atadurasEnRespuestasBien===1&&res.clasico.certezaBajada===1,JSON.stringify(res));
+    const regs=[
+      {id:'a',t:Date.UTC(2026,8,20),q:'¿Qué porcentaje es sneakers?',sec:'920 ZAPATOS',ok:true,modo:'api',voto:null,h:'SNEAKERS',p:12},
+      {id:'b',t:Date.UTC(2026,8,21),q:'¿que porcentaje es sneakers',sec:'920 ZAPATOS',ok:true,modo:'manual',voto:'mal',nota:'me dio el de tenis casual'},
+      {id:'c',t:Date.UTC(2026,8,21),q:'¿dónde van las velas?',sec:null,ok:false,modo:'manual',voto:null}];
+    const reales=preguntasRealesParaExamen(regs);
+    const ok=reales.length===2&&reales[0].visto.veces===2&&reales[0].visto.noSirvio&&/tenis/.test(reales[0].visto.nota||'')&&reales[0].p.join()==='12';
+    fila('medición','las preguntas reales se exportan sin repetir, con la nota del 👎',ok,JSON.stringify(reales));
+    const vuelta=validarExamen({preguntas:reales});
+    fila('medición','y el archivo exportado se puede cargar como examen',vuelta.length===2&&vuelta[1].q==='¿dónde van las velas?'&&!('visto' in vuelta[0]));
+    const gT=tablero;
+    try{
+      tablero=[{id:'z',t:Date.now(),q:'x',sec:null,ok:true,modo:'api',voto:null}];
+      votarConsulta('z','mal','esperaba la pág. 12');
+      fila('medición','el 👎 guarda su nota en el registro',tablero[0].voto==='mal'&&tablero[0].nota==='esperaba la pág. 12');
+    }finally{tablero=gT;guardarTablero()}
   }
   /* Ruta: tres manuales inventados y ninguno elegido. */
   {
@@ -10066,12 +10185,12 @@ function pruebasRobustez(){
       const ch=(id,docName,page,heading,text)=>indexChunk({id,source:'pdf',docName,page,heading,text,figureIds:[]});
       docs=[{name:M},{name:Z},{name:C}];
       docChunks=[
-        ch('r1',Z,18,'SNEAKERS','Sneakers: 30% de participación en la sección.'),
-        ch('r2',Z,23,'MESAS DE EXHIBICIÓN','Exhibe el zapato en número 7 sobre la mesa.'),
+        ch('r1',Z,12,'SNEAKERS','Sneakers: 35% de participación en la sección.'),
+        ch('r2',Z,23,'MESAS DE EXHIBICIÓN','Exhibe el zapato del pie derecho sobre la mesa.'),
         ch('r3',M,9,'ALINEACIÓN','Deja 80 cm de pasillo entre muebles para la circulación.'),
         ch('r4',C,9,'ALINEACIÓN','Deja 80 cm de pasillo entre mesas para la circulación.'),
-        ch('r5',M,22,'SALA','El sofá lleva 4 cojines al frente.'),
-        ch('r6',C,14,'FLOREROS','Los floreros se etiquetan por debajo.'),
+        ch('r5',M,22,'SALA','El sofá lleva 3 cojines al frente.'),
+        ch('r6',C,14,'VELAS','Las velas se etiquetan en la tapa.'),
       ];
       appState.manualActivo=null;history=[];rutaActual=null;rutaForzada=null;
       rebuildCorpus();
@@ -10082,12 +10201,12 @@ function pruebasRobustez(){
       fila('ruta','si la pregunta nombra la sección, esa',b.doc===M&&b.motivo==='nombrada',JSON.stringify(b));
       const c=r('¿cuánto pasillo dejo?');
       fila('ruta','dos secciones igual de buenas: empate con las dos',c.motivo==='empate'&&c.doc===null&&c.alternativas.length===2&&c.alternativas.includes(M)&&c.alternativas.includes(C),JSON.stringify(c));
-      history=[{role:'user',content:'¿qué porcentaje tiene sneakers?'},{role:'assistant',content:'30%',seccion:Z}];
+      history=[{role:'user',content:'¿qué porcentaje tiene sneakers?'},{role:'assistant',content:'35%',seccion:Z}];
       const d=r('¿y sandalias?');
       fila('ruta','«¿y sandalias?» sigue en la sección de la pregunta anterior',d.doc===Z&&d.motivo==='seguimiento',JSON.stringify(d));
       const e=r('¿y cuántos cojines lleva el sofá?');
       fila('ruta','un «¿y…?» que solo otra sección tiene no se queda pegado',e.doc===M&&e.motivo==='evidencia',JSON.stringify(e));
-      history=[{role:'user',content:'¿cómo etiqueto los floreros?'},{role:'assistant',content:'—',seccion:C}];
+      history=[{role:'user',content:'¿cómo etiqueto las velas?'},{role:'assistant',content:'—',seccion:C}];
       const g2=r('¿cuánto pasillo dejo?');
       fila('ruta','a media conversación, el empate lo resuelve la sección que se venía preguntando',g2.doc===C&&g2.motivo==='seguimiento'&&g2.alternativas.includes(M),JSON.stringify(g2));
       history=[];
