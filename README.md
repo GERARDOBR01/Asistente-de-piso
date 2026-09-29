@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 197 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20197%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 204 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20204%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -277,6 +277,38 @@ palabras. En el **Tablero → «⬇ Preguntas para examen»** se exportan las du
 formato del examen, sin repetir, con lo que la app encontró y la nota de cada 👎 como pista.
 Falta anotar en cada una el dato y la página esperados.
 
+**Un instrumento que no se rompe a media medición.** Antes de medir, **«🩺 Chequeo antes de
+medir»** revisa las secciones, la lectura de los PDF y las fichas, hace una sola llamada para
+saber si la key sirve y si queda cuota, y estima el costo de la tanda. Durante la medición:
+
+- el límite por minuto del plan gratis se espera lo que dice el proveedor, con el mismo modelo;
+- la cuota del día para la tanda sin guardar errores como resultados, y al día siguiente sigue
+  donde se quedó;
+- **midiendo nunca se cambia de modelo**: si el elegido está saturado, la fila es un error y no
+  la respuesta de otro;
+- una respuesta del agente cortada por tokens se repite una vez con más margen;
+- cada fila guarda el modelo que de verdad contestó, la versión de la app y la de lectura;
+- cada falla se clasifica por capa: sección, búsqueda (el dato no llegó), modelo (llegó y
+  contestó otra cosa), página citada, error del proveedor.
+
+### Medir sin teléfono: el banco y el comparador
+
+El mismo examen, la misma calificación y el mismo archivo de resultados, corriendo en un
+Chromium sin ventana. Los manuales se leen de una carpeta **fuera del repo** y la key de
+`GEMINI_API_KEY` (el modo manual no la necesita):
+
+```
+node eval/banco.mjs --manuales ~/manuales --examen ~/examen.json --motores manual
+GEMINI_API_KEY=… node eval/banco.mjs --manuales ~/manuales --examen ~/examen.json \
+    --motores clasico,agente --etiqueta base
+node eval/comparar.mjs eval/resultados/base__….json eval/resultados/cambio__….json
+```
+
+`--libre` mide «como el asesor» y `--continuar <resultado>` retoma una tanda que cortó la cuota.
+`comparar.mjs` dice, pregunta por pregunta, qué se arregló, qué se rompió (y sale con error si
+algo se rompió) y en qué capa siguen las fallas. Con el modo manual y los 5 manuales reales, el
+banco reproduce la medición de la app: 56/86 con sección elegida, 52/86 sin elegirla.
+
 ## Cómo está hecho
 
 - **Un solo archivo `index.html`.** Sin build, sin bundler, sin backend propio, sin
@@ -376,7 +408,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 197 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 204 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 
