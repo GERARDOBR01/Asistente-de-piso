@@ -6061,7 +6061,7 @@ async function prepararFicha(docName,{silencioso=false}={}){
   const model=modeloDeFicha(provider);
   const procWrap=document.getElementById('proc-wrap'),procMsg=document.getElementById('proc-msg'),procBar=document.getElementById('proc-bar');
   procWrap.style.display='block';
-  let hechas=0,fallos=0,seguidos=0,tokens=0;
+  let hechas=0,fallos=0,seguidos=0,tokens=0,cortada=null;
   const seccion=nombreDeSeccion(docName);
   /* Llamada suelta (el arnés del modo IA) o dentro de la tanda: el interruptor
      de «detener» es el mismo. */
@@ -6079,6 +6079,13 @@ async function prepararFicha(docName,{silencioso=false}={}){
       }catch(e){
         console.warn('ficha pág.',n,e);
         fallos++;seguidos++;
+        /* El límite por minuto ya lo esperó conReintentos. Lo que llega aquí
+           de cuota del día o de key no se arregla con la página siguiente. */
+        if(e.clase==='cuota-dia'||e.clase==='key'){
+          cortada=e.clase;
+          if(!silencioso)showToast(e.clase==='key'?'La key no sirve: la lectura con IA se detuvo.':`Se acabó la cuota de hoy: ${seccion} quedó leída hasta la pág. ${n-1}. Mañana sigue donde se quedó.`,'warn',7000);
+          break;
+        }
         /* Tres seguidas es cuota o key, no una página rara. */
         if(seguidos>=3){if(!silencioso)showToast(`La lectura de ${seccion} se detuvo tras 3 errores seguidos: ${e.message}`,'error',6000);break}
       }
@@ -6098,7 +6105,7 @@ async function prepararFicha(docName,{silencioso=false}={}){
     if(doc&&doc.hash)guardarManual(doc.hash,doc,docChunks.filter(c=>c.docName===docName),docFigures.filter(f=>f.docName===docName))
       .catch(e=>console.warn('guardar ficha',e));
   }
-  return{hechas,fallos,total:pendientes.length,tokens}
+  return{hechas,fallos,total:pendientes.length,tokens,cortada}
 }
 async function prepararFichasPendientes(){
   if(preparandoFicha||!hayKeyParaIA())return;
@@ -7279,6 +7286,7 @@ const AGENTE_MAX_IMAGENES=2;    // láminas vistas por pregunta
 const AGENTE_MAX_LLAMADAS=6;    // herramientas por vuelta
 const AGENTE_ANTICIPADAS=2;     // páginas que la búsqueda local le adelanta
 const AGENTE_MAX_TOKENS=2500;
+const AGENTE_MAX_TOKENS_CORTE=4500;  // una sola repetición con más margen si no cupo
 const CITA_MIN=0.8;             // parte de las palabras de una cita que debe estar en su página
 let ultimaTrazaAgente=null;     // qué hizo el agente en la última pregunta (lo lee eval/modo-ia.mjs)
 
@@ -7553,7 +7561,7 @@ async function agenteGemini({key,model,conv,herramientas,forzarRespuesta,maxToke
   });
   if(!res.ok){const data=await res.json().catch(()=>({}));throw errorDeProveedor(res.status,data)}
   const partes=[];
-  let texto='',tokens=0;
+  let texto='',tokens=0,razon='';
   await leerSSE(res,obj=>{
     for(const p of obj?.candidates?.[0]?.content?.parts||[]){
       partes.push(p);
@@ -7561,10 +7569,20 @@ async function agenteGemini({key,model,conv,herramientas,forzarRespuesta,maxToke
     }
     const m=obj?.usageMetadata?.totalTokenCount;
     if(m)tokens=m;
+    if(obj?.candidates?.[0]?.finishReason)razon=obj.candidates[0].finishReason;
+    if(obj?.promptFeedback?.blockReason)razon='BLOCK:'+obj.promptFeedback.blockReason;
   });
   const llamadas=partes.filter(p=>p.functionCall).map((p,i)=>({
     id:p.functionCall.id||('g'+i),idReal:!!p.functionCall.id,name:p.functionCall.name,args:p.functionCall.args||{}}));
-  return{texto,llamadas,crudo:{gemini:compactarPartes(partes)},tokens}
+  return{texto,llamadas,crudo:{gemini:compactarPartes(partes)},tokens,fin:finDeRespuesta(razon)}
+}
+/* Por qué terminó la respuesta. Una cortada por tokens no es una respuesta
+   mala: es una respuesta que no cupo, y se califica distinto. */
+function finDeRespuesta(r){
+  const t=String(r||'').toUpperCase();
+  if(t==='MAX_TOKENS'||t==='LENGTH')return'corte';
+  if(/SAFETY|RECITATION|PROHIBITED|BLOCK|CONTENT_FILTER|SPII|BLOCKLIST/.test(t))return'bloqueo';
+  return'ok'
 }
 async function agenteOpenAI({key,model,conv,herramientas,forzarRespuesta,maxTokens,temperature,onDelta,signal}){
   const body={model,messages:convAOpenAI(conv),max_tokens:maxTokens,temperature:temperature??0.2,stream:true,stream_options:{include_usage:true}};
@@ -7576,7 +7594,7 @@ async function agenteOpenAI({key,model,conv,herramientas,forzarRespuesta,maxToke
     method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify(body),signal
   });
   if(!res.ok){const data=await res.json().catch(()=>({}));throw errorDeProveedor(res.status,data)}
-  let texto='',tokens=0;
+  let texto='',tokens=0,razon='';
   const acum=[];
   await leerSSE(res,obj=>{
     const d=obj?.choices?.[0]?.delta;
@@ -7589,9 +7607,10 @@ async function agenteOpenAI({key,model,conv,herramientas,forzarRespuesta,maxToke
       if(tc.function?.arguments)a.args+=tc.function.arguments;
     }
     if(obj?.usage?.total_tokens)tokens=obj.usage.total_tokens;
+    if(obj?.choices?.[0]?.finish_reason)razon=obj.choices[0].finish_reason;
   });
   const llamadas=acum.filter(Boolean).map((a,i)=>({id:a.id||('o'+i),idReal:!!a.id,name:a.name,args:jsonDeTexto(a.args)||{}}));
-  return{texto,llamadas,crudo:null,tokens}
+  return{texto,llamadas,crudo:null,tokens,fin:finDeRespuesta(razon)}
 }
 PROVIDERS.gemini.agente=agenteGemini;
 PROVIDERS.openai.agente=agenteOpenAI;
@@ -7655,14 +7674,15 @@ async function ejecutarAgente({q,provider,key,model,signal,onDelta,onRonda,onEst
     (textoAnticipado?`=== LECTURA ANTICIPADA · pág. ${anticipadas.join(', ')} (la búsqueda local cree que pueden servir; si no, pide otras) ===\n${textoAnticipado}\n\n`:'')
     +`PREGUNTA DEL ASESOR: ${q}`}];
   onEstado&&onEstado(anticipadas.length?`Leyendo el manual · pág. ${anticipadas.join(', ')}`:'Ubicando en el manual…');
-  let modeloUsado=model,respaldo=null,sinImagenes=false;
+  let modeloUsado=model,respaldo=null,sinImagenes=false,margen=AGENTE_MAX_TOKENS;
+  estado.cortes=0;
   for(let ronda=1;ronda<=AGENTE_MAX_RONDAS;ronda++){
     const ultima=ronda===AGENTE_MAX_RONDAS;
     onRonda&&onRonda(ronda);
     let r;
     try{
       r=await conReintentos(provider,model,m=>provider.agente({key,model:m,conv,herramientas,forzarRespuesta:ultima,
-        maxTokens:AGENTE_MAX_TOKENS,temperature:appState.temperature,onDelta,signal}),
+        maxTokens:margen,temperature:appState.temperature,onDelta,signal}),
         {signal,onRetry,onRespaldo:(de,a)=>{respaldo={de,a};onRespaldo&&onRespaldo(de,a)}});
     }catch(err){
       /* Una imagen dentro de la respuesta a una herramienta es lo único de este
@@ -7675,6 +7695,14 @@ async function ejecutarAgente({q,provider,key,model,signal,onDelta,onRonda,onEst
     }
     modeloUsado=r.model||modeloUsado;
     estado.tokens+=r.tokens||0;estado.rondas=ronda;
+    /* Bloqueada por el proveedor: no es del manual; que conteste el clásico. */
+    if(r.fin==='bloqueo')throw new Error('el proveedor bloqueó la respuesta');
+    /* No cupo antes de la respuesta final: se repite esa vuelta una vez con más
+       margen. Sin esto, un tope de tokens se calificaba como respuesta mala. */
+    if(r.fin==='corte'&&!r.llamadas.length&&!/RESPUESTA\s+FINAL/i.test(r.texto||'')&&margen<AGENTE_MAX_TOKENS_CORTE){
+      estado.cortes++;margen=AGENTE_MAX_TOKENS_CORTE;
+      onRonda&&onRonda(ronda);ronda--;continue;
+    }
     if(!r.llamadas.length||ultima){
       if(!(r.texto||'').trim())throw new Error('el agente terminó sin respuesta');
       return{texto:r.texto,estado,model:modeloUsado,respaldo,contexto:[...estado.leidas.values()].join('\n\n')}
@@ -9142,7 +9170,7 @@ function presentarRespuestaAgente(loaderEl,r,q){
   const citadas=[...new Set([...limpio.matchAll(/p[áa]g\.?\s*(\d+)/gi)].map(m=>Number(m[1])))];
   const sugerencias=sugerenciasDeFicha(r.estado.doc,[...new Set([...citadas,...leidas])],q);
   if(sugerencias.length)loaderEl.insertBefore(filaDeChips(esGap?'Esto sí lo trae el manual:':'También te puede servir:',sugerencias),footer);
-  ultimaTrazaAgente={motor:'agente',rondas:r.estado.rondas,paginas:leidas.length,imagenes:r.estado.imagenes,tokens:r.estado.tokens,
+  ultimaTrazaAgente={motor:'agente',rondas:r.estado.rondas,cortes:r.estado.cortes||0,paginas:leidas.length,imagenes:r.estado.imagenes,tokens:r.estado.tokens,
     herramientas:r.estado.llamadas,citas:citas.total,citasMalas:citas.malas.length,correcciones:campos.correcciones.length};
   return{texto:limpio,entendi:campos.entendi}
 }
@@ -9405,8 +9433,17 @@ async function correrMedicion(){
       for(const d of secciones){
         if(medicionDetener)break;
         m.estado=`preparando la ficha de ${nombreDeSeccion(d)}`;pintarMedicion();
-        await prepararFicha(d,{silencioso:true});
+        const rf=await prepararFicha(d,{silencioso:true});
+        if(rf.cortada){
+          showToast(rf.cortada==='key'?'La key no sirve: revísala en Ajustes.':'Se acabó la cuota de hoy preparando las fichas. Mañana, al volver a abrir el examen, sigue donde se quedó.','warn',9000);
+          medicionDetener=true;break;
+        }
       }
+      /* Medir el agente con fichas a medias da un número que no es del agente:
+         se dice en el panel y queda en el archivo de resultados. */
+      const incompletas=[...new Set(m.preguntas.map(x=>docDeSeccion(x.seccion)).filter(Boolean))]
+        .filter(d=>paginasSinFicha(d).length).map(d=>`${nombreDeSeccion(d)} (${paginasSinFicha(d).length} págs.)`);
+      m.avisoFicha=incompletas.length?`Fichas incompletas: ${incompletas.join(', ')}. El agente se mide con lo que hay.`:'';
     }
     const claveFila=(motor,libre,x)=>motor+'|'+(libre?1:0)+'|'+x.seccion+'|'+x.q;
     /* Una fila con error no es un resultado: al reanudar se vuelve a preguntar. */
@@ -9507,6 +9544,7 @@ function pintarMedicion(){
       <button onclick="cerrarPanelMedicion()" aria-label="Cerrar">✕</button>
     </div>
     <div class="med-controles">
+      ${m.avisoFicha?`<div class="med-nota"><b>⚠ ${escapeHtml(m.avisoFicha)}</b></div>`:''}
       <div class="med-nota">${escapeHtml(m.nombre)} · ${m.preguntas.length} preguntas de ${secciones.length} secciones${faltan.length?` · <b>sin cargar:</b> ${faltan.map(escapeHtml).join(', ')}`:''}.
         Corre con tu key desde este teléfono; la key no entra en el archivo de resultados. Quedan ~${minutos} min: deja la pantalla encendida.</div>
       <label><input type="checkbox" id="med-clasico" ${m.motores.includes('clasico')?'checked':''} ${midiendo?'disabled':''}> Motor clásico</label>

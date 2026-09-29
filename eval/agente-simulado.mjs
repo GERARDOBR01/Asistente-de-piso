@@ -225,6 +225,17 @@ try {
     'midiendo, un modelo saturado queda como error y no se contesta con otro', JSON.stringify(medS));
   await p.unroute('**/models/**');
 
+  /* 12 · Respuesta cortada por tokens: se repite una vez con más margen */
+  guion = (body, n) => n === 1
+    ? [{ candidates: [{ content: { parts: [{ text: '[PENSAMIENTO INTERNO]\nENTENDÍ: sensor\nEVIDENCIA: pág. 6 · SENSORES · «el sensor va oculto' }] }, finishReason: 'MAX_TOKENS' }] }]
+    : OK15;
+  vistas = [];
+  await p.evaluate(() => { history = []; });
+  await preguntar('¿a qué altura va el sensor?');
+  u = await ultimo();
+  revisa(/15 cm/.test(u.cuerpo) && vistas.length === 2 && vistas[1].generationConfig?.maxOutputTokens > vistas[0].generationConfig?.maxOutputTokens && u.agente?.cortes === 1,
+    'una respuesta cortada por tokens se repite con más margen y queda en la traza', JSON.stringify({ n: vistas.length, cortes: u.agente?.cortes }));
+
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
   await p.route('https://api.openai.com/**', r => {
