@@ -297,6 +297,9 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .doc-size{font-size:10.5px;color:var(--text3);flex-shrink:0}
 .doc-chunks{font-size:9.5px;color:var(--text3);flex-shrink:0;padding:2px 6px;border-radius:4px;background:var(--s2);border:1px solid var(--border)}
 .doc-releer{color:var(--amber);font-weight:600}
+.ruta-seccion{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11.5px;color:var(--text3);margin:2px 0 8px}
+.ruta-seccion .chip-ia{font-size:11.5px}
+.pregunta-seccion .chips-ia{margin-top:8px}
 .doc-tag{font-size:9px;padding:2px 7px;border-radius:10px;background:var(--gdim);color:var(--gold);border:1px solid rgba(255,90,110,0.2);letter-spacing:1px;text-transform:uppercase}
 .doc-remove{background:none;border:none;cursor:pointer;color:var(--text4);font-size:13px;padding:3px 5px;border-radius:4px;transition:all .15s;flex-shrink:0}
 .doc-remove:hover{color:var(--red);background:rgba(224,82,82,0.08)}
@@ -2522,14 +2525,14 @@ function identificadoresDeSeccion(){
   }
   return identificadores
 }
-function seccionNombradaEnPregunta(q){
+function seccionesNombradasEnPregunta(q){
   const lista=identificadoresDeSeccion();
   /* Con un solo manual cargado no hay con qué confundirse. */
-  if(lista.length<2)return null;
+  if(lista.length<2)return[];
   const toks=new Set(tokenize(q||''));
-  for(const id of lista)if(id.terminos.some(t=>toks.has(t)))return id;
-  return null
+  return lista.filter(id=>id.terminos.some(t=>toks.has(t)))
 }
+function seccionNombradaEnPregunta(q){return seccionesNombradasEnPregunta(q)[0]||null}
 function seccionActiva(){
   if(!docChunks.length)return null;
   if(appState.manualActivo)return nombreDeSeccion(appState.manualActivo);
@@ -3360,17 +3363,157 @@ parecido para que parezca una respuesta.`;
    tres se le dicen al asesor en la tira de fuentes: la sección que eligió, la
    que nombró en la pregunta, o ninguna. */
 function decidirSeccion(query){
+  const activo=appState.manualActivo;
+  /* Sin sección elegida, la pregunta manda: si dice "en juveniles", se busca en
+     juveniles y no en los cinco manuales a la vez; y si no la nombra, manda la
+     sección que sí tiene con qué responder (`enrutarSeccion`). */
+  if(!activo||!docs.some(d=>d.name===activo)){
+    const ruta=rutaDe(query);
+    return{doc:ruta.doc,otraSeccion:null,porPregunta:RUTA_ROTULO[ruta.motivo]||false}
+  }
   /* Con la pregunta ESCRITA, nunca con la ampliada: si la ampliación pegó la
      pregunta anterior, sus palabras señalarían a la sección de aquel turno. */
   const nombrada=seccionNombradaEnPregunta(query);
-  const activo=appState.manualActivo;
   if(!nombrada)return{doc:activo,otraSeccion:null,porPregunta:false};
-  /* Sin sección elegida, la pregunta manda: si dice "en juveniles", se busca en
-     juveniles y no en los cinco manuales a la vez. */
-  if(!activo)return{doc:nombrada.docName,otraSeccion:null,porPregunta:true};
   if(nombrada.docName===activo)return{doc:activo,otraSeccion:null,porPregunta:false};
   return{doc:activo,porPregunta:false,
     otraSeccion:{docName:nombrada.docName,nombre:nombrada.nombre,motivo:'nombrada'}}
+}
+
+/* ── LA SECCIÓN QUE ELIGE LA PREGUNTA ─────────────
+   Con muchos manuales cargados y ninguno elegido, cada pregunta se buscaba en
+   todos a la vez: el agente no corría —necesita UNA sección—, el modo manual
+   mezclaba tarjetas de varias y el motor clásico mandaba al modelo fragmentos
+   de tres secciones con un aviso. El asesor no tiene por qué elegir primero:
+   casi siempre la pregunta dice de qué sección es. La nombra («en juveniles»),
+   sigue la conversación anterior («¿y sandalias?»), o solo un manual tiene con
+   qué responderla. Vale para esa pregunta y nada más: el selector se queda
+   como estaba. Y si dos secciones responden igual de bien no se adivina: se
+   le pregunta al asesor con un botón por sección, sin gastar una llamada. */
+let rutaActual=null;    // la de la pregunta en curso: {q, doc, motivo, alternativas}
+let rutaForzada=null;   // {q, doc}: la eligió el asesor en un empate
+const RUTA_ROTULO={nombrada:'por tu pregunta',evidencia:'por tu pregunta',seguimiento:'sigue la conversación','elegida-por-ti':'la elegiste'};
+function seccionDelTurnoAnterior(){
+  for(let i=history.length-1;i>=0;i--){
+    const h=history[i];
+    if(h.role==='assistant')return h.seccion&&docs.some(d=>d.name===h.seccion)?h.seccion:null;
+  }
+  return null
+}
+/* Una sola búsqueda sobre todo lo cargado, agrupada por manual: con treinta
+   manuales, treinta búsquedas por separado serían treinta barridos. Sin `doc`
+   el nombre de la sección sí cuenta, que aquí es justo lo que distingue. */
+function evidenciaPorSeccion(consulta){
+  const por=new Map();
+  for(const r of retrieve(consulta,{source:'pdf',limit:400})){
+    if(!por.has(r.c.docName))por.set(r.c.docName,[]);
+    por.get(r.c.docName).push(r);
+  }
+  return[...por].map(([docName,rs])=>({docName,nivel:nivelDeEvidencia(rs,consulta),score:rs[0].score}))
+    .filter(c=>c.nivel>=1)
+    .sort((a,b)=>b.nivel-a.nivel||b.score-a.score)
+}
+/* La ruta depende de la pregunta y de todo lo que la rodea: la sección
+   elegida, qué manuales hay y qué se preguntó antes. */
+const claveDeRuta=q=>[q,appState.manualActivo||'',docs.map(d=>d.name).join('|'),history.length].join('\u0001');
+function enrutarSeccion(q){
+  const clave=claveDeRuta(q);
+  const ruta=(doc,motivo,alternativas=[])=>({q,doc,motivo,alternativas,clave});
+  if(!docChunks.length||!docs.length)return ruta(null,'sin-manuales');
+  if(docs.length===1)return ruta(docs[0].name,'unica');
+  const activo=appState.manualActivo;
+  if(activo&&docs.some(d=>d.name===activo))return ruta(activo,'elegida');
+  if(rutaForzada&&rutaForzada.q===q&&docs.some(d=>d.name===rutaForzada.doc)){
+    const doc=rutaForzada.doc;rutaForzada=null;
+    return ruta(doc,'elegida-por-ti');
+  }
+  if(esPreguntaDeEstado(q)||isCreatorQuestion(q))return ruta(null,'ninguna');
+  const scope=assessQuestionScope(q);
+  if(scope.isGreeting||scope.clearlyOff)return ruta(null,'ninguna');
+  const nombradas=seccionesNombradasEnPregunta(q);
+  if(nombradas.length===1)return ruta(nombradas[0].docName,'nombrada');
+  let cand=evidenciaPorSeccion(consultaDeBusqueda(q));
+  if(nombradas.length>1){
+    const solo=new Set(nombradas.map(n=>n.docName));
+    cand=cand.filter(c=>solo.has(c.docName));
+    if(!cand.length)return ruta(null,'empate',nombradas.slice(0,3).map(n=>n.docName));
+  }else{
+    const prev=seccionDelTurnoAnterior();
+    if(prev&&esElipsis(q)){
+      /* Un seguimiento se queda en la sección de la pregunta anterior, salvo que
+         lo escrito —sin la ampliación, que arrastra la pregunta anterior y por
+         tanto su sección— no esté ahí y otra lo tenga claro: «¿y los cojines?»
+         después de una pregunta de zapatos es otra sección, no un seguimiento. */
+      const propia=evidenciaPorSeccion(q);
+      if(propia.some(c=>c.docName===prev)||!propia.some(c=>c.nivel>=2))return ruta(prev,'seguimiento');
+      cand=propia;
+    }else if(prev&&cand.some(c=>c.docName===prev&&c.nivel>=2)){
+      /* El asesor que viene preguntando de su sección no cambia de sección
+         porque otra también hable de pasillos o del POS: si la de la
+         conversación responde con evidencia sólida, se queda. Medido con cinco
+         manuales reales, así es como «¿qué va en el pos?» deja de preguntar
+         «¿en cuál estás?» a media conversación. Las otras quedan de botón. */
+      return ruta(prev,'seguimiento',cand.filter(c=>c.docName!==prev&&c.nivel>=2).slice(0,2).map(c=>c.docName));
+    }
+  }
+  if(!cand.length)return ruta(null,'ninguna');
+  const[mejor,segundo]=cand;
+  const cerca=c=>c.nivel===mejor.nivel&&c.score*DESTAQUE_MIN>mejor.score;
+  if(segundo&&cerca(segundo)){
+    /* Dos con evidencia sólida y parecida: eso lo decide el asesor. Con
+       evidencia floja en las dos no hay nada que preguntar: se busca en todos
+       y el «no está» sale solo. */
+    if(mejor.nivel>=2)return ruta(null,'empate',cand.filter(cerca).slice(0,3).map(c=>c.docName));
+    return ruta(null,'ninguna');
+  }
+  return ruta(mejor.docName,nombradas.length>1?'nombrada':'evidencia',
+    cand.slice(1).filter(c=>c.nivel>=2).slice(0,2).map(c=>c.docName));
+}
+/* La ruta de ESTA pregunta, si ya se calculó; si no —una prueba, una
+   medición que llama directo—, se calcula aquí. */
+function rutaDe(q){
+  if(!rutaActual||rutaActual.clave!==claveDeRuta(q))rutaActual=enrutarSeccion(q);
+  return rutaActual
+}
+/* El empate se contesta con una pregunta, no con una respuesta: un botón por
+   sección, y al pulsarlo se repite lo mismo en esa. Nada sale del teléfono. */
+function preguntarSeccion(q,alternativas){
+  const nombres=alternativas.map(d=>'**'+nombreDeSeccion(d)+'**');
+  const texto=`Eso aparece en ${nombres.slice(0,-1).join(', ')} y en ${nombres[nombres.length-1]}, y ${nombres.length===2?'las dos':'todas'} lo responden igual de bien. ¿En cuál estás?`;
+  const el=appendMsg('assistant',texto,false);
+  el.classList.add('pregunta-seccion');
+  const fila=document.createElement('div');fila.className='chips-ia';
+  for(const d of alternativas){
+    const b=document.createElement('button');b.className='chip-ia';b.textContent='📕 '+nombreDeSeccion(d);
+    b.onclick=()=>{rutaForzada={q,doc:d};fila.querySelectorAll('button').forEach(x=>x.disabled=true);ask(q)};
+    fila.appendChild(b);
+  }
+  el.appendChild(fila);
+  history.push({role:'user',content:q});
+  history.push({role:'assistant',content:texto,modo:'manual'});
+  saveChatHistory();scrollToBottom();
+  return el
+}
+/* En una línea, de qué sección salió y por qué, con botón a la otra si otra
+   también tenía con qué. Solo cuando la eligió la app: si la eligió el asesor
+   en el selector, ya lo sabe. */
+function lineaDeRuta(q,ruta,soloBotones){
+  if(!ruta||!RUTA_ROTULO[ruta.motivo]||!ruta.doc)return null;
+  if(soloBotones&&!(ruta.alternativas||[]).length)return null;
+  const wrap=document.createElement('div');wrap.className='ruta-seccion';
+  const t=document.createElement('span');
+  t.textContent=soloBotones?'¿Era de otra sección?':`📕 Busqué en ${nombreDeSeccion(ruta.doc)} (${RUTA_ROTULO[ruta.motivo]})`;
+  wrap.appendChild(t);
+  for(const d of ruta.alternativas||[]){
+    const b=document.createElement('button');b.className='chip-ia';b.textContent='¿Era de '+nombreDeSeccion(d)+'?';
+    b.onclick=()=>{rutaForzada={q,doc:d};b.disabled=true;ask(q)};
+    wrap.appendChild(b);
+  }
+  return wrap
+}
+function botonesDeRutaAlterna(loaderEl,q){
+  const alt=lineaDeRuta(q,rutaActual&&rutaActual.q===q?rutaActual:null,true);
+  if(alt)loaderEl.appendChild(alt);
 }
 
 /* Con la sección activa vacía, ¿alguna otra cargada sí responde? Se pregunta
@@ -6068,7 +6211,7 @@ async function handleFiles(fileList){
     try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
     refrescarVocabularioManual();
   }else if(docs.length>1&&!appState.manualActivo){
-    showToast('📕 Tienes varios manuales cargados. Elige arriba con cuál estás trabajando para que las citas y las láminas salgan de ese.','info',7000);
+    showToast('📕 Tienes varios manuales cargados: cada pregunta busca en la sección que le toca, y si dos empatan te pregunto. Si trabajas siempre en una, elígela arriba.','info',7000);
   }else if(activoPrevio&&appState.manualActivo===activoPrevio&&docs.length>habia){
     /* Cargar un manual nuevo y que la sección activa siga siendo la de antes es
        silencioso y caro: todo lo que se pregunte del manual recién cargado se
@@ -6146,7 +6289,7 @@ function cambiarSeccion(valor){
   renderQuickBtns();
   showToast(appState.manualActivo
     ?`📕 Sección activa: ${nombreDeSeccion(appState.manualActivo)}. Solo se consulta ese manual.`
-    :'📚 Se consultarán todos los manuales cargados.','info',3500);
+    :'📚 Sin sección fija: cada pregunta busca en la sección que le toca.','info',3500);
 }
 function removeDoc(i){
   const name=docs[i].name,hash=docs[i].hash;
@@ -6196,7 +6339,7 @@ function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
     const n=corta(nombreDeSeccion(ultimaSeccionUsada));
     /* Si la sección la eligió la pregunta y no el selector, se dice: responder
        por un manual que el asesor no eligió sin avisar es la misma trampa. */
-    sources.push({type:'seccion',label:ultimaSeccionPorPregunta?`📕 ${n} (por tu pregunta)`:'📕 '+n});
+    sources.push({type:'seccion',label:ultimaSeccionPorPregunta?`📕 ${n} (${typeof ultimaSeccionPorPregunta==='string'?ultimaSeccionPorPregunta:'por tu pregunta'})`:'📕 '+n});
   }
   else if(hasPdfs&&docs.length>1)sources.push({type:'seccion',label:`📚 ${docs.length} manuales a la vez`});
   /* Con la pregunta apuntando a otra sección, las páginas que se consultaron son
@@ -6567,14 +6710,18 @@ const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
    y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
    contesta lo que preguntó. */
 function seccionesPorRelevancia(q){
-  /* En modo manual el filtro de sección activa vale igual: si el asesor dijo con
-     qué manual trabaja, no tiene por qué recibir la lámina de otro. */
-  const doc=docChunks.length?appState.manualActivo:null;
+  /* En modo manual el filtro de sección vale igual: si el asesor dijo con qué
+     manual trabaja —o la pregunta lo dijo por él—, no tiene por qué recibir la
+     lámina de otro. */
+  const doc=docChunks.length?rutaDe(q).doc:null;
+  /* Con manuales cargados, solo manuales: sin `source` el manual interno de
+     demostración se colaba entre las tarjetas cuando no había sección elegida. */
+  const source=docChunks.length?'pdf':null;
   /* Se filtra y DESPUÉS se corta. Cortando antes, los fragmentos que solo
      trae el diccionario llenaban los doce lugares, el filtro los quitaba a
      todos y la lámina con la palabra escrita se había quedado en el 13.º:
      «que ba en la tore» salía en blanco teniendo TORRE en su página 11. */
-  const buscar=c=>retrieve(c,{limit:60,doc}).filter(filtroSolidez(c)).slice(0,12);
+  const buscar=c=>retrieve(c,{limit:60,doc,source}).filter(filtroSolidez(c)).slice(0,12);
   if(esOperacionDeTienda(q))return[];
   const consulta=consultaDeBusqueda(q);
   /* Y la misma regla que en buildContext: una pregunta de una sola palabra se
@@ -6844,6 +6991,7 @@ function esOperacionDeTienda(q){
 }
 
 function responderSinModelo(q){
+  rutaActual=null;
   ocultarBannerRestaurar();
   switchTab('chat');
   appendMsg('user',q,false);
@@ -6866,6 +7014,8 @@ function responderSinModelo(q){
     saveChatHistory();scrollToBottom();
     return;
   }
+  const ruta=rutaDe(q);
+  if(ruta.motivo==='empate'){preguntarSeccion(q,ruta.alternativas);return}
   const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
   let fragmentos='',chars=0;
   const tarjetas=[];
@@ -6888,11 +7038,11 @@ function responderSinModelo(q){
      coincide" mientras BLANCOS —cargado, a un clic— tenía la lámina. La misma
      comprobación que ya se hace con API key, aquí sin gastar nada. */
   let enOtra=null;
-  if(!fragmentos&&docChunks.length&&appState.manualActivo&&docs.length>1&&!esOperacionDeTienda(q)){
-    const otra=otraSeccionConEvidencia(consultaDeBusqueda(q),appState.manualActivo);
+  if(!fragmentos&&docChunks.length&&ruta.doc&&docs.length>1&&!esOperacionDeTienda(q)){
+    const otra=otraSeccionConEvidencia(consultaDeBusqueda(q),ruta.doc);
     if(otra)enOtra=otra.nombre;
     else{
-      const falta=terminosAusentes(q,appState.manualActivo);
+      const falta=terminosAusentes(q,ruta.doc);
       if(falta.length&&falta[0].duenos.length)enOtra=nombreDeSeccion(falta[0].duenos[0].docName);
     }
   }
@@ -6909,7 +7059,7 @@ function responderSinModelo(q){
      contestaran. Se enseñan igual —puede que sirvan— pero con la advertencia
      arriba, sin lámina que las respalde, y al tablero va como duda que el
      manual no explica. */
-  const activo=appState.manualActivo||(docs.length===1?docs[0].name:null);
+  const activo=ruta.doc||(docs.length===1?docs[0].name:null);
   const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
   const cuenta=fragmentos&&!ausentes.length?cosaQueSeCuenta(q):null;
   const sinCifra=!!cuenta&&tarjetas.some(t=>hablaDe(t.texto,t.c.heading,cuenta))
@@ -6970,6 +7120,8 @@ function responderSinModelo(q){
   const cuerpoEl=msgEl.querySelector('.msg-body');
   if(fragmentos){
     const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    const linea=lineaDeRuta(q,ruta);
+    if(linea)cuerpoEl.appendChild(linea);
     if(avisoVisible){
       const aa=document.createElement('div');aa.className=avisoAusente?'frag-ausente':'frag-ausente frag-parecidas';aa.textContent=avisoVisible;
       cuerpoEl.appendChild(aa);
@@ -7006,7 +7158,7 @@ function responderSinModelo(q){
     })));
   }
   history.push({role:'user',content:q});
-  history.push({role:'assistant',content:cuerpo,modo:'manual'});
+  history.push({role:'assistant',content:cuerpo,modo:'manual',seccion:(tarjetas[0]&&tarjetas[0].c.docName)||ruta.doc||null});
   saveChatHistory();
   scrollToBottom();
 }
@@ -7371,12 +7523,17 @@ function quitarImagenes(conv){
    que no es una duda del manual —saludo, fuera de tema, preguntas sobre la
    app, quién te creó— lo sigue contestando el camino de siempre, que ya lo
    resuelve bien y sin gastar vueltas. */
-function seccionAgente(){
+/* El agente lee UNA sección. Si el asesor no eligió ninguna, la que eligió la
+   pregunta (`enrutarSeccion`): con treinta manuales cargados y el selector en
+   «Todos», antes el agente no corría nunca. */
+function seccionAgente(q){
   if(appState.manualActivo&&docs.some(d=>d.name===appState.manualActivo))return appState.manualActivo;
-  return docs.length===1?docs[0].name:null
+  if(docs.length===1)return docs[0].name;
+  const r=q!=null?rutaDe(q):rutaActual;
+  return r&&r.doc&&docs.some(d=>d.name===r.doc)?r.doc:null
 }
 function motorAgenteDisponible(q){
-  if(appState.motor!=='agente'||!docChunks.length||!seccionAgente())return false;
+  if(appState.motor!=='agente'||!docChunks.length||!seccionAgente(q))return false;
   const prov=PROVIDERS[appState.provider];
   if(!prov||typeof prov.agente!=='function')return false;
   if(esPreguntaDeEstado(q)||isCreatorQuestion(q))return false;
@@ -7385,7 +7542,7 @@ function motorAgenteDisponible(q){
 }
 
 async function ejecutarAgente({q,provider,key,model,signal,onDelta,onRonda,onEstado,onRetry,onRespaldo}){
-  const doc=seccionAgente();
+  const doc=seccionAgente(q);
   if(!doc)throw new Error('sin sección para el agente');
   const estado=nuevoEstadoAgente(doc);
   const seccion=nombreDeSeccion(doc);
@@ -7504,6 +7661,7 @@ async function sendMessage(){
      piso la red se cae, y un «error de red» a media duda no le sirve a nadie.
      El modo manual corre completo en el teléfono. */
   const sinRed=!navigator.onLine;
+  rutaActual=null;
   if(sinRed||!appState.apiKey||appState.apiKey.length<10){
     if(sinRed&&appState.apiKey&&!avisoSinRed){
       avisoSinRed=true;
@@ -7519,6 +7677,13 @@ async function sendMessage(){
   if(sessionTokens>=appState.tokenLimit){showToast('🔴 Límite de tokens alcanzado. Limpia el chat o reinicia el contador.','error',5000);return}
   const input=document.getElementById('user-input');
   const q=input.value.trim();if(!q)return;
+  /* Primero, de qué sección es. Un empate no gasta la llamada: se pregunta. */
+  const ruta=rutaDe(q);
+  if(ruta.motivo==='empate'){
+    input.value='';ajustarAltura(input);ocultarBannerRestaurar();switchTab('chat');
+    appendMsg('user',q,false);preguntarSeccion(q,ruta.alternativas);
+    return;
+  }
   input.value='';ajustarAltura(input);isGenerating=true;chatDescartado=false;
   ocultarBannerRestaurar();
 
@@ -7615,8 +7780,9 @@ async function sendMessage(){
       const final=presentarRespuestaAgente(loaderEl,r,q);
       sessionTokens+=r.estado.tokens||estimateTokens(r.texto);updateTokenBar();
       history.push({role:'user',content:q});
-      history.push({role:'assistant',content:final.texto,entendi:final.entendi});
+      history.push({role:'assistant',content:final.texto,entendi:final.entendi,seccion:r.estado.doc});
       renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,false,true,false);
+      botonesDeRutaAlterna(loaderEl,q);
       return;
     }catch(err){
       if(err.name==='AbortError'||chatDescartado)throw err;
@@ -7710,8 +7876,9 @@ async function sendMessage(){
     sessionTokens+=tokens||estimateTokens(streamedText);updateTokenBar();
     history.push({role:'user',content:q});
     const{final}=parseAIResponse(streamedText);
-    history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)});
+    history.push({role:'assistant',content:sanitizeFinalAnswer(final,q),seccion:ctx.seccionUsada||null});
     renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs,ctx.ampliada);
+    botonesDeRutaAlterna(loaderEl,q);
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
     if(chatDescartado){loaderEl.remove();return}
@@ -8854,7 +9021,7 @@ function presentarRespuestaAgente(loaderEl,r,q){
   const esGap=esRespuestaSinDato(limpio,certeza);
   ultimosFragmentos=r.estado.chunks;
   ultimaOtraSeccion=null;
-  ultimaSeccionUsada=r.estado.doc;ultimaSeccionPorPregunta=false;
+  ultimaSeccionUsada=r.estado.doc;ultimaSeccionPorPregunta=(rutaActual&&rutaActual.q===q&&RUTA_ROTULO[rutaActual.motivo])||false;
   ultimaSeccionSugerida=esGap&&r.estado.otras.length===1?{docName:r.estado.otras[0].docName,nombre:r.estado.otras[0].nombre}:null;
   renderAssistantMessage(loaderEl,texto,r.estado.tokens||estimateTokens(texto),q,r.contexto);
   marcarModelo(loaderEl,r.model,!!r.respaldo);
@@ -9889,6 +10056,76 @@ function pruebasRobustez(){
     }finally{
       midiendo=gM;ultimosFragmentos=gU;docFigures=gF;
       if(gP)docPaginas.set(D,gP);else docPaginas.delete(D);
+    }
+  }
+  /* Ruta: tres manuales inventados y ninguno elegido. */
+  {
+    const g={docs,docChunks,activo:appState.manualActivo,history,ruta:rutaActual,forzada:rutaForzada,motor:appState.motor,prov:appState.provider};
+    const M='910 MUEBLES.pdf',Z='920 ZAPATOS.pdf',C='930 DECORACION.pdf';
+    try{
+      const ch=(id,docName,page,heading,text)=>indexChunk({id,source:'pdf',docName,page,heading,text,figureIds:[]});
+      docs=[{name:M},{name:Z},{name:C}];
+      docChunks=[
+        ch('r1',Z,18,'SNEAKERS','Sneakers: 30% de participación en la sección.'),
+        ch('r2',Z,23,'MESAS DE EXHIBICIÓN','Exhibe el zapato en número 7 sobre la mesa.'),
+        ch('r3',M,9,'ALINEACIÓN','Deja 80 cm de pasillo entre muebles para la circulación.'),
+        ch('r4',C,9,'ALINEACIÓN','Deja 80 cm de pasillo entre mesas para la circulación.'),
+        ch('r5',M,22,'SALA','El sofá lleva 4 cojines al frente.'),
+        ch('r6',C,14,'FLOREROS','Los floreros se etiquetan por debajo.'),
+      ];
+      appState.manualActivo=null;history=[];rutaActual=null;rutaForzada=null;
+      rebuildCorpus();
+      const r=q=>{rutaActual=null;return enrutarSeccion(q)};
+      const a=r('¿qué porcentaje tiene sneakers?');
+      fila('ruta','sin sección elegida, la evidencia elige ZAPATOS',a.doc===Z&&a.motivo==='evidencia',JSON.stringify(a));
+      const b=r('¿cuántos cojines lleva el sofá en muebles?');
+      fila('ruta','si la pregunta nombra la sección, esa',b.doc===M&&b.motivo==='nombrada',JSON.stringify(b));
+      const c=r('¿cuánto pasillo dejo?');
+      fila('ruta','dos secciones igual de buenas: empate con las dos',c.motivo==='empate'&&c.doc===null&&c.alternativas.length===2&&c.alternativas.includes(M)&&c.alternativas.includes(C),JSON.stringify(c));
+      history=[{role:'user',content:'¿qué porcentaje tiene sneakers?'},{role:'assistant',content:'30%',seccion:Z}];
+      const d=r('¿y sandalias?');
+      fila('ruta','«¿y sandalias?» sigue en la sección de la pregunta anterior',d.doc===Z&&d.motivo==='seguimiento',JSON.stringify(d));
+      const e=r('¿y cuántos cojines lleva el sofá?');
+      fila('ruta','un «¿y…?» que solo otra sección tiene no se queda pegado',e.doc===M&&e.motivo==='evidencia',JSON.stringify(e));
+      history=[{role:'user',content:'¿cómo etiqueto los floreros?'},{role:'assistant',content:'—',seccion:C}];
+      const g2=r('¿cuánto pasillo dejo?');
+      fila('ruta','a media conversación, el empate lo resuelve la sección que se venía preguntando',g2.doc===C&&g2.motivo==='seguimiento'&&g2.alternativas.includes(M),JSON.stringify(g2));
+      history=[];
+      const f=r('¿de qué color pinto el techo del almacén?');
+      fila('ruta','sin evidencia en ninguna: se busca en todas, sin elegir',f.doc===null&&f.motivo==='ninguna',JSON.stringify(f));
+      appState.manualActivo=C;
+      const h=r('¿qué porcentaje tiene sneakers?');
+      fila('ruta','con sección elegida en el selector, manda esa',h.doc===C&&h.motivo==='elegida');
+      appState.manualActivo=null;
+      rutaForzada={q:'¿cuánto pasillo dejo?',doc:C};
+      const i=r('¿cuánto pasillo dejo?'),i2=r('¿cuánto pasillo dejo?');
+      fila('ruta','el botón del empate elige la sección una vez',i.doc===C&&i.motivo==='elegida-por-ti'&&i2.motivo==='empate');
+      appState.motor='agente';appState.provider='gemini';rutaActual=null;
+      fila('ruta','el agente corre sin sección elegida si la pregunta la elige',motorAgenteDisponible('¿qué porcentaje tiene sneakers?')&&seccionAgente('¿qué porcentaje tiene sneakers?')===Z);
+      rutaActual=null;
+      fila('ruta','y no corre en un empate',!motorAgenteDisponible('¿cuánto pasillo dejo?'));
+      rutaActual=null;
+      const man=seccionesPorRelevancia('¿cada cuánto actualizo los maniquíes y retiro sensores?');
+      fila('ruta','con PDFs cargados, el modo manual no enseña el manual interno de demo',man.every(x=>x.c.source==='pdf'),man.map(x=>x.c.docName).join(', '));
+      rutaActual=null;
+      const man2=seccionesPorRelevancia('¿qué porcentaje tiene sneakers?');
+      fila('ruta','el modo manual busca en la sección que eligió la pregunta',man2.length>0&&man2.every(x=>x.c.docName===Z),man2.map(x=>x.c.docName).join(', '));
+      rutaActual=null;
+      const ctx=buildContext('¿qué porcentaje tiene sneakers?');
+      fila('ruta','el motor clásico usa la misma sección y lo dice',ctx.seccionUsada===Z&&ctx.seccionPorPregunta==='por tu pregunta'&&!ctx.variasSecciones);
+      /* El empate en pantalla: un mensaje con un botón por sección y nada más. */
+      const box=document.getElementById('chat-messages');
+      const antes=box?box.children.length:0;
+      rutaActual=null;
+      responderSinModelo('¿cuánto pasillo dejo?');
+      const ult=box?[...box.querySelectorAll('.msg.assistant')].pop():null;
+      const botones=ult?ult.querySelectorAll('.chip-ia').length:0;
+      fila('ruta','el empate pregunta con un botón por sección',!!ult&&ult.classList.contains('pregunta-seccion')&&botones===2,'botones: '+botones);
+      if(box)while(box.children.length>antes)box.lastElementChild.remove();
+    }finally{
+      docs=g.docs;docChunks=g.docChunks;appState.manualActivo=g.activo;history=g.history;
+      rutaActual=g.ruta;rutaForzada=g.forzada;appState.motor=g.motor;appState.provider=g.prov;
+      rebuildCorpus();
     }
   }
   return out
