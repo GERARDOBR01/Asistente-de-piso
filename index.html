@@ -9269,7 +9269,7 @@ function tieneAlternativaMed(resp,alt){
   if(!pal.length)return nums.length>0;
   return pal.filter(w=>r.includes(w.slice(0,5))).length>=Math.ceil(pal.length/2)
 }
-const SIN_DATO_MED=/nada(?:\s+de\s+esta\s+secci[óo]n|\s+del\s+manual)?\s+coincide|no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:regla|dato|informaci[óo]n)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
+const SIN_DATO_MED=/nada(?:\s+de\s+esta\s+secci[óo]n|\s+del\s+manual)?\s+coincide|no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:una\s+|ning[úu]n[ao]?\s+)?(?:regla|dato|informaci[óo]n)|no\s+trae\s+(?:ese|esa|este|esta|el|la|ning[úu]n[ao]?|nada)|no\s+tengo\s+(?:esa|ese|la|el|ning[úu]n[ao]?)\s+(?:informaci[óo]n|dato)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
 const paginasCitadasMed=t=>[...(t||'').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+(?:\s*(?:,|y|-|–)\s*\d+)*)/gi)].flatMap(m=>m[1].match(/\d+/g).map(Number));
 function calificarMedicion(x,r){
   const texto=r.cuerpo||'';
@@ -9489,6 +9489,48 @@ async function correrMedicion(){
     pintarMedicion();
   }
 }
+/* ── Antes de gastar una hora y la cuota del día: ¿está todo listo? ──
+   Una sola llamada mínima para saber si la key sirve y si queda cuota; lo
+   demás se revisa en el teléfono. Dice cuántas llamadas va a costar la tanda
+   y en qué orden conviene correrla. */
+const AGENTE_VUELTAS_ESTIMADAS=2.5;
+async function chequeoAntesDeMedir(){
+  const m=medicionActual;if(!m||midiendo)return;
+  const motores=['clasico','agente','manual'].filter(k=>document.getElementById('med-'+k)?.checked);
+  const lineas=[];
+  const ok=t=>lineas.push({ok:true,t}),mal=t=>lineas.push({ok:false,t});
+  const secciones=[...new Set(m.preguntas.map(x=>x.seccion))];
+  const faltan=secciones.filter(s=>!docDeSeccion(s));
+  faltan.length?mal(`Sin cargar: ${faltan.join(', ')}. Sus preguntas se saltan.`):ok(`Las ${secciones.length} secciones del examen están cargadas.`);
+  const viejos=docs.filter(lecturaVieja);
+  viejos.length?mal(`Lectura anterior del PDF en ${viejos.map(d=>nombreDeSeccion(d.name)).join(', ')}: vuelve a elegir esos PDF en Manuales.`):ok('Todos los manuales con la lectura nueva.');
+  const docsEx=[...new Set(m.preguntas.map(x=>docDeSeccion(x.seccion)).filter(Boolean))];
+  const sinFicha=docsEx.reduce((n,d)=>n+paginasSinFicha(d).length,0);
+  if(motores.includes('agente'))sinFicha?mal(`Faltan ${sinFicha} páginas de ficha: se leen al empezar (${sinFicha} llamadas).`):ok('Fichas completas.');
+  const conModelo=motores.filter(k=>k!=='manual');
+  if(conModelo.length){
+    try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
+    if(!hayKeyParaIA())mal('No hay key en Ajustes: solo se puede medir el modo manual.');
+    else{
+      m.estado='probando la key…';pintarMedicion();
+      try{
+        await callWithRetry(PROVIDERS[appState.provider],appState.apiKey,[{role:'user',content:'Responde solo: ok'}],appState.chatModel,5,0);
+        ok(`La key responde con ${nombreCortoDeModelo(appState.chatModel)}.`);
+      }catch(e){
+        mal(e.clase==='cuota-dia'?'La cuota de hoy de esta key ya se acabó: mide mañana, o solo el modo manual.'
+          :e.clase==='key'?'El proveedor rechaza la key: revísala en Ajustes.'
+          :`La prueba de la key falló: ${String(e.message||e).slice(0,120)}`);
+      }
+    }
+    const n=m.preguntas.length;
+    const llamadas=Math.round((conModelo.includes('clasico')?n:0)+(conModelo.includes('agente')?n*AGENTE_VUELTAS_ESTIMADAS+sinFicha:0));
+    const tope=(conModelo.includes('clasico')?n:0)+(conModelo.includes('agente')?n*AGENTE_MAX_RONDAS+sinFicha:0);
+    const minutos=Math.ceil(n*conModelo.length*(MEDICION_PAUSA_MS/1000+12)/60);
+    lineas.push({ok:null,t:`Costo estimado: ~${llamadas} llamadas (tope ${tope}), unos ${minutos} min con la pantalla encendida.`});
+    if(conModelo.length>1)lineas.push({ok:null,t:'Si tu plan tiene pocas llamadas al día, corre primero solo el clásico completo y el agente al día siguiente: una tanda entera vale más que dos a medias.'});
+  }
+  m.chequeo=lineas;m.estado='listo';pintarMedicion();
+}
 function resultadoMedicion(){
   const m=medicionActual;
   return{examen:m.nombre,fecha:new Date().toISOString(),version:VERSION_APP,lectura:LECTURA_VERSION,
@@ -9545,6 +9587,7 @@ function pintarMedicion(){
     </div>
     <div class="med-controles">
       ${m.avisoFicha?`<div class="med-nota"><b>⚠ ${escapeHtml(m.avisoFicha)}</b></div>`:''}
+      ${(m.chequeo||[]).length?`<div class="med-nota">${m.chequeo.map(l=>`${l.ok===true?'✅':l.ok===false?'⚠️':'ℹ️'} ${escapeHtml(l.t)}`).join('<br>')}</div>`:''}
       <div class="med-nota">${escapeHtml(m.nombre)} · ${m.preguntas.length} preguntas de ${secciones.length} secciones${faltan.length?` · <b>sin cargar:</b> ${faltan.map(escapeHtml).join(', ')}`:''}.
         Corre con tu key desde este teléfono; la key no entra en el archivo de resultados. Quedan ~${minutos} min: deja la pantalla encendida.</div>
       <label><input type="checkbox" id="med-clasico" ${m.motores.includes('clasico')?'checked':''} ${midiendo?'disabled':''}> Motor clásico</label>
@@ -9552,7 +9595,8 @@ function pintarMedicion(){
       <label><input type="checkbox" id="med-manual" ${m.motores.includes('manual')?'checked':''} ${midiendo?'disabled':''}> Modo manual (sin key)</label>
       <label title="Sin sección elegida, como pregunta el asesor: la app elige la sección de cada pregunta y, si dos empatan, se toca la del examen."><input type="checkbox" id="med-libre" ${m.libre?'checked':''} ${midiendo?'disabled':''}> Como el asesor: sin elegir sección</label>
       ${midiendo?'<button class="ref-general" onclick="medicionDetener=true;this.disabled=true">■ Detener</button>'
-        :`<button class="ref-general" onclick="correrMedicion()">${m.filas.length?'▶ Seguir':'▶ Empezar'}</button>`}
+        :`<button class="ref-general" onclick="chequeoAntesDeMedir()">🩺 Chequeo antes de medir</button>
+          <button class="ref-general" onclick="correrMedicion()">${m.filas.length?'▶ Seguir':'▶ Empezar'}</button>`}
       ${m.filas.length&&!midiendo?`<button class="ref-general" onclick="compartirMedicion(false)">📤 Compartir resultados</button>
         <button class="ref-general" onclick="compartirMedicion(true)">⬇ Descargar</button>
         <button class="ref-general" onclick="borrarMedicion()">Borrar avance</button>`:''}
@@ -10255,6 +10299,12 @@ function pruebasRobustez(){
     fila('medición','«como el asesor» califica también la sección elegida',c1.ok&&c1.seccionOk===true&&c2.seccionOk===false);
     const c3=calificarMedicion({...x,tipo:'no-esta',k:[],p:[]},{cuerpo:'Nada del manual coincide con esa pregunta.',etiqueta:'',ruta:{seccion:null,motivo:'ninguna'},esperado:'920 ZAPATOS'});
     fila('medición','el «nada coincide» del modo manual cuenta como «no está», sin sección elegida',c3.ok&&c3.seccionOk);
+    /* Auditado contra las formas en que un modelo dice «no está»: estas tres se calificaban como error. */
+    const noEsta=t=>calificarMedicion({q:'x',tipo:'no-esta',k:[],p:[],minK:1,otra:''},{cuerpo:t,etiqueta:''}).ok;
+    fila('medición','«no hay una regla», «no trae ese dato» y «no tengo esa información» cuentan como «no está»',
+      noEsta('No hay una regla para eso en tu manual.')&&noEsta('El manual de esta sección no trae ese dato.')&&noEsta('No tengo esa información en el manual.'));
+    fila('medición','un dato con su página no se lee como «no está»',
+      !calificarMedicion({q:'x',tipo:'dato',k:['15 cm'],p:[6],minK:1,otra:''},{cuerpo:'Sí: el manual no lo prohíbe y la regla es 15 cm (pág. 6).',etiqueta:''}).dijoNoEsta);
     const res=resumenMedicion([
       {motor:'manual',libre:true,tipo:'dato',ok:true,dato:true,pagina:true,ruta:{seccion:'A'},seccionOk:true,toque:true,tPrimer:5,tTotal:5},
       {motor:'manual',tipo:'dato',ok:false,dato:false,pagina:false,tPrimer:5,tTotal:5},

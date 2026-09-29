@@ -236,6 +236,19 @@ try {
   revisa(/15 cm/.test(u.cuerpo) && vistas.length === 2 && vistas[1].generationConfig?.maxOutputTokens > vistas[0].generationConfig?.maxOutputTokens && u.agente?.cortes === 1,
     'una respuesta cortada por tokens se repite con más margen y queda en la traza', JSON.stringify({ n: vistas.length, cortes: u.agente?.cortes }));
 
+  /* 13 · Chequeo antes de medir: una llamada mínima y el costo estimado */
+  const chq = await p.evaluate(async () => {
+    medicionActual = { nombre: 'examen chequeo', clave: 'ap_medicion_prueba_c', motores: ['clasico', 'agente'], estado: 'listo', filas: [],
+      preguntas: validarExamen([{ q: '¿a qué altura va el sensor?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] }]) };
+    mostrarPanelMedicion();
+    await chequeoAntesDeMedir();
+    const lineas = medicionActual.chequeo.map(l => (l.ok === false ? '✗ ' : '') + l.t);
+    cerrarPanelMedicion();
+    return lineas;
+  });
+  revisa(chq.some(t => /key responde/.test(t)) && chq.some(t => /Costo estimado/.test(t)) && !chq.some(t => t.startsWith('✗')),
+    'el chequeo antes de medir prueba la key con una llamada y estima el costo', chq.join(' | '));
+
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
   await p.route('https://api.openai.com/**', r => {
