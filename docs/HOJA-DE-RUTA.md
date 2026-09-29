@@ -25,7 +25,8 @@ estamos y qué sigue, en orden.
 | Sección | La pregunta la elige: 83/86 en sesión, con empate resuelto con botones |
 | Motores | Manual medido (56/86 con sección, 52/86 sin elegirla). **Clásico y agente sin medir con modelo real** |
 | Verificación | Cifras, nombres, páginas, citas y atadura (0/21 falsas alarmas, 60/77 detectadas); certeza baja a MEDIA si algo no se comprueba |
-| Pruebas | Arnés 204 + simulado 24 en el CI |
+| Aprende del piso | Hecho: atajos pregunta → página, vocabulario por sección con candados, «Sí, eso», reformulación, propuestas de la IA, Tablero y export. **Sin medir su efecto todavía** |
+| Pruebas | Arnés 232 + simulado 28 en el CI |
 
 ## Ahora: la línea base con modelo real
 
@@ -36,22 +37,18 @@ estamos y qué sigue, en orden.
    se ataca primero.
 4. Juntar preguntas reales del Tablero («⬇ Preguntas para examen») para el examen v2.
 
-## Siguiente: la app aprende del piso
+## Siguiente: medir lo que aprende del piso
 
-En este orden, cada paso medido con el banco antes y después:
+Ya está construido (ver el README, «La app aprende del piso»). Lo que falta es probar con
+números que suma y no rompe nada:
 
-1. **El 👎 pide la lámina.** Un toque en la página correcta deja un atajo (esa forma de
-   preguntar → esa página) y una pregunta de examen verificada.
-2. **«¿Quisiste decir…?» que se confirma con un toque.**
-3. **Detectar la reformulación:** una pregunta que no llegó seguida de otra parecida que sí.
-4. **Vocabulario aprendido por sección** (palabra del piso → palabra del manual), con candados:
-   varias confirmaciones, visible y borrable en el Tablero, una errata aislada no se aprende,
-   nunca datos.
-5. **«⬇ Vocabulario del piso»:** se exporta, lo revisamos juntos, y lo bueno sube al diccionario
-   base del código para todos los teléfonos (solo si el banco dice que mejora).
-6. **La IA propone equivalencias** con el glosario de la sección, como propuesta hasta que el
-   piso la confirme.
-7. Reemplazar la «memoria de aprendizaje» de 👍/👎 actual, que no mueve nada medible.
+1. Juntar dos o tres semanas de uso real en el piso y exportar «⬇ Vocabulario del piso».
+2. Revisarlo juntos: qué palabras son de verdad del piso y cuáles son ruido.
+3. Medir el mismo examen sin y con lo aprendido (`--aprendido` en el banco, o la casilla en la
+   app), y comparar con `comparar.mjs`: 0 rotas, y cuántas arregladas.
+4. Lo que el banco confirme sube al diccionario base del código para todos los teléfonos.
+5. Ajustar los candados con números: cuántas confirmaciones, el bono del atajo y el tope por
+   sección.
 
 ## Pulido pendiente
 

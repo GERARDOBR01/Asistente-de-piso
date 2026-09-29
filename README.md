@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 204 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20204%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 232 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20232%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -309,9 +309,64 @@ node eval/comparar.mjs eval/resultados/base__….json eval/resultados/cambio__�
 algo se rompió) y en qué capa siguen las fallas. Con el modo manual y los 5 manuales reales, el
 banco reproduce la medición de la app: 56/86 con sección elegida, 52/86 sin elegirla.
 
+### La app aprende del piso: caminos, nunca respuestas
+
+El piso no habla como el manual. Dice «burros» donde la lámina dice «percheros», o pregunta por
+algo que está en la pág. 7 con palabras que la pág. 7 no usa. La app aprende esos **caminos**:
+una palabra del piso que lleva a una palabra del manual, y una forma de preguntar que lleva a una
+página. **El dato sigue saliendo siempre del manual, con su página.** No se aprende una sola
+respuesta.
+
+Aprende de cuatro cosas que el asesor ya hace:
+
+- **El 👎 pide la lámina.** «¿En qué página estaba?», con las páginas más probables como botones
+  y un número para escribir la que sea. Un toque deja un atajo y abre esa lámina. Si la pregunta
+  traía palabras que ese manual no usa, quedan emparejadas, por confirmar, con el título de esa
+  página. En modo manual, un «nada coincide» también ofrece decir dónde estaba. Y «No está en
+  el manual» lo anota como hueco real en el Tablero.
+- **«✓ Sí, eso».** Cuando la app dice «lo encontré como…» o el agente dice «Entendí…», un toque
+  lo confirma.
+- **La reformulación.** Una pregunta que no llegó, seguida en menos de 3 minutos por otra
+  parecida que sí llegó. Lo que cambió entre una y otra es cómo lo dice el manual.
+- **La IA propone** (con key). Mira las palabras del piso que siguen sin resolver y los títulos
+  del manual, y propone equivalencias. Se hace al terminar de preparar un manual o con
+  «✨ Que la IA proponga» en el Tablero. Lo propuesto **no se usa** hasta que alguien lo
+  confirma.
+
+Con candados, porque aprender mal empeora lo que ya funcionaba:
+
+- cada palabra es de **una sección**;
+- se activa con **dos confirmaciones de consultas distintas**, así que una errata aislada o un
+  toque equivocado no se aprende;
+- **nunca cifras**;
+- la palabra del manual tiene que existir en **ese** manual;
+- lo que ya dice el diccionario no se duplica;
+- hay un tope por sección.
+
+Lo aprendido entra a la búsqueda como una palabra más del diccionario: pesa igual y ayuda a
+llegar, pero no cuenta como palabra escrita. El atajo solo **reordena** lo que ya llegó por sus
+palabras; no mete una página sin evidencia. Cada respuesta dice qué usó: «📚 Usé lo que aprendió
+el piso: «burros» = «percheros»».
+
+En el Tablero, «Lo que aprendió del piso» enseña las palabras activas, las que están por
+confirmar y las propuestas de la IA, con ✓ para confirmar y 🗑 para borrar. Desde ahí se saca
+todo con «⬇ Vocabulario del piso»: palabras y páginas, sin preguntas. El archivo sirve para
+revisarlo y, si el banco dice que mejora, subirlo al diccionario del código para todos los
+teléfonos. «⬆ Cargar vocabulario» lo pasa a otro teléfono con los mismos candados. «Aprender del
+piso» se apaga en Ajustes.
+
+**Midiendo no se aprende nada, y por defecto tampoco se usa lo aprendido.** La medición es del
+código, no de la memoria de un teléfono. Para medir el efecto está la casilla «Con lo aprendido
+del piso» en la app, o `--aprendido vocabulario.json` en el banco; el resultado lo dice y
+`comparar.mjs` lo marca. Así, «¿sirvió aprender?» se contesta con el mismo examen, sin y con.
+
+Esto reemplaza a la vieja «memoria de aprendizaje» de 👍/👎, que pegaba al prompt las preguntas
+que salieron mal. No movía nada medible y se colaba en la medición. Se borró, y sus datos se
+borran del teléfono al abrir la versión nueva. Las notas del 👎 ya viajaban en el Tablero.
+
 **Qué sigue:** la [hoja de ruta](docs/HOJA-DE-RUTA.md) dice cómo trabajamos (nada mejora sin
-número), dónde estamos por capa y el orden de lo que viene: la línea base con modelo real y
-después la app aprendiendo del piso.
+número), dónde estamos por capa y el orden de lo que viene: la línea base con modelo real y,
+con ella, medir cuánto suma lo aprendido del piso.
 
 ## Cómo está hecho
 
@@ -412,7 +467,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 204 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 232 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 
@@ -542,8 +597,8 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 - **Con API key, la pregunta sale del dispositivo** hacia el proveedor que el usuario
   configuró. Es una llamada directa del navegador a su API, sin intermediarios míos.
 - **Guarda en el navegador**: la API key en `sessionStorage` (se borra al cerrar la
-  pestaña, nunca en `localStorage`); el historial de chat, la memoria y los accesos rápidos
-  en `localStorage`.
+  pestaña, nunca en `localStorage`); el historial de chat, lo aprendido del piso y los accesos
+  rápidos en `localStorage`.
 - **Guarda los manuales procesados en IndexedDB**, indexados por el hash del archivo, para
   no volver a procesar 28 láminas cada vez que se abre la página desde el celular. Incluye
   los recortes de las figuras. **Vive en el dispositivo y no sale a la red**, y hay un botón

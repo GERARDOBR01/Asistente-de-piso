@@ -479,23 +479,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:
 .icon-btn.clear:hover{color:var(--red);border-color:rgba(224,82,82,0.3);background:rgba(224,82,82,0.05)}
 .icon-btn.export:hover{color:var(--gold);border-color:rgba(255,90,110,0.3);background:var(--gglow)}
 
-.memory-panel{background:var(--s1);border:1px solid var(--border2);border-radius:var(--rxl);padding:1.2rem;box-shadow:var(--sh)}
-.memory-title{font-family:'Geist',system-ui,sans-serif;font-size:18px;font-weight:400;color:var(--gold2);margin-bottom:1rem}
-.memory-stats{display:flex;gap:10px;margin-bottom:1rem}
-.mem-stat{flex:1;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);text-align:center}
-.mem-stat-n{font-size:22px;font-family:'Geist',system-ui,sans-serif;color:var(--gold)}
-.mem-stat-l{font-size:9px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.mem-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto}
-.mem-item{padding:9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);font-size:11.5px}
-.mem-item.fail{border-left:2px solid rgba(224,82,82,0.4)}
-.mem-item.success{border-left:2px solid rgba(62,207,142,0.4)}
-.mem-item-q{color:var(--text2);margin-bottom:3px;font-size:11px}
-.mem-item-note{color:var(--text3);font-size:10.5px;font-style:italic}
-.mem-item-date{font-size:9px;color:var(--text4);margin-top:4px}
-.mem-clear-btn{padding:5px 12px;background:transparent;color:var(--red);border:1px solid rgba(224,82,82,0.2);border-radius:var(--r);font-size:10px;font-family:'Geist',system-ui,sans-serif;cursor:pointer;transition:all .15s}
-.mem-clear-btn:hover{background:rgba(224,82,82,0.08)}
-.mem-empty{text-align:center;color:var(--text3);font-size:12px;padding:2rem;font-style:italic}
-.mem-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
 
 .card{background:var(--s1);border:1px solid var(--border);border-radius:var(--rxl);padding:1.4rem;box-shadow:var(--sh)}
 .config-fields{display:flex;flex-direction:column;gap:16px}
@@ -803,11 +786,26 @@ footer span {
 .tb-btn.primario{background:var(--gglow);border-color:rgba(255,90,110,0.55);color:var(--gold2);font-weight:600}
 .tb-btn.borrar{margin-left:auto;background:none;color:var(--text3)}
 .tb-btn.borrar:hover{color:var(--red);border-color:rgba(224,82,82,0.3)}
-.mem-plegada{margin-top:18px}
 .fb-pregunta{font-size:12px;color:var(--text3)}
+.ap-usado{font-size:11.5px;color:var(--text3);margin:4px 0 8px;font-family:'Geist',system-ui,sans-serif}
+.ap-lamina{margin-top:10px;padding:10px 12px;border:1px dashed var(--border2);border-radius:var(--r);background:var(--s2)}
+.ap-lamina-t{font-size:12.5px;color:var(--text2);margin-bottom:8px;font-family:'Geist',system-ui,sans-serif}
+.ap-lamina-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ap-chip{padding:6px 12px;border-radius:16px;font-size:12px;font-family:'Geist',system-ui,sans-serif;cursor:pointer;border:1px solid rgba(255,90,110,0.3);background:var(--gdim);color:var(--text);line-height:1.35;max-width:100%;text-align:left}
+.ap-chip:hover{border-color:var(--gold)}
+.ap-chip:disabled{opacity:.7;cursor:default}
+.ap-chip-no{background:none;border-color:var(--border2);color:var(--text3)}
+.ap-si{margin-left:8px;padding:3px 10px;font-size:11.5px}
+.ap-num{width:84px;padding:6px 10px;border-radius:16px;border:1px solid var(--border2);background:var(--s1);color:var(--text);font-size:12px;font-family:inherit}
+.ap-num-mal{border-color:var(--red)}
+.ap-sub{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin:12px 0 4px}
+.ap-acc{display:flex;gap:4px;flex-shrink:0}
+.ap-mini{padding:4px 9px;border-radius:8px;border:1px solid var(--border2);background:var(--s2);color:var(--text2);cursor:pointer;font-size:12px}
+.ap-mini:hover{border-color:var(--gold)}
+.ap-bloque .tb-acciones{margin-top:12px}
 
 @media print{
-  header,.tabs,footer,.toast-wrap,.panel:not(#panel-memory),.tb-periodo,.tb-acciones,.mem-plegada{display:none!important}
+  header,.tabs,footer,.toast-wrap,.panel:not(#panel-memory),.tb-periodo,.tb-acciones,.ap-acciones{display:none!important}
   #panel-memory{display:block!important}
   body{background:#fff!important;padding:0}
   .tb-bloque,.tb-tile{break-inside:avoid}
@@ -918,9 +916,9 @@ header::after{display:none}
   background:var(--grad);color:var(--on-accent);font-size:10px;font-weight:700;line-height:16px;text-align:center}
 
 /* ── Superficies de vidrio ── */
-.card,.memory-panel,.quick-editor,.tb-tile,.tb-bloque,.doc-item,.seccion-row,.restore-banner,.rag-info,.avanzado{
+.card,.quick-editor,.tb-tile,.tb-bloque,.doc-item,.seccion-row,.restore-banner,.rag-info,.avanzado{
   backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%)}
-.card,.memory-panel{background:var(--s1);border:1px solid var(--border2);border-radius:var(--rxl);box-shadow:var(--vidrio-sombra)}
+.card{background:var(--s1);border:1px solid var(--border2);border-radius:var(--rxl);box-shadow:var(--vidrio-sombra)}
 
 /* ── Chat ── */
 .chat-wrap{background:none;border:0;border-radius:0;box-shadow:none;overflow:visible;
@@ -1084,12 +1082,6 @@ header::after{display:none}
 .tb-chip.activo{background:var(--gdim);border-color:rgba(255,114,130,0.45);color:var(--gold)}
 .tb-btn{border-radius:999px;min-height:44px;background:var(--s1)}
 .tb-btn.primario{background:var(--grad);border-color:transparent;color:var(--on-accent)}
-.memory-title{font-family:'Geist',system-ui,sans-serif;font-size:16px;font-weight:600;color:var(--text)}
-.mem-stat{background:var(--s1);border-radius:14px}
-.mem-stat-n{font-family:'Geist',system-ui,sans-serif;font-weight:650}
-.mem-item{background:var(--s1);border-radius:12px}
-.mem-item.fail,.mem-item.success{border-left:1px solid var(--border)}
-.mem-clear-btn{border-radius:999px}
 
 /* ── Ajustes ── */
 .fld-label,.fld-lbl{font-size:11.5px;letter-spacing:.06em;color:var(--text2);font-weight:500}
@@ -1188,9 +1180,14 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .key-status.warn{color:var(--text2);background:var(--s1);border-color:var(--border2)}
 .key-toggle{display:flex;align-items:center;justify-content:center;width:40px;height:40px;right:4px;border-radius:20px}
 .key-toggle .ico{width:18px;height:18px}
-/* Con el teclado abierto la barra flotaría encima de él: se esconde mientras se escribe. */
-body:has(#user-input:focus) .tabs{display:none}
-body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10px)}
+/* Con el teclado abierto la barra flotaría encima de él: se esconde mientras se escribe.
+   Solo en pantallas táctiles, que son las del teclado. En computadora la caja se queda
+   enfocada tras enviar, y al hacer clic en 👎 la barra volvía, la caja subía a tapar el
+   botón y el clic se perdía: el primer 👎 de cada respuesta no llegaba. */
+@media (pointer:coarse){
+  body:has(#user-input:focus) .tabs{display:none}
+  body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10px)}
+}
 
 /* Espera en modo API: puntos grandes, qué está pasando y cuánto lleva. */
 .msg.loading .msg-body{font-style:normal;color:var(--text2)}
@@ -1314,26 +1311,9 @@ body:has(#user-input:focus){padding-bottom:calc(env(safe-area-inset-bottom) + 10
   </div>
 </div>
 
-<!-- MEMORIA -->
+<!-- TABLERO -->
 <div class="panel" id="panel-memory">
   <div class="tablero" id="tablero"></div>
-  <details class="avanzado mem-plegada">
-  <summary>Memoria del modo con API · los 👍/👎 que se le recuerdan al modelo</summary>
-  <div class="memory-panel">
-    <div class="mem-header">
-      <div class="memory-title">Memoria de aprendizaje</div>
-      <button class="mem-clear-btn" onclick="clearMemory()">Limpiar todo</button>
-    </div>
-    <div class="memory-stats">
-      <div class="mem-stat"><div class="mem-stat-n" id="mem-fail-count">0</div><div class="mem-stat-l">Fallos</div></div>
-      <div class="mem-stat"><div class="mem-stat-n" id="mem-success-count">0</div><div class="mem-stat-l">Éxitos</div></div>
-      <div class="mem-stat"><div class="mem-stat-n" id="mem-total-count">0</div><div class="mem-stat-l">Total</div></div>
-    </div>
-    <div class="mem-list" id="mem-list">
-      <div class="mem-empty">Aún no hay registros.<br>Califica respuestas con 👍 👎 para comenzar.</div>
-    </div>
-  </div>
-  </details>
 </div>
 
 <!-- CONFIG -->
@@ -1521,11 +1501,11 @@ sale señalada al asesor.</textarea>
         <div class="fld-label">Funcionalidades</div>
         <div class="toggle-row">
           <div>
-            <div class="toggle-label">Memoria de aprendizaje</div>
-            <div class="toggle-desc">Recuerda respuestas marcadas como correctas/incorrectas</div>
+            <div class="toggle-label">Aprender del piso</div>
+            <div class="toggle-desc">Aprende cómo pregunta tu equipo: palabras y páginas, nunca datos. Lo ves y lo borras en Tablero</div>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" id="toggle-memory" checked>
+            <input type="checkbox" id="toggle-aprende" checked>
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -2107,7 +2087,7 @@ function rebuildCorpus(){
   verbosVistos=new Map();
   nombresEnTexto=null;
   identificadores=null;
-  vocabPorDoc=null;
+  vocabPorDoc=null;secPorDoc=null;
   entidadesCorpus=null;
   fragmentosPorPagina=null;
   refrescarVocabularioManual();
@@ -2685,7 +2665,7 @@ function infinitivos(w){
    «pasillos» aportaría un acierto por cada forma que probamos y el conteo de
    aciertos —que es el que decide si hay respuesta o no— quedaría inflado por
    una sola palabra. */
-function weightedTerms(query){
+function weightedTerms(query,doc){
   const palabras=palabrasDeConsulta(query);
   const terms=new Map();
   const corregidas=new Map();
@@ -2758,6 +2738,9 @@ function weightedTerms(query){
       if(phrase===base)continue;
       for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT/2,'~'+k);
     }
+    /* Lo que aprendió el piso entra como una palabra más del diccionario —mismo
+       peso, mismo grupo—: ayuda a llegar, pero no vale como palabra escrita. */
+    for(const p of palabrasAprendidasPara(k,doc))for(const t of tokenize(p.manual))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
   }
   return[...terms].map(([t,{w,g}])=>({t,w,g}))
 }
@@ -2841,7 +2824,7 @@ function esVerbo(w){
 const esVerboDePiso=g=>esVerbo(g.replace(/^[~!]/,''));
 function retrieve(query,opts){
   const{source=null,limit=40,doc=null}=opts||{};
-  let terms=weightedTerms(query);
+  let terms=weightedTerms(query,doc);
   /* Dentro de UNA sección, su propio nombre no distingue nada: todo el manual
      de CASUAL HOMBRE es de hombre. «entayado de hombres» contestaba con la
      portada —titulada «140 CASUAL HOMBRE»— antes que con ENTALLADO. Entre
@@ -2931,6 +2914,15 @@ function retrieve(query,opts){
        como escrita, porque es la palabra del asesor bien escrita. */
     score*=1+Math.min(palabrasEscritas,hits+hitsErrata)/palabrasEscritas;
     out.push({c,score,hits,hitsSyn,hitsErrata,exigidos});
+  }
+  /* La página que el piso señaló para esta forma de preguntar sube un escalón.
+     Solo reordena lo que ya llegó por sus palabras: un atajo no mete una
+     página que la búsqueda no encontró, ni pasa por encima de la solidez. */
+  const atajos=out.length?atajosPara(query,doc):[];
+  if(atajos.length){
+    const mejor=Math.max(...out.map(r=>r.score));
+    const paginas=new Set(atajos.map(a=>a.sec+'|'+a.pagina));
+    for(const r of out)if(r.c.page&&paginas.has(secDe(r.c.docName)+'|'+r.c.page)){r.score+=mejor*APRENDE_BONO_ATAJO;r.atajo=true}
   }
   out.sort((a,b)=>b.score-a.score||b.hits-a.hits);
   return(out.some(r=>r.c.isFicha==='indice')?paginasEnVezDeFicha(out,terms):out).slice(0,limit)
@@ -3668,6 +3660,8 @@ function terminosAusentes(query,activo){
        falta nada: falta una letra. El corrector ya la encontró antes que yo. */
     const cerca=masParecida(k);
     if(cerca)formas.add(cerca);
+    /* Una palabra que el piso ya enseñó no falta: se dice de otro modo. */
+    for(const p of palabrasAprendidasPara(k,activo))formas.add(p.manual);
     const raices=new Set([...formas].map(raizCorta).filter(r=>r.length>2));
     let dentro=false;
     for(const f of formas)if(propio.has(f)){dentro=true;break}
@@ -3981,81 +3975,6 @@ ${secciones.size>1?'\n'+avisoVariasSecciones(secciones.size)+'\n':''}
 ${pdf.texto}`
 }
 
-/* ════════════════════════════════════════════════
-   MEMORIA DE APRENDIZAJE
-
-   NOTA DE STORAGE: Esta sección usa localStorage A PROPÓSITO.
-   La memoria de aprendizaje (feedback 👍/👎 del usuario) está
-   pensada para persistir entre sesiones — un asesor que marcó
-   una respuesta como útil hoy debería poder beneficiarse de eso
-   mañana. Es contenido del usuario, no credenciales.
-
-   En contraste, las API keys y el historial de chat usan
-   sessionStorage (se borran al cerrar la pestaña), porque son
-   credenciales / datos sensibles que NO deben persistir.
-   Si alguna vez "refactorizas" esto unificando todo a un solo
-   storage, revisa primero la intención de seguridad.
-════════════════════════════════════════════════ */
-let memory={fails:[],successes:[]};
-function loadMemory(){
-  try{const s=localStorage.getItem('ap_memory_v5');if(s)memory=JSON.parse(s);memory.fails=memory.fails||[];memory.successes=memory.successes||[];}
-  catch{memory={fails:[],successes:[]}}
-}
-function saveMemory(){try{localStorage.setItem('ap_memory_v5',JSON.stringify(memory))}catch{}}
-function addMemoryFail(q,a,note){
-  memory.fails.unshift({question:q,answer:a.slice(0,300),note:note||'',date:new Date().toLocaleDateString('es-MX')});
-  if(memory.fails.length>50)memory.fails=memory.fails.slice(0,50);
-  saveMemory();renderMemoryPanel();
-}
-function addMemorySuccess(q,a){
-  memory.successes.unshift({question:q,answer:a.slice(0,300),date:new Date().toLocaleDateString('es-MX')});
-  if(memory.successes.length>30)memory.successes=memory.successes.slice(0,30);
-  saveMemory();renderMemoryPanel();
-}
-function getMemoryContext(query){
-  const kws=expandKeywords(extractKeywords(query));
-  const scoredFails=memory.fails.map(f=>({...f,score:scoreText(f.question,kws)})).filter(f=>f.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
-  const scoredSucc=memory.successes.map(s=>({...s,score:scoreText(s.question,kws)})).filter(s=>s.score>0).sort((a,b)=>b.score-a.score).slice(0,3);
-  const parts=[];
-  if(scoredFails.length)parts.push(`=== MEMORIA DE FALLOS — EVITAR ESTOS ERRORES ===\n${scoredFails.map(f=>`- Pregunta: "${f.question.slice(0,100)}" → Problema: ${f.note||'Usuario marcó como incorrecto'}. NO repitas este error.`).join('\n')}`);
-  if(scoredSucc.length)parts.push(`=== MEMORIA DE ÉXITOS — MANTENER ESTE NIVEL ===\n${scoredSucc.map(s=>`- Pregunta: "${s.question.slice(0,100)}" → Esta respuesta fue marcada como correcta.`).join('\n')}`);
-  return parts.join('\n\n')
-}
-function renderMemoryPanel(){
-  document.getElementById('mem-fail-count').textContent=memory.fails.length;
-  document.getElementById('mem-success-count').textContent=memory.successes.length;
-  document.getElementById('mem-total-count').textContent=memory.fails.length+memory.successes.length;
-  const list=document.getElementById('mem-list');
-  const all=[...memory.fails.map(f=>({...f,type:'fail'})),...memory.successes.map(s=>({...s,type:'success'}))];
-  if(!all.length){list.innerHTML='<div class="mem-empty">Aún no hay registros.<br>Califica respuestas con 👍 👎 para comenzar.</div>';return}
-  list.innerHTML=all.map(m=>`
-    <div class="mem-item ${m.type}">
-      <div class="mem-item-q">${m.type==='fail'?'❌':'✅'} ${escapeHtml((m.question||'').slice(0,120))}</div>
-      ${m.note?`<div class="mem-item-note">"${escapeHtml(m.note)}"</div>`:''}
-      <div class="mem-item-date">${escapeHtml(m.date)}</div>
-    </div>`).join('')
-}
-function clearMemory(){
-  const wrap=document.getElementById('toast-wrap');
-  const t=document.createElement('div');
-  t.className='toast warn';
-  t.innerHTML=`<div style="margin-bottom:6px">¿Limpiar toda la memoria de aprendizaje?</div>
-    <div style="display:flex;gap:6px">
-      <button class="toast-confirm" style="padding:4px 12px;background:rgba(224,82,82,0.15);color:#E8B0B0;border:1px solid rgba(224,82,82,0.3);border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit">Sí, limpiar</button>
-      <button class="toast-cancel" style="padding:4px 12px;background:var(--s3);color:var(--text2);border:1px solid var(--border2);border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit">Cancelar</button>
-    </div>`;
-  t.querySelector('.toast-confirm').onclick=()=>{
-    t.style.animation='toast-out .2s ease forwards';
-    setTimeout(()=>t.remove(),220);
-    memory={fails:[],successes:[]};saveMemory();renderMemoryPanel();
-    showToast('✓ Memoria de aprendizaje limpiada','success',2000);
-  };
-  t.querySelector('.toast-cancel').onclick=()=>{
-    t.style.animation='toast-out .2s ease forwards';
-    setTimeout(()=>t.remove(),220);
-  };
-  wrap.appendChild(t);
-}
 
 /* ════════════════════════════════════════════════
    PARSER DE RESPUESTA + GUARDRAILS
@@ -4238,7 +4157,7 @@ function getStreamingDisplayText(streamedText){
 const appState={
   provider:'gemini',apiKey:'',chatModel:'gemini-3.5-flash',
   system:'',extra:'',tokenLimit:80000,
-  memoryEnabled:true,extraEnabled:true,temperature:0.2,
+  aprendeEnabled:true,extraEnabled:true,temperature:0.2,
   /* `null` = todos los manuales. En el piso se trabaja UNA sección: con cinco
      manuales de la misma plantilla cargados, la respuesta se armaba con los
      cinco y el dato salía citado a la página de un manual que no era el suyo. */
@@ -4340,20 +4259,20 @@ function loadSaved(){
     /* Se guardan como '1'/'0'. Leerlos contra 'false' los volvía a encender en
        cada recarga: apagar la memoria no duraba más que la pestaña. */
     const apagado=v=>v==='0'||v==='false';
-    appState.memoryEnabled=!apagado(localStorage.getItem('ap_memory_enabled'));
+    appState.aprendeEnabled=!apagado(localStorage.getItem('ap_aprende_enabled'));
     appState.extraEnabled=!apagado(localStorage.getItem('ap_extra_enabled'));
     appState.temperature=parseFloat(localStorage.getItem('ap_temperature')||'0.2');
-    document.getElementById('toggle-memory').checked=appState.memoryEnabled;
+    document.getElementById('toggle-aprende').checked=appState.aprendeEnabled;
     document.getElementById('toggle-extra').checked=appState.extraEnabled;
     document.getElementById('temp-slider').value=Math.round(appState.temperature*100);
     document.getElementById('temp-display').textContent=appState.temperature.toFixed(2);
   }catch{appState.provider='gemini';quickBtns=[...DEFAULT_QUICK]}
-  initManualSections();loadMemory();
+  initManualSections();cargarAprendido();
   updateKeyStatus(appState.apiKey);
   // Mostrar aviso de key si está configurada
   const warnEl = document.getElementById('key-warning');
   if (warnEl && appState.apiKey) warnEl.classList.add('show');
-  renderDocs();renderQuickBtns();updateTokenBar();renderMemoryPanel();
+  renderDocs();renderQuickBtns();updateTokenBar();
   // v7.0: banner de restore desde sessionStorage
   try{if(sessionStorage.getItem('ap_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show')}catch{}
   // v7.0 paso 3: sincronizar selector API Experta
@@ -4478,7 +4397,7 @@ function saveConfig(evt){
   appState.system=document.getElementById('system-prompt').value.trim();
   appState.extra=document.getElementById('extra-ctx').value.trim();
   appState.tokenLimit=parseInt(document.getElementById('token-limit-input').value,10)||80000;
-  appState.memoryEnabled=document.getElementById('toggle-memory').checked;
+  appState.aprendeEnabled=document.getElementById('toggle-aprende').checked;
   appState.extraEnabled=document.getElementById('toggle-extra').checked;
   appState.temperature=parseInt(document.getElementById('temp-slider').value,10)/100;
   try{
@@ -4499,7 +4418,7 @@ function saveConfig(evt){
     localStorage.setItem('ap_system',appState.system);
     localStorage.setItem('ap_extra',appState.extra);
     localStorage.setItem('ap_token_limit',appState.tokenLimit);
-    localStorage.setItem('ap_memory_enabled',appState.memoryEnabled?'1':'0');
+    localStorage.setItem('ap_aprende_enabled',appState.aprendeEnabled?'1':'0');
     localStorage.setItem('ap_extra_enabled',appState.extraEnabled?'1':'0');
     localStorage.setItem('ap_temperature',appState.temperature);
   } catch (e) {
@@ -4563,6 +4482,7 @@ function registrarConsulta(q,encontro,chunk,modo,dudoso){
   tablero.push(r);
   if(tablero.length>TABLERO_MAX)tablero=tablero.slice(-TABLERO_MAX);
   guardarTablero();
+  notarConsultaParaAprender(r,q,chunk);
   if(document.getElementById('panel-memory').classList.contains('active'))renderTablero();
   return r.id
 }
@@ -4577,7 +4497,7 @@ function votarConsulta(id,voto,nota){
 }
 /* 👍/👎 para la respuesta sin modelo. Sin esto «resuelta» solo podía querer
    decir «el manual traía algo», y el piloto necesita saber si le sirvió. */
-function votoManual(msgEl,id){
+function votoManual(msgEl,id,{q=null,doc=null,pagina=null}={}){
   const footer=document.createElement('div');footer.className='msg-footer';
   const pr=document.createElement('span');pr.className='fb-pregunta';pr.textContent='¿Te sirvió?';
   const bien=document.createElement('button');bien.className='fb-btn good';bien.type='button';bien.textContent='👍';bien.setAttribute('aria-label','Sí me sirvió');
@@ -4587,6 +4507,8 @@ function votoManual(msgEl,id){
     btn.classList.add('active');bien.disabled=mal.disabled=true;
     votarConsulta(id,voto);
     pr.textContent=voto==='bien'?'Anotado ✓':'Anotado en el tablero: esta no sirvió';
+    if(q&&voto==='bien')confirmarCamino(q,doc,pagina,id);
+    if(q&&voto==='mal')pedirLamina(msgEl,null,q,id,doc);
   };
   bien.onclick=()=>votar(bien,'bien');
   mal.onclick=()=>votar(mal,'mal');
@@ -4686,6 +4608,7 @@ function renderTablero(){
     if(tablero.length)b.disabled=true;else b.onclick=()=>switchTab('chat');
     const acc=el('div','tb-acciones');acc.appendChild(b);
     cont.appendChild(acc);
+    bloqueAprendido(cont);
     return;
   }
 
@@ -4749,6 +4672,7 @@ function renderTablero(){
   const bor=el('button','tb-btn borrar','Borrar registro');bor.type='button';bor.onclick=borrarTablero;
   acc.append(comp,exa,imp,bor);
   cont.appendChild(acc);
+  bloqueAprendido(cont);
 }
 function textoResumen(){
   const res=resumirTablero(consultasDelPeriodo());
@@ -4789,10 +4713,14 @@ function preguntasRealesParaExamen(regs){
     const k=normalizeText(r.q).replace(/\s+/g,' ').trim();
     if(!k)continue;
     const v=vistas.get(k);
-    if(v){v.visto.veces++;if(r.nota&&!v.visto.nota)v.visto.nota=r.nota;if(r.voto==='mal')v.visto.noSirvio=true;continue}
-    vistas.set(k,{q:r.q,seccion:r.sec||'',tipo:'dato',cat:'piso-real',k:[],p:r.p?[r.p]:[],
+    if(v){v.visto.veces++;if(r.nota&&!v.visto.nota)v.visto.nota=r.nota;if(r.voto==='mal')v.visto.noSirvio=true;if(r.pl&&!v.visto.paginaDelPiso){v.visto.paginaDelPiso=r.pl;v.p=[r.pl]}continue}
+    /* Si el piso tocó la página que contestaba, ESA es la esperada: vale más
+       que la que eligió la app. */
+    const pag=r.pl||r.p||null;
+    vistas.set(k,{q:r.q,seccion:r.dl||r.sec||'',tipo:'dato',cat:'piso-real',k:[],p:pag?[pag]:[],
       visto:{veces:1,encontro:!!r.ok,pagina:r.p||null,titulo:r.h||null,modo:r.modo||null,
-        noSirvio:r.voto==='mal',nota:r.nota||null,fecha:new Date(r.t).toISOString().slice(0,10)}});
+        noSirvio:r.voto==='mal',nota:r.nota||null,fecha:new Date(r.t).toISOString().slice(0,10),
+        ...(r.pl?{paginaDelPiso:r.pl}:{}),...(r.hueco?{noEstaSegunElPiso:true}:{})}});
   }
   return[...vistas.values()]
 }
@@ -4817,6 +4745,551 @@ function borrarTablero(){
   if(!confirm('¿Borrar todas las dudas anotadas en este teléfono? No se puede deshacer.'))return;
   tablero=[];guardarTablero();renderTablero();
   showToast('🗑️ Registro del tablero borrado','warn',2500);
+}
+
+/* ════════════════════════════════════════════════
+   APRENDE DEL PISO
+
+   El piso no habla como el manual: dice «burro» donde la lámina dice
+   «perchero», o pregunta por «la mesa de la entrada» y la respuesta está en la
+   pág. 7. La app aprende esos CAMINOS, nunca respuestas: una palabra del piso
+   que lleva a una palabra del manual, y una forma de preguntar que lleva a una
+   página. El dato sigue saliendo siempre del manual, con su página.
+
+   Reemplaza a la «memoria de aprendizaje» de 👍/👎, que pegaba al prompt las
+   preguntas que salieron mal: no movía nada medible y, peor, se colaba en la
+   medición y la ensuciaba.
+
+   Candados, porque lo que se aprende mal empeora lo que ya funcionaba:
+   · cada palabra es de UNA sección: «burro» en MUEBLES no es «burro» en ZAPATOS;
+   · se activa con dos confirmaciones de consultas distintas: una errata
+     aislada, o un toque equivocado, no se aprende;
+   · nunca cifras ni nada con dígitos: se aprende cómo se llama algo, no cuánto;
+   · la palabra del manual tiene que estar en ESE manual;
+   · todo se ve y se borra en el Tablero;
+   · midiendo, no se usa ni se escribe nada (salvo que la medición lo pida).
+   Vive en este teléfono (localStorage), como el tablero.
+════════════════════════════════════════════════ */
+const APRENDIDO_KEY='ap_aprendido_v1';
+const APRENDE_CONFIRMACIONES=2;          // consultas distintas para activar una palabra
+const APRENDE_MAX_PALABRAS=60;           // por sección
+const APRENDE_MAX_ATAJOS=120;            // por sección
+const APRENDE_JACCARD=0.6;               // parecido de la pregunta con el atajo
+const APRENDE_BONO_ATAJO=0.25;           // sobre el mejor puntaje de la consulta
+const APRENDE_VENTANA_REFORMULA=3*60e3;  // una reformulación llega en minutos
+let aprendido={v:1,palabras:[],atajos:[]};
+var indiceAprendido=null,secPorDoc=null;
+let ultimaConsultaAprende=null;
+
+function aprendidoVacio(){return{v:1,palabras:[],atajos:[]}}
+function cargarAprendido(){
+  /* La memoria vieja se va: sus notas del 👎 ya viajan en el tablero. */
+  try{localStorage.removeItem('ap_memory_v5');localStorage.removeItem('ap_memory_enabled')}catch{}
+  try{aprendido=limpiarAprendido(JSON.parse(localStorage.getItem(APRENDIDO_KEY)||'null'))}
+  catch{aprendido=aprendidoVacio()}
+  indiceAprendido=null;
+}
+function guardarAprendido(){
+  indiceAprendido=null;
+  try{localStorage.setItem(APRENDIDO_KEY,JSON.stringify(aprendido))}catch{}
+  const p=document.getElementById('panel-memory');
+  if(p&&p.classList.contains('active'))renderTablero();
+}
+/* Lo que se carga —del teléfono o de un archivo compartido— se trata como dato
+   ajeno: solo campos conocidos, solo palabras, con tope. */
+function limpiarAprendido(d){
+  const out=aprendidoVacio();
+  if(!d||typeof d!=='object')return out;
+  const txt=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
+  const ids=v=>Array.isArray(v)?v.filter(x=>typeof x==='string').slice(-20):[];
+  for(const p of Array.isArray(d.palabras)?d.palabras:[]){
+    const piso=palabraAprendible(p&&p.piso),manual=palabraAprendible(p&&p.manual),sec=txt(p&&p.sec,120);
+    if(!piso||!manual||!sec||piso===manual)continue;
+    out.palabras.push({id:txt(p.id,24)||idAprende(),sec,piso,manual,conf:Math.max(0,Math.min(99,Number(p.conf)||0)),
+      consultas:ids(p.consultas),origen:['lamina','reformulacion','quisiste','ia','importada','tablero'].includes(p.origen)?p.origen:'importada',
+      propuesta:!!p.propuesta,t:Number(p.t)||Date.now()});
+  }
+  for(const a of Array.isArray(d.atajos)?d.atajos:[]){
+    const sec=txt(a&&a.sec,120),pagina=Number(a&&a.pagina);
+    const terminos=Array.isArray(a&&a.terminos)?[...new Set(a.terminos.map(palabraAprendible).filter(Boolean))].slice(0,12):[];
+    if(!sec||!(pagina>0&&pagina<10000)||!terminos.length)continue;
+    const ver=Array.isArray(a.ver)?a.ver.map(palabraAprendible).filter(Boolean).slice(0,8):[];
+    out.atajos.push({id:txt(a.id,24)||idAprende(),sec,terminos,ver,pagina,conf:Math.max(1,Math.min(99,Number(a.conf)||1)),
+      consultas:ids(a.consultas),t:Number(a.t)||Date.now()});
+  }
+  return out
+}
+function idAprende(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+/* Una palabra suelta, sin dígitos: «burro» sí; «12», «30%» o «2do» no. */
+function palabraAprendible(w){
+  const n=normalizeText(String(w||'')).trim();
+  return /^[a-z]{3,30}$/.test(n)&&!STOPWORDS.has(n)?n:''
+}
+/* Leer lo aprendido y escribirlo son dos puertas distintas: una medición «con
+   lo aprendido» lo usa, pero ninguna medición enseña nada. */
+function puedeUsarAprendido(){
+  if(!appState.aprendeEnabled)return false;
+  if(typeof midiendo!=='undefined'&&midiendo)return!!(medicionActual&&medicionActual.conAprendido);
+  return true
+}
+function puedeAprender(){
+  return!!appState.aprendeEnabled&&!(typeof midiendo!=='undefined'&&midiendo)
+}
+function secDe(doc){
+  if(!doc)return null;
+  if(!secPorDoc)secPorDoc=new Map();
+  if(!secPorDoc.has(doc))secPorDoc.set(doc,nombreDeSeccion(doc));
+  return secPorDoc.get(doc)
+}
+function docDeSec(sec){return(docs.find(d=>secDe(d.name)===sec)||{}).name||null}
+const palabraActiva=p=>!p.propuesta&&p.conf>=APRENDE_CONFIRMACIONES;
+function construirIndiceAprendido(){
+  const pal=new Map();
+  for(const p of aprendido.palabras){
+    if(!palabraActiva(p))continue;
+    for(const v of variantes(p.piso)){
+      if(!pal.has(v))pal.set(v,[]);
+      pal.get(v).push(p);
+    }
+  }
+  indiceAprendido={pal};
+  return indiceAprendido
+}
+/* Las palabras aprendidas que aplican a `k` en esta consulta. Con sección, las
+   de esa sección; sin ella (al elegir sección), las de todas: cada una apunta a
+   una palabra que solo existe en su manual, así que empuja a su sección. */
+function palabrasAprendidasPara(k,doc){
+  if(!puedeUsarAprendido()||!aprendido.palabras.length)return[];
+  const idx=indiceAprendido||construirIndiceAprendido();
+  const lista=idx.pal.get(k)||[];
+  if(!lista.length)return[];
+  const sec=doc?secDe(doc):null;
+  return sec?lista.filter(p=>p.sec===sec):lista
+}
+/* Las raíces con las que se compara una pregunta con un atajo: las palabras de
+   tema, sin verbos ni el nombre de la sección («¿dónde van los burros en
+   MUEBLES?» y «burros» son la misma consulta dentro de MUEBLES). */
+function palabrasDeAtajo(q,doc){
+  const propio=new Set(doc?tokenize(secDe(doc)||''):[]);
+  return palabrasDeConsulta(q).filter(k=>!esVerbo(k)&&!/\d/.test(k)&&!propio.has(k)&&k.length>=3)
+}
+function terminosDeAtajo(q,doc){return[...new Set(palabrasDeAtajo(q,doc).map(raizCorta))]}
+function atajosPara(q,doc){
+  if(!puedeUsarAprendido()||!aprendido.atajos.length)return[];
+  const sec=doc?secDe(doc):null;
+  const t=new Set(terminosDeAtajo(q,doc));
+  if(!t.size)return[];
+  return aprendido.atajos.filter(a=>(!sec||a.sec===sec)&&jaccardTokens(t,new Set(a.terminos))>=APRENDE_JACCARD)
+}
+/* Lo aprendido que tocó ESTA consulta, para decirlo en pantalla: si el asesor
+   no ve el camino, no puede corregirlo. */
+function aprendidoEn(q,doc){
+  if(!puedeUsarAprendido())return[];
+  const out=[];
+  for(const k of palabrasDeConsulta(q))for(const p of palabrasAprendidasPara(k,doc))
+    out.push({tipo:'palabra',id:p.id,texto:`«${palabraOriginal(q,k)}» = «${p.manual}»`});
+  for(const a of atajosPara(q,doc))out.push({tipo:'atajo',id:a.id,texto:`pág. ${a.pagina}${docs.length>1?' de '+a.sec:''}`});
+  return out
+}
+function lineaDeAprendido(q,doc){
+  const usado=aprendidoEn(q,doc);
+  if(!usado.length)return null;
+  const l=document.createElement('div');l.className='ap-usado';
+  const pal=usado.filter(u=>u.tipo==='palabra').map(u=>u.texto),at=usado.filter(u=>u.tipo==='atajo').map(u=>u.texto);
+  l.textContent='📚 Usé lo que aprendió el piso: '+[pal.length?pal.join(', '):null,at.length?'buscar primero en '+at.join(', '):null].filter(Boolean).join('; ')+'. Se revisa o se borra en Tablero.';
+  return l
+}
+
+/* ── Escribir ── */
+function recortarSeccion(lista,sec,max,activa){
+  const deSec=lista.filter(x=>x.sec===sec);
+  if(deSec.length<=max)return lista;
+  /* Se van primero las viejas sin confirmar; lo activo se queda. */
+  const fuera=new Set(deSec.filter(x=>!activa(x)).sort((a,b)=>a.t-b.t).slice(0,deSec.length-max).map(x=>x.id));
+  return lista.filter(x=>!fuera.has(x.id))
+}
+/* Por qué NO se aprende un par; vacío si se puede. Sirve también para no
+   ofrecer un «✓ Sí, eso» que no enseñaría nada. */
+function motivoParaNoAprender(doc,piso,manual){
+  const a=palabraAprendible(piso),b=palabraAprendible(manual);
+  if(!a||!b)return'no es una palabra';
+  if(a===b||variantes(a).includes(b)||raizCorta(a)===raizCorta(b))return'es la misma palabra';
+  if(esVerbo(a)||esVerbo(b))return'es un verbo';
+  if(doc){
+    const voc=vocabDeDoc(doc);
+    if(!variantes(b).some(v=>voc.has(v)))return'el manual no la usa';
+    if(variantes(a).some(v=>voc.has(v)))return'el manual ya la usa';
+  }
+  for(const v of variantes(a))for(const frase of expandKeywords([v]))if(tokenize(frase).includes(b))return'ya está en el diccionario';
+  return''
+}
+function aprenderPalabra(doc,piso,manual,origen,idConsulta,{propuesta=false}={}){
+  if(!puedeAprender()||!doc)return null;
+  if(motivoParaNoAprender(doc,piso,manual))return null;
+  const sec=secDe(doc),a=palabraAprendible(piso),b=palabraAprendible(manual);
+  let p=aprendido.palabras.find(x=>x.sec===sec&&x.piso===a&&x.manual===b);
+  if(p){
+    if(propuesta)return p;
+    if(p.propuesta){p.propuesta=false;p.conf=0}
+    if(idConsulta&&p.consultas.includes(idConsulta))return p;
+    p.conf++;if(idConsulta)p.consultas.push(idConsulta);p.t=Date.now();
+    if(origen!==p.origen&&p.origen==='ia')p.origen=origen;
+  }else{
+    p={id:idAprende(),sec,piso:a,manual:b,conf:propuesta?0:1,consultas:idConsulta&&!propuesta?[idConsulta]:[],origen,propuesta,t:Date.now()};
+    aprendido.palabras.push(p);
+    aprendido.palabras=recortarSeccion(aprendido.palabras,sec,APRENDE_MAX_PALABRAS,palabraActiva);
+  }
+  p.consultas=p.consultas.slice(-20);
+  guardarAprendido();
+  return p
+}
+function aprenderAtajo(doc,q,pagina,idConsulta){
+  if(!puedeAprender()||!doc||!(pagina>0))return null;
+  const sec=secDe(doc),terminos=terminosDeAtajo(q,doc);
+  if(!terminos.length)return null;
+  const t=new Set(terminos);
+  let a=aprendido.atajos.find(x=>x.sec===sec&&x.pagina===pagina&&jaccardTokens(t,new Set(x.terminos))>=APRENDE_JACCARD);
+  if(a){
+    if(idConsulta&&a.consultas.includes(idConsulta))return a;
+    a.conf++;if(idConsulta)a.consultas.push(idConsulta);a.t=Date.now();a.consultas=a.consultas.slice(-20);
+  }else{
+    a={id:idAprende(),sec,terminos,ver:palabrasDeAtajo(q,doc).slice(0,8),pagina,conf:1,consultas:idConsulta?[idConsulta]:[],t:Date.now()};
+    aprendido.atajos.push(a);
+    aprendido.atajos=recortarSeccion(aprendido.atajos,sec,APRENDE_MAX_ATAJOS,x=>x.conf>=2);
+  }
+  guardarAprendido();
+  return a
+}
+/* Las palabras de la pregunta que ese manual no usa: son las «raras» del piso. */
+function palabrasRaras(q,doc){
+  if(!doc)return[];
+  const voc=vocabDeDoc(doc),propio=new Set(tokenize(secDe(doc)||''));
+  return palabrasDeConsulta(q).filter(k=>palabraAprendible(k)&&k.length>=4&&!esVerbo(k)&&!propio.has(k)
+    &&!variantes(k).some(v=>voc.has(v)))
+}
+/* Las palabras con que el manual titula una página: a eso se refería el asesor
+   cuando tocó esa página. */
+function palabrasDeTituloDePagina(doc,pagina,q){
+  const propio=new Set(tokenize(secDe(doc)||''));
+  /* Una página con dos láminas —SENSORES y ETIQUETADO— tiene dos títulos. Si
+     el resto de la pregunta coincide con el texto de una, es esa; si no
+     coincide con ninguna, van las dos y decide la siguiente confirmación. */
+  const frags=fragmentosDePagina(doc,pagina).filter(c=>c.heading&&c.isFicha!=='indice');
+  const resto=new Set((q?palabrasDeConsulta(q):[]).filter(k=>!esVerbo(k)).flatMap(variantes));
+  const coincide=c=>{const t=new Set(tokenize(c.heading+' '+c.text));let n=0;for(const k of resto)if(t.has(k))n++;return n};
+  const mejor=frags.length?Math.max(...frags.map(coincide)):0;
+  const cuenta=new Map();
+  for(const c of mejor>0?frags.filter(c=>coincide(c)===mejor):frags){
+    for(const k of tokenize(c.heading))if(palabraAprendible(k)&&k.length>=4&&!esVerbo(k)&&!propio.has(k))cuenta.set(k,(cuenta.get(k)||0)+1);
+  }
+  return[...cuenta].sort((a,b)=>b[1]-a[1]).map(x=>x[0]).slice(0,4)
+}
+/* El asesor tocó la página que contestaba. Deja el atajo y, si escribió
+   palabras que el manual no usa, las empareja como candidatas con el título de
+   esa página: con la segunda consulta que las confirme, quedan aprendidas. */
+function aprenderDeLamina(doc,q,pagina,idConsulta){
+  const atajo=aprenderAtajo(doc,q,pagina,idConsulta);
+  const pares=[];
+  const raras=palabrasRaras(q,doc).slice(0,2);
+  if(raras.length)for(const r of raras)for(const m of palabrasDeTituloDePagina(doc,pagina,q)){
+    const p=aprenderPalabra(doc,r,m,'lamina',idConsulta);
+    if(p)pares.push(p);
+  }
+  const reg=tablero.find(x=>x.id===idConsulta);
+  if(reg){reg.pl=pagina;reg.dl=secDe(doc);delete reg.hueco;guardarTablero()}
+  return{atajo,pares}
+}
+/* Una pregunta que no llegó, seguida en minutos por otra parecida que sí: lo
+   que cambió entre una y otra es cómo se dice en el manual. */
+function aprenderDeReformulacion(ant,act){
+  if(!ant||!act||ant.ok||!act.ok||!act.doc||ant.doc!==act.doc)return[];
+  if(act.t-ant.t>APRENDE_VENTANA_REFORMULA)return[];
+  const a=new Set(palabrasDeConsulta(ant.q).filter(k=>!esVerbo(k))),b=new Set(palabrasDeConsulta(act.q).filter(k=>!esVerbo(k)));
+  const comunes=[...a].filter(k=>b.has(k));
+  const raras=palabrasRaras(ant.q,act.doc).filter(k=>!b.has(k));
+  const voc=vocabDeDoc(act.doc);
+  const nuevas=[...b].filter(k=>!a.has(k)&&palabraAprendible(k)&&k.length>=4&&variantes(k).some(v=>voc.has(v)));
+  /* Si no comparten nada, es otra pregunta, no la misma dicha de otro modo;
+     salvo que la primera fuera de una sola palabra rara. */
+  if(!raras.length||!nuevas.length||raras.length>2||nuevas.length>3)return[];
+  if(!comunes.length&&a.size>1)return[];
+  const out=[];
+  for(const r of raras)for(const n of nuevas){const p=aprenderPalabra(act.doc,r,n,'reformulacion',act.id);if(p)out.push(p)}
+  return out
+}
+function docDeConsulta(q,chunk){
+  if(chunk&&chunk.source==='pdf')return chunk.docName;
+  if(rutaActual&&rutaActual.q===q&&rutaActual.doc)return rutaActual.doc;
+  return appState.manualActivo||(docs.length===1?docs[0].name:null)
+}
+/* Lo llama `registrarConsulta`. */
+function notarConsultaParaAprender(r,q,chunk){
+  if(!puedeAprender()||!r)return;
+  const act={id:r.id,q,doc:docDeConsulta(q,chunk),ok:!!r.ok&&!r.dudoso,t:r.t};
+  const ant=ultimaConsultaAprende;
+  if(ant){
+    const regAnt=tablero.find(x=>x.id===ant.id);
+    if(regAnt&&regAnt.voto==='mal')ant.ok=false;
+    aprenderDeReformulacion(ant,act);
+  }
+  ultimaConsultaAprende=act;
+}
+
+/* ── El 👎 pide la lámina ── */
+function paginasCandidatas(q,doc){
+  const res=retrieve(consultaDeBusqueda(q),{source:'pdf',limit:80,doc:doc||null});
+  const vistas=new Map();
+  for(const r of res){
+    if(!r.c.page)continue;
+    const k=r.c.docName+'|'+r.c.page;
+    if(vistas.has(k))continue;
+    vistas.set(k,{doc:r.c.docName,page:r.c.page,heading:(r.c.heading||'').replace(/^#+\s*/,'').trim()});
+    if(vistas.size>=6)break;
+  }
+  return[...vistas.values()]
+}
+function pedirLamina(msgEl,antes,q,idConsulta,doc,{sinDato=false}={}){
+  if(!puedeAprender()||!docChunks.length||msgEl.querySelector('.ap-lamina'))return;
+  const caja=document.createElement('div');caja.className='ap-lamina';
+  const t=document.createElement('div');t.className='ap-lamina-t';
+  t.textContent=sinDato?'¿Sí está en el manual? Toca su página y la próxima vez la busco ahí:'
+    :'¿En qué página estaba? Tócala y la app aprende el camino:';
+  caja.appendChild(t);
+  const fila=document.createElement('div');fila.className='ap-lamina-chips';
+  const listo=(texto)=>{caja.textContent='';const d=document.createElement('div');d.className='ap-lamina-t';d.textContent=texto;caja.appendChild(d)};
+  const elegir=(d,pagina)=>{
+    const r=aprenderDeLamina(d,q,pagina,idConsulta);
+    listo(r.atajo?`Anotado ✓ La próxima vez que pregunten así, busco primero en la pág. ${pagina}.`
+      +(r.pares.length?` Y si «${r.pares[0].piso}» vuelve a llevar ahí, lo aprendo como «${r.pares[0].manual}».`:''):'Anotado ✓');
+    const lam=paginaComoLamina(fragmentosDePagina(d,pagina),pagina);
+    if(lam)renderEvidencia(caja,[lam],'senalada');
+  };
+  for(const c of paginasCandidatas(q,doc)){
+    const b=document.createElement('button');b.type='button';b.className='ap-chip';
+    b.textContent=`pág. ${c.page}`+(c.heading?' · '+(c.heading.length>28?c.heading.slice(0,27)+'…':c.heading):'')+(docs.length>1&&!doc?' · '+secDe(c.doc):'');
+    b.onclick=()=>elegir(c.doc,c.page);
+    fila.appendChild(b);
+  }
+  const docPropio=doc||docDeConsulta(q,null);
+  if(docPropio){
+    const num=document.createElement('input');num.type='number';num.min='1';num.inputMode='numeric';num.placeholder='Otra pág.';num.className='ap-num';num.setAttribute('aria-label','Número de página');
+    const ok=document.createElement('button');ok.type='button';ok.className='ap-chip';ok.textContent='Listo';
+    ok.onclick=()=>{
+      const n=parseInt(num.value,10);
+      if(!(n>0)||!paginasDelManual(docPropio).includes(n)){num.classList.add('ap-num-mal');return}
+      elegir(docPropio,n);
+    };
+    fila.append(num,ok);
+  }
+  const no=document.createElement('button');no.type='button';no.className='ap-chip ap-chip-no';no.textContent='No está en el manual';
+  no.onclick=()=>{
+    const reg=tablero.find(x=>x.id===idConsulta);
+    if(reg){reg.hueco=true;reg.ok=false;guardarTablero()}
+    listo('Anotado ✓ Va al Tablero, en «Lo que el manual no explica».');
+  };
+  fila.appendChild(no);
+  caja.appendChild(fila);
+  if(antes&&antes.parentNode===msgEl)msgEl.insertBefore(caja,antes);else msgEl.appendChild(caja);
+}
+/* Un 👍 a una respuesta que dijo su página confirma el camino. */
+function confirmarCamino(q,doc,pagina,idConsulta){
+  if(doc&&pagina)aprenderAtajo(doc,q,Number(pagina),idConsulta);
+}
+
+/* ── «¿Quisiste decir…?» que se confirma ── */
+function botonSiEso(pares,doc,idConsulta){
+  const utiles=pares.filter(p=>!motivoParaNoAprender(doc,p.dijo,p.como));
+  if(!puedeAprender()||!doc||!utiles.length)return null;
+  const b=document.createElement('button');b.type='button';b.className='ap-chip ap-si';b.textContent='✓ Sí, eso';
+  b.title='Si vuelve a pasar, la app aprende que en esta sección se dice así.';
+  b.onclick=()=>{
+    for(const p of utiles)aprenderPalabra(doc,p.dijo,p.como,'quisiste',idConsulta);
+    b.disabled=true;b.textContent='Anotado ✓';
+  };
+  return b
+}
+
+/* ── La IA propone ── */
+function palabrasRarasDelTablero(doc){
+  const sec=secDe(doc),cuenta=new Map();
+  for(const r of tablero){
+    if(r.sec!==sec||(r.ok&&r.voto!=='mal'))continue;
+    for(const k of palabrasRaras(r.q,doc))cuenta.set(k,(cuenta.get(k)||0)+1);
+  }
+  const ya=new Set(aprendido.palabras.filter(p=>p.sec===sec).map(p=>p.piso));
+  return[...cuenta].filter(([k])=>!ya.has(k)).sort((a,b)=>b[1]-a[1]).map(x=>x[0]).slice(0,25)
+}
+function titulosDeSeccion(doc){
+  const t=new Set();
+  for(const c of docChunks)if(c.docName===doc&&c.heading&&!c.isFicha){const h=c.heading.replace(/^#+\s*/,'').trim();if(h.length>2&&h.length<70)t.add(h)}
+  return[...t].slice(0,90)
+}
+const PROPONER_PROMPT=`Eres parte de una app que ayuda a asesores de piso de una tienda departamental a encontrar lo que dice su manual de exhibición.
+Los asesores escriben palabras que el manual no usa. Te paso esas palabras y los títulos del manual de su sección.
+Para cada palabra del piso, si UNA palabra que aparece tal cual en los títulos significa lo mismo en una tienda, devuélvela.
+Si no hay un equivalente claro, no la incluyas. Nunca inventes palabras del manual ni devuelvas cifras.
+Responde SOLO JSON: {"pares":[{"piso":"palabra del piso","manual":"palabra de los títulos"}]}`;
+async function proponerConIA(doc,{silencioso=false}={}){
+  if(!hayKeyParaIA()||!puedeAprender()||!doc)return 0;
+  const raras=palabrasRarasDelTablero(doc);
+  if(!raras.length){if(!silencioso)showToast('Todavía no hay palabras del piso sin resolver en esta sección.','info',3500);return 0}
+  const provider=appState.provider,key=appState.apiKey,model=modeloDeFicha(provider);
+  const pedido=`${PROPONER_PROMPT}\n\nSECCIÓN: ${secDe(doc)}\nPALABRAS DEL PISO: ${raras.join(', ')}\nTÍTULOS DEL MANUAL:\n${titulosDeSeccion(doc).join('\n')}${glosarioDeSeccion(doc)?'\n'+glosarioDeSeccion(doc):''}`;
+  const llamar=async m=>{
+    if(provider==='gemini'){
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{
+        method:'POST',headers:PROVIDERS.gemini._headers(key),
+        body:JSON.stringify({contents:[{role:'user',parts:[{text:pedido}]}],
+          generationConfig:{maxOutputTokens:1200,temperature:0.1,responseMimeType:'application/json',thinkingConfig:razonamientoGemini(m)}})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw errorDeProveedor(res.status,data);
+      return{texto:textoDeGemini(data)}
+    }
+    const res=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+      body:JSON.stringify({model:m,max_tokens:1200,temperature:0.1,response_format:{type:'json_object'},messages:[{role:'user',content:pedido}]})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw errorDeProveedor(res.status,data);
+    return{texto:data.choices?.[0]?.message?.content||''}
+  };
+  let n=0;
+  try{
+    /* `conReintentos` devuelve el objeto con el modelo que contestó. */
+    const o=jsonDeTexto((await conReintentos(PROVIDERS[provider],model,llamar)).texto);
+    const permitidas=new Set(raras);
+    for(const p of (o&&Array.isArray(o.pares)?o.pares:[]).slice(0,30)){
+      const piso=palabraAprendible(p&&p.piso);
+      if(!permitidas.has(piso))continue;
+      if(aprenderPalabra(doc,piso,p.manual,'ia',null,{propuesta:true}))n++;
+    }
+    if(!silencioso)showToast(n?`✨ La IA propuso ${n} ${n===1?'equivalencia':'equivalencias'}: confírmalas en Tablero.`:'La IA no encontró equivalencias claras.','info',4500);
+  }catch(e){
+    console.warn('proponer',e);
+    if(!silencioso)showToast('No se pudieron pedir propuestas: '+(e.message||e),'warn',4500);
+  }
+  return n
+}
+
+/* ── Verlo, borrarlo, sacarlo y cargarlo ── */
+function borrarAprendido(tipo,id){
+  if(tipo==='palabra')aprendido.palabras=aprendido.palabras.filter(p=>p.id!==id);
+  else aprendido.atajos=aprendido.atajos.filter(a=>a.id!==id);
+  guardarAprendido();
+}
+function confirmarAprendido(id){
+  const p=aprendido.palabras.find(x=>x.id===id);if(!p)return;
+  p.propuesta=false;p.conf=Math.max(p.conf,APRENDE_CONFIRMACIONES);p.t=Date.now();
+  if(p.origen!=='ia')p.origen='tablero';
+  guardarAprendido();
+}
+function olvidarTodoAprendido(){
+  if(!confirm('¿Olvidar todo lo que aprendió del piso en este teléfono? No se puede deshacer.'))return;
+  aprendido=aprendidoVacio();guardarAprendido();
+  showToast('🗑️ Se olvidó lo aprendido','warn',2500);
+}
+/* Sale sin preguntas: solo palabras, páginas y cuántas veces se confirmaron. */
+function vocabularioParaExportar(){
+  return{vocabulario:'Asistente de piso',version:VERSION_APP,fecha:new Date().toISOString(),
+    palabras:aprendido.palabras.map(({sec,piso,manual,conf,origen,propuesta})=>({sec,piso,manual,conf,origen,...(propuesta?{propuesta:true}:{})})),
+    atajos:aprendido.atajos.map(({sec,terminos,ver,pagina,conf})=>({sec,terminos,ver,pagina,conf}))}
+}
+async function exportarVocabulario(){
+  if(!aprendido.palabras.length&&!aprendido.atajos.length){showToast('Todavía no hay nada aprendido.','warn',3000);return}
+  const nombre=`vocabulario-del-piso-${new Date().toISOString().slice(0,10)}.json`;
+  const blob=new Blob([JSON.stringify(vocabularioParaExportar(),null,1)],{type:'application/json'});
+  const archivo=new File([blob],nombre,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[archivo]})){
+    try{await navigator.share({files:[archivo],title:'Vocabulario del piso'});return}catch(e){if(e.name==='AbortError')return}
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+/* Se suma a lo que ya hay: lo que viene de otro teléfono entra con sus
+   confirmaciones, pero pasa los mismos candados. */
+function importarVocabulario(datos){
+  const nuevo=limpiarAprendido(datos);
+  let n=0;
+  for(const p of nuevo.palabras){
+    const doc=docDeSec(p.sec);
+    if(doc&&motivoParaNoAprender(doc,p.piso,p.manual))continue;
+    const ya=aprendido.palabras.find(x=>x.sec===p.sec&&x.piso===p.piso&&x.manual===p.manual);
+    if(ya){ya.conf=Math.max(ya.conf,p.conf);if(!p.propuesta)ya.propuesta=false}
+    else{aprendido.palabras.push({...p,id:idAprende(),consultas:[],origen:p.origen==='ia'?'ia':'importada'});n++}
+  }
+  for(const a of nuevo.atajos){
+    const ya=aprendido.atajos.find(x=>x.sec===a.sec&&x.pagina===a.pagina&&jaccardTokens(new Set(x.terminos),new Set(a.terminos))>=APRENDE_JACCARD);
+    if(ya)ya.conf=Math.max(ya.conf,a.conf);
+    else{aprendido.atajos.push({...a,id:idAprende(),consultas:[]});n++}
+  }
+  guardarAprendido();
+  return n
+}
+function cargarVocabularioDeArchivo(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    try{
+      const n=importarVocabulario(JSON.parse(await f.text()));
+      showToast(n?`✓ Se cargaron ${n} ${n===1?'camino':'caminos'} aprendidos`:'No había nada nuevo que cargar','success',3000);
+    }catch{showToast('Ese archivo no es un vocabulario del piso.','error',3500)}
+  };
+  inp.click();
+}
+function bloqueAprendido(cont){
+  const b=el('div','tb-bloque ap-bloque');
+  b.appendChild(el('div','tb-h','Lo que aprendió del piso'));
+  b.appendChild(el('div','tb-hsub',appState.aprendeEnabled
+    ?'Cómo pregunta tu equipo: palabras que usa el piso y la palabra del manual a la que se refieren, y páginas que contestan cierta pregunta. Nunca datos. Una palabra se activa con dos confirmaciones.'
+    :'Está apagado en Ajustes («Aprender del piso»): no se usa ni se aprende nada.'));
+  const activas=aprendido.palabras.filter(palabraActiva),porConfirmar=aprendido.palabras.filter(p=>!p.propuesta&&!palabraActiva(p)),propuestas=aprendido.palabras.filter(p=>p.propuesta);
+  const varias=new Set([...aprendido.palabras,...aprendido.atajos].map(x=>x.sec)).size>1;
+  const ORIGEN={lamina:'por la lámina que tocaron',reformulacion:'por una pregunta reformulada',quisiste:'por «Sí, eso»',ia:'propuesta por la IA',importada:'cargada de archivo',tablero:'confirmada aquí'};
+  const fila=(texto,det,acciones)=>{
+    const f=el('div','tb-fila ap-fila');
+    const et=el('div','tb-et',texto);et.appendChild(el('small',null,det));
+    const acc=el('div','ap-acc');for(const a of acciones)acc.appendChild(a);
+    f.append(et,acc);return f
+  };
+  const boton=(txt,titulo,fn)=>{const x=el('button','ap-mini',txt);x.type='button';x.title=titulo;x.onclick=fn;return x};
+  const grupo=(titulo,lista,conConfirmar)=>{
+    if(!lista.length)return;
+    b.appendChild(el('div','ap-sub',titulo));
+    for(const p of lista.slice().sort((x,y)=>y.t-x.t).slice(0,30)){
+      const acc=[];
+      if(conConfirmar)acc.push(boton('✓','Confirmar: se activa ya',()=>confirmarAprendido(p.id)));
+      acc.push(boton('🗑','Borrar',()=>borrarAprendido('palabra',p.id)));
+      b.appendChild(fila(`«${p.piso}» → «${p.manual}»`,[varias?p.sec:null,ORIGEN[p.origen]||null,p.propuesta?null:`${p.conf} ${p.conf===1?'confirmación':'confirmaciones'}`].filter(Boolean).join(' · '),acc));
+    }
+  };
+  grupo('Palabras activas',activas,false);
+  grupo('Por confirmar',porConfirmar,true);
+  grupo('Propuestas de la IA (no se usan hasta que las confirmes)',propuestas,true);
+  if(aprendido.atajos.length){
+    b.appendChild(el('div','ap-sub','Preguntas que ya saben su página'));
+    for(const a of aprendido.atajos.slice().sort((x,y)=>y.t-x.t).slice(0,30))
+      b.appendChild(fila((a.ver&&a.ver.length?a.ver:a.terminos).join(' · '),[varias?a.sec:null,`pág. ${a.pagina}`,`${a.conf} ${a.conf===1?'vez':'veces'}`].filter(Boolean).join(' · '),[boton('🗑','Borrar',()=>borrarAprendido('atajo',a.id))]));
+  }
+  if(!aprendido.palabras.length&&!aprendido.atajos.length)
+    b.appendChild(el('div','tb-vacio-lista','Todavía nada. Aprende cuando alguien toca 👎 y dice en qué página estaba, cuando confirma «Sí, eso» o cuando reformula una pregunta que no llegó.'));
+  const acc=el('div','tb-acciones ap-acciones');
+  const ex=el('button','tb-btn','⬇ Vocabulario del piso');ex.type='button';ex.onclick=exportarVocabulario;
+  ex.title='Palabras y páginas aprendidas, sin preguntas: para revisarlas o pasarlas a otro teléfono.';
+  const im=el('button','tb-btn','⬆ Cargar vocabulario');im.type='button';im.onclick=cargarVocabularioDeArchivo;
+  acc.append(ex,im);
+  const docProp=appState.manualActivo||(docs.length===1?docs[0].name:null);
+  if(hayKeyParaIA()&&docProp&&appState.aprendeEnabled){
+    const ia=el('button','tb-btn','✨ Que la IA proponga');ia.type='button';
+    ia.title='La IA mira las palabras del piso que el manual no usa y propone a cuál se refieren. Quedan por confirmar.';
+    ia.onclick=async()=>{ia.disabled=true;await proponerConIA(docProp);ia.disabled=false};
+    acc.appendChild(ia);
+  }
+  if(aprendido.palabras.length||aprendido.atajos.length){
+    const bor=el('button','tb-btn borrar','Olvidar todo');bor.type='button';bor.onclick=olvidarTodoAprendido;acc.appendChild(bor);
+  }
+  b.appendChild(acc);
+  cont.appendChild(b);
 }
 
 /* ════════════════════════════════════════════════
@@ -5666,7 +6139,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.5.0';
+const VERSION_APP='ap-v1.6.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -6104,6 +6577,10 @@ async function prepararFicha(docName,{silencioso=false}={}){
     const doc=docs.find(d=>d.name===docName);
     if(doc&&doc.hash)guardarManual(doc.hash,doc,docChunks.filter(c=>c.docName===docName),docFigures.filter(f=>f.docName===docName))
       .catch(e=>console.warn('guardar ficha',e));
+    /* Con el manual recién leído, la IA mira las palabras del piso que siguen
+       sin resolver en esta sección y propone equivalencias: quedan por
+       confirmar, nunca se usan solas. Una llamada, y solo si hay qué mirar. */
+    if(!cortada&&!silencioso&&palabrasRarasDelTablero(docName).length>=3)proponerConIA(docName,{silencioso:true}).catch(()=>{});
   }
   return{hechas,fallos,total:pendientes.length,tokens,cortada}
 }
@@ -6426,7 +6903,7 @@ function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
   /* Con un PDF cargado el manual interno ya no entra al contexto: anunciarlo
      como fuente era prometer una revisión que no ocurrió. */
   if(contextBuilt&&!hasPdfs)sources.push({type:'manual',label:'Manual interno'});
-  if(memUsed)sources.push({type:'memory',label:'Memoria'});
+  if(memUsed&&memUsed.length)sources.push({type:'memory',label:'📚 Aprendido: '+memUsed.slice(0,2).map(u=>u.texto).join(', ')});
   if(appState.extraEnabled&&appState.extra.trim())sources.push({type:'extra',label:'Contexto asesor'});
   if(!sources.length)sources.push({type:'none',label:'Sin fuentes'});
   return sources
@@ -7178,13 +7655,13 @@ function responderSinModelo(q){
   const porParecidas=fragmentos&&!avisoAusente&&primera&&primera.hits===0&&primera.hitsErrata===0
     ?(()=>{
       const voc=activo?vocabDeDoc(activo):null;
-      const pesos=weightedTerms(consultaDeBusqueda(q));
+      const pesos=weightedTerms(consultaDeBusqueda(q),activo);
       const enTarjeta=' '+normalizeText((primera.c.heading||'')+' '+primera.c.text).replace(/\s+/g,' ')+' ';
       const out=[];
       for(const k of new Set(pesos.filter(x=>x.g&&x.g[0]==='~').map(x=>x.g.slice(1)))){
         if(k.length<4||esVerbo(k)||(voc&&variantes(k).some(v=>voc.has(v))))continue;
         const como=pesos.find(x=>x.g==='~'+k&&enTarjeta.includes(' '+x.t+' '));
-        if(como)out.push({dijo:palabraOriginal(q,k),como:como.t});
+        if(como)out.push({dijo:palabraOriginal(q,k),k,como:como.t});
       }
       return out
     })():[];
@@ -7212,13 +7689,17 @@ function responderSinModelo(q){
   /* Sin fragmentos es un «no está»: se pinta distinto, sin brillo de acento. */
   if(!fragmentos)msgEl.classList.add('sin-dato');
   const cuerpoEl=msgEl.querySelector('.msg-body');
+  let avisoParecidasEl=null;
   if(fragmentos){
-    const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    const terminos=new Map(weightedTerms(consultaDeBusqueda(q),activo).map(x=>[x.t,x.w]));
     const linea=lineaDeRuta(q,ruta);
     if(linea)cuerpoEl.appendChild(linea);
+    const aprendidoLinea=lineaDeAprendido(consultaDeBusqueda(q),activo);
+    if(aprendidoLinea)cuerpoEl.appendChild(aprendidoLinea);
     if(avisoVisible){
       const aa=document.createElement('div');aa.className=avisoAusente?'frag-ausente':'frag-ausente frag-parecidas';aa.textContent=avisoVisible;
       cuerpoEl.appendChild(aa);
+      avisoParecidasEl=avisoAusente?null:aa;
     }
     const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
     cuerpoEl.appendChild(av);
@@ -7239,9 +7720,17 @@ function responderSinModelo(q){
   const figs=fragmentos&&!avisoAusente?figurasDeFragmentos(tarjetas.map(t=>t.c),null,null):[];
   renderEvidencia(msgEl,figs,figs.origen==='cita'?'manual':'manualPagina');
   const idConsulta=registrarConsulta(q,!!fragmentos&&!avisoAusente,tarjetas[0]&&tarjetas[0].c,'manual',!!avisoAusente);
+  /* «Lo encontré como…»: si era eso, un toque lo confirma, y con dos se
+     aprende que en esta sección se dice así. */
+  if(avisoParecidasEl){
+    const si=botonSiEso(porParecidas.map(p=>({dijo:p.k,como:p.como})),activo,idConsulta);
+    if(si)avisoParecidasEl.appendChild(si);
+  }
+  /* «Nada coincide» es justo cuando más sirve que el piso diga dónde estaba. */
+  if(!fragmentos&&!enOtra&&activo)pedirLamina(msgEl,null,q,idConsulta,activo,{sinDato:true});
   if(fragmentos){
-    const pie=votoManual(msgEl,idConsulta);
-    const terminos=new Map(weightedTerms(consultaDeBusqueda(q)).map(x=>[x.t,x.w]));
+    const pie=votoManual(msgEl,idConsulta,{q,doc:activo,pagina:tarjetas[0]&&tarjetas[0].c.page});
+    const terminos=new Map(weightedTerms(consultaDeBusqueda(q),activo).map(x=>[x.t,x.w]));
     const t0=tarjetas[0];
     pie.appendChild(botonCompartir(()=>({
       pregunta:q,
@@ -7898,7 +8387,7 @@ async function sendMessage(){
       sessionTokens+=r.estado.tokens||estimateTokens(r.texto);updateTokenBar();
       history.push({role:'user',content:q});
       history.push({role:'assistant',content:final.texto,entendi:final.entendi,seccion:r.estado.doc});
-      renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,false,true,false);
+      renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,aprendidoEn(q,r.estado&&r.estado.doc),true,false);
       botonesDeRutaAlterna(loaderEl,q);
       return;
     }catch(err){
@@ -7914,7 +8403,6 @@ async function sendMessage(){
   }
   const ctx=buildContext(q);
   context=ctx.texto;
-  const memCtx=appState.memoryEnabled?getMemoryContext(q):'';
   const system=(appState.system||document.getElementById('system-prompt').value.trim());
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
@@ -7927,7 +8415,7 @@ async function sendMessage(){
   const sourceNotice=hasPdfs
     ?quienEres+'\n\n⚠ FUENTE ÚNICA: El PDF que el asesor cargó es el manual que se está ejecutando hoy en ese piso, y es la ÚNICA fuente de esta respuesta. No hay otra en el contexto: no completes con reglas generales de Mercadep ni con conocimiento de visual merchandising. Si el PDF no lo trae, la respuesta es "El manual no especifica [X]" — el asesor tiene un botón para consultar aparte la referencia general. Revisa TODO el contexto antes de decidir que algo "no está". Cada fragmento viene rotulado [documento · pág. N · sección]: cita la página de todo dato que tomes.'
     :'\n\n⚠ FUENTES DISPONIBLES: Solo hay manual interno Mercadep disponible. REVÍSALO para responder.';
-  const fullSystem=system+GUARDRAIL_APPEND+(memCtx?'\n\n'+memCtx:'')+sourceNotice;
+  const fullSystem=system+GUARDRAIL_APPEND+sourceNotice;
   const messages=[{role:'system',content:fullSystem}];
   /* El historial va ANTES del contexto y se queda en tres intercambios. Con
      catorce mensajes después del contexto, las cifras de respuestas anteriores
@@ -7997,7 +8485,7 @@ async function sendMessage(){
     history.push({role:'user',content:q});
     const{final}=parseAIResponse(streamedText);
     history.push({role:'assistant',content:sanitizeFinalAnswer(final,q),seccion:ctx.seccionUsada||null});
-    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,!!memCtx,hasPdfs,ctx.ampliada);
+    renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,aprendidoEn(consultaDeBusqueda(q),ctx.seccionUsada||null),hasPdfs,ctx.ampliada);
     botonesDeRutaAlterna(loaderEl,q);
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
@@ -8498,6 +8986,7 @@ const ROTULO_EVIDENCIA={
   consultado:['Lámina del fragmento que se consultó (la respuesta no citó página):','Láminas de los fragmentos que se consultaron (la respuesta no citó página):'],
   manual:['Del manual, la lámina de la que sale esto:','Del manual, las láminas de las que sale esto:'],
   manualPagina:['De la misma página del manual (no sé si esta lámina es justo la de tu duda):','De la misma página del manual (no sé si estas láminas son justo las de tu duda):'],
+  senalada:['La página que señalaste:','Las páginas que señalaste:'],
 };
 function renderEvidencia(container,figuras,origen){
   if(!figuras||!figuras.length)return;
@@ -8984,6 +9473,8 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
      manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */
   let idConsulta=null,fuenteCitada=null;
+  /* Se fija ahora: al tocar 👎, `ultimosFragmentos` puede ser ya de otra pregunta. */
+  const docDeRespuesta=contextoEnviado?((ultimosFragmentos||[]).find(c=>c.source==='pdf')?.docName||ultimaSeccionUsada||docDeConsulta(originalQuestion,null)):null;
   if(contextoEnviado&&!cortada&&!/_\[Generación detenida/.test(rawText)){
     const frags=ultimosFragmentos||[];
     const fuente=frags.find(c=>c.page&&verif.citadas.has(String(c.page)))||frags[0];
@@ -9075,8 +9566,8 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     if(goodBtn.disabled||goodBtn.classList.contains('active'))return;
     goodBtn.classList.add('active');badBtn.classList.remove('active');cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
-    addMemorySuccess(originalQuestion,cleanFinal);
     if(idConsulta)votarConsulta(idConsulta,'bien');
+    if(fuenteCitada)confirmarCamino(originalQuestion,fuenteCitada.docName,fuenteCitada.page,idConsulta);
     // v7.0: feedback visual inmediato
     showToast('✓ Respuesta marcada como correcta', 'success', 1800);
   };
@@ -9084,14 +9575,15 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     if(badBtn.disabled||badBtn.classList.contains('active'))return;
     badBtn.classList.add('active');goodBtn.classList.remove('active');
     noteWrap.style.display='block';
+    /* Lo más útil que puede dejar un 👎 es dónde SÍ estaba. */
+    if(contextoEnviado)pedirLamina(loaderEl,noteWrap,originalQuestion,idConsulta,docDeRespuesta);
   };
   sendBtn.onclick=()=>{
     if(sendBtn.disabled)return;
     cerrarVoto();
     noteWrap.style.display='none';fbDone.style.display='';
-    addMemoryFail(originalQuestion,cleanFinal,noteEl.value.trim());
     if(idConsulta)votarConsulta(idConsulta,'mal',noteEl.value.trim());
-    showToast('✓ Feedback registrado en memoria', 'success', 1800);
+    showToast('✓ Anotado en el tablero', 'success', 1800);
   };
 
   fbWrap.appendChild(goodBtn);fbWrap.appendChild(badBtn);
@@ -9159,6 +9651,13 @@ function presentarRespuestaAgente(loaderEl,r,q){
   if(campos.correcciones.length){
     const el=document.createElement('div');el.className='entendi';
     el.innerHTML='Entendí '+campos.correcciones.map(c=>`<strong>${escapeHtml(c.manual)}</strong> <span>(escribiste «${escapeHtml(c.escribio)}»)</span>`).join(', ');
+    /* Si lo entendió bien, un toque lo confirma: con dos, esa palabra del piso
+       queda aprendida para esta sección, también sin modelo. */
+    const reg=tablero.length&&tablero[tablero.length-1].q===String(q).slice(0,200)?tablero[tablero.length-1]:null;
+    const pares=campos.correcciones.map(c=>({dijo:tokenize(c.escribio),como:tokenize(c.manual)}))
+      .filter(p=>p.dijo.length===1&&p.como.length===1).map(p=>({dijo:p.dijo[0],como:p.como[0]}));
+    const si=botonSiEso(pares,r.estado.doc,reg&&reg.id);
+    if(si)el.appendChild(si);
     loaderEl.insertBefore(el,loaderEl.querySelector('.msg-label').nextSibling);
   }
   const leidas=[...r.estado.leidas.keys()];
@@ -9309,7 +9808,7 @@ function resumenMedicion(filas){
   const pct=(xs,q)=>{if(!xs.length)return null;const s=[...xs].sort((a,b)=>a-b);return s[Math.min(s.length-1,Math.floor(q*s.length))]};
   const seg=ms=>ms==null?'—':(ms/1000).toFixed(1)+' s';
   const out={};
-  const grupo=f=>f.motor+(f.libre?' · sin sección':'');
+  const grupo=f=>f.motor+(f.libre?' · sin sección':'')+(f.aprendido&&f.aprendido!=='apagado'?' · con lo aprendido':'');
   for(const motor of[...new Set(filas.map(grupo))]){
     const fm=filas.filter(f=>grupo(f)===motor);
     const conRuta=fm.filter(f=>f.ruta);
@@ -9438,6 +9937,9 @@ async function correrMedicion(){
   try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
   m.motores=['clasico','agente','manual'].filter(k=>document.getElementById('med-'+k)?.checked);
   m.libre=!!document.getElementById('med-libre')?.checked;
+  /* Lo aprendido del piso se mide aparte y a propósito: por defecto la medición
+     es del código, no de la memoria de este teléfono. */
+  m.conAprendido=!!document.getElementById('med-aprendido')?.checked;
   if(!m.motores.length){showToast('Elige al menos un motor.','warn',3000);return}
   /* El modo manual no pregunta a nadie: se mide sin key. */
   if(m.motores.some(k=>k!=='manual')&&!hayKeyParaIA()){showToast('Conecta tu API key en Ajustes: la medición pregunta al modelo desde este teléfono. El modo manual sí se puede medir sin key.','warn',6000);return}
@@ -9467,12 +9969,14 @@ async function correrMedicion(){
         .filter(d=>paginasSinFicha(d).length).map(d=>`${nombreDeSeccion(d)} (${paginasSinFicha(d).length} págs.)`);
       m.avisoFicha=incompletas.length?`Fichas incompletas: ${incompletas.join(', ')}. El agente se mide con lo que hay.`:'';
     }
-    const claveFila=(motor,libre,x)=>motor+'|'+(libre?1:0)+'|'+x.seccion+'|'+x.q;
+    const conAp=!!m.conAprendido;
+    const claveFila=(motor,libre,x,ap)=>motor+'|'+(libre?1:0)+(ap?'|a':'')+'|'+x.seccion+'|'+x.q;
     /* Una fila con error no es un resultado: al reanudar se vuelve a preguntar. */
-    const hechas=new Set(m.filas.filter(f=>!f.error).map(f=>claveFila(f.motor,f.libre,f)));
+    const hechas=new Set(m.filas.filter(f=>!f.error).map(f=>claveFila(f.motor,f.libre,f,f.aprendido&&f.aprendido!=='apagado')));
     const tanda=[];
-    for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(claveFila(motor,m.libre,x)))tanda.push({x,motor});
+    for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(claveFila(motor,m.libre,x,conAp)))tanda.push({x,motor});
     const guardar=()=>{try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores,libre:m.libre}))}catch{}};
+    const resumenAp=conAp?`${aprendido.palabras.filter(palabraActiva).length} palabras · ${aprendido.atajos.length} atajos`:'apagado';
     for(const[i,{x,motor}]of tanda.entries()){
       if(medicionDetener)break;
       const doc=docDeSeccion(x.seccion);
@@ -9481,11 +9985,11 @@ async function correrMedicion(){
       m.estado=`${motor}${m.libre?' sin sección':''} · ${i+1} de ${tanda.length} · ${x.q.slice(0,60)}`;pintarMedicion();
       const r=await medirPregunta(x,motor,doc,{libre:m.libre,esperadoDoc});
       r.esperado=esperadoDoc?nombreDeSeccion(esperadoDoc):null;r.motor=motor;
-      const fila={...x,motor,libre:m.libre,...r,...calificarMedicion(x,r),
+      const fila={...x,motor,libre:m.libre,aprendido:resumenAp,...r,...calificarMedicion(x,r),
         modelo:motor==='manual'?'sin modelo':(r.modeloReal||appState.chatModel),modeloPedido:motor==='manual'?null:appState.chatModel,
         lectura:LECTURA_VERSION,version:VERSION_APP,fecha:new Date().toISOString()};
-      const k=claveFila(motor,m.libre,x);
-      m.filas=m.filas.filter(f=>claveFila(f.motor,f.libre,f)!==k);
+      const k=claveFila(motor,m.libre,x,conAp);
+      m.filas=m.filas.filter(f=>claveFila(f.motor,f.libre,f,f.aprendido&&f.aprendido!=='apagado')!==k);
       m.filas.push(fila);
       guardar();
       pintarMedicion();
@@ -9557,6 +10061,7 @@ function resultadoMedicion(){
   const m=medicionActual;
   return{examen:m.nombre,fecha:new Date().toISOString(),version:VERSION_APP,lectura:LECTURA_VERSION,
     proveedor:appState.provider,modelo:appState.chatModel,libre:!!m.libre,
+    aprendizaje:m.conAprendido?{palabras:aprendido.palabras.filter(palabraActiva).length,atajos:aprendido.atajos.length}:'apagado',
     manuales:docs.map(d=>({seccion:nombreDeSeccion(d.name),paginas:d.pageCount||null,lectura:(d.lectura||1),
       paginasSinFicha:paginasSinFicha(d.name).length,ficha:estadoDeFicha(d.name).replace(/^ · /,'')||'sin ficha'})),
     resumen:resumenMedicion(m.filas),resultados:m.filas}
@@ -9616,6 +10121,7 @@ function pintarMedicion(){
       <label><input type="checkbox" id="med-agente" ${m.motores.includes('agente')?'checked':''} ${midiendo?'disabled':''}> Agente lector</label>
       <label><input type="checkbox" id="med-manual" ${m.motores.includes('manual')?'checked':''} ${midiendo?'disabled':''}> Modo manual (sin key)</label>
       <label title="Sin sección elegida, como pregunta el asesor: la app elige la sección de cada pregunta y, si dos empatan, se toca la del examen."><input type="checkbox" id="med-libre" ${m.libre?'checked':''} ${midiendo?'disabled':''}> Como el asesor: sin elegir sección</label>
+      <label title="Por defecto se mide el código, sin lo que este teléfono aprendió del piso. Encendido, se mide con lo aprendido, para compararlo contra la medición sin él."><input type="checkbox" id="med-aprendido" ${m.conAprendido?'checked':''} ${midiendo?'disabled':''}> Con lo aprendido del piso</label>
       ${midiendo?'<button class="ref-general" onclick="medicionDetener=true;this.disabled=true">■ Detener</button>'
         :`<button class="ref-general" onclick="chequeoAntesDeMedir()">🩺 Chequeo antes de medir</button>
           <button class="ref-general" onclick="correrMedicion()">${m.filas.length?'▶ Seguir':'▶ Empezar'}</button>`}
@@ -10433,6 +10939,108 @@ function pruebasRobustez(){
     }finally{
       docs=g.docs;docChunks=g.docChunks;appState.manualActivo=g.activo;history=g.history;
       rutaActual=g.ruta;rutaForzada=g.forzada;appState.motor=g.motor;appState.provider=g.prov;
+      rebuildCorpus();
+    }
+  }
+  /* Aprende del piso: dos manuales inventados. Lo aprendido de verdad en este
+     teléfono se aparta y se devuelve intacto. */
+  {
+    const g={docs,docChunks,activo:appState.manualActivo,history,ruta:rutaActual,ap:aprendido,tab:tablero,
+      en:appState.aprendeEnabled,mid:midiendo,med:medicionActual,ult:ultimaConsultaAprende};
+    const M='910 MUEBLES.pdf',Z='920 ZAPATOS.pdf';
+    try{
+      const ch=(id,docName,page,heading,text)=>indexChunk({id,source:'pdf',docName,page,heading,text,figureIds:[]});
+      docs=[{name:M},{name:Z}];
+      docChunks=[
+        ch('a1',M,5,'PERCHEROS','Los percheros se colocan junto al muro, con la ropa ordenada por color.'),
+        ch('a2',M,7,'MESA DE ENTRADA','La mesa de entrada lleva la novedad del mes.'),
+        ch('a3',M,11,'NOVEDADES','La novedad del mes también se anuncia en la cabecera.'),
+        ch('a4',M,9,'ALINEACIÓN','Deja 80 cm de pasillo entre muebles.'),
+        ch('a5',Z,12,'SNEAKERS','Sneakers: 35% de participación en la sección.'),
+        ch('a6',Z,14,'NOVEDADES','La novedad del mes va en la mesa de tenis.'),
+        ch('a7',M,5,'ESPEJOS','Los espejos se limpian cada mañana.'),
+      ];
+      appState.manualActivo=null;history=[];rutaActual=null;
+      aprendido=aprendidoVacio();tablero=[];ultimaConsultaAprende=null;
+      appState.aprendeEnabled=true;midiendo=false;medicionActual=null;
+      rebuildCorpus();
+      const top=(q,doc)=>{const r=retrieve(q,{doc,source:'pdf'});return r[0]?r[0].c.page:null};
+      const q1='¿dónde van los burros?';
+      fila('aprende','la memoria vieja ya no existe ni va al prompt',typeof getMemoryContext==='undefined'&&typeof addMemoryFail==='undefined');
+      fila('aprende','sin aprender, «burros» no llega a PERCHEROS',top(q1,M)!==5,'pág. '+top(q1,M));
+      midiendo=true;
+      fila('aprende','midiendo no se aprende nada',aprenderPalabra(M,'burros','percheros','lamina','c1')===null&&!aprendido.palabras.length);
+      midiendo=false;
+      const p1=aprenderPalabra(M,'burros','percheros','lamina','c1');
+      aprenderPalabra(M,'burros','percheros','lamina','c1');
+      fila('aprende','una confirmación no activa, y la misma consulta no cuenta dos veces',!!p1&&p1.conf===1&&!palabraActiva(p1)&&top(q1,M)!==5);
+      aprenderPalabra(M,'burros','percheros','reformulacion','c2');
+      fila('aprende','con dos consultas distintas se activa y «burros» llega a PERCHEROS',palabraActiva(p1)&&top(q1,M)===5,'pág. '+top(q1,M));
+      fila('aprende','lo aprendido se dice en pantalla',/burros.*percheros/.test(lineaDeAprendido(q1,M)?.textContent||''));
+      fila('aprende','una palabra aprendida deja de contarse como ausente',!terminosAusentes(q1,M).some(i=>i.palabra==='burros'));
+      fila('aprende','es de su sección: en ZAPATOS no aplica',!palabrasAprendidasPara('burros',Z).length&&palabrasAprendidasPara('burros',M).length===1);
+      midiendo=true;medicionActual={conAprendido:false};
+      const enMedicion=top(q1,M);
+      medicionActual={conAprendido:true};
+      const conAp=top(q1,M);
+      midiendo=false;medicionActual=null;
+      fila('aprende','midiendo no se usa, salvo «con lo aprendido»',enMedicion!==5&&conAp===5,`${enMedicion} / ${conAp}`);
+      appState.aprendeEnabled=false;
+      fila('aprende','con «Aprender del piso» apagado no se usa',top(q1,M)!==5);
+      appState.aprendeEnabled=true;
+      fila('aprende','nunca cifras: ni «12», ni «80», ni «2do»',
+        !aprenderPalabra(M,'12','percheros','lamina','c3')&&!aprenderPalabra(M,'burros','80','lamina','c3')&&!aprenderPalabra(M,'2do','percheros','lamina','c3'));
+      fila('aprende','la palabra del manual tiene que estar en ESE manual',!aprenderPalabra(M,'tenis','sneakers','lamina','c3'));
+      fila('aprende','lo que ya dice el diccionario o el manual no se aprende',
+        motivoParaNoAprender(M,'muro','percheros')==='el manual ya la usa'&&!!motivoParaNoAprender(M,'mesa','isla'));
+      /* Atajo: la misma pregunta, dos páginas que la contestan por sus palabras. */
+      const q2='¿dónde pongo la novedad del mes?';
+      const antes=top(q2,M);
+      const at=aprenderAtajo(M,q2,antes===7?11:7,'c4');
+      const despues=top(q2,M);
+      fila('aprende','el atajo sube la página que señaló el piso',!!at&&despues===at.pagina,`${antes} → ${despues}`);
+      fila('aprende','el atajo es de su sección',top(q2,Z)===14);
+      fila('aprende','el atajo solo reordena: no mete páginas sin evidencia',retrieve('¿cuánto cuesta una vela aromática?',{doc:M,source:'pdf'}).every(r=>!r.atajo));
+      /* La lámina tocada deja el atajo y una candidata con el título. */
+      tablero=[{id:'c5',t:Date.now(),q:'¿dónde van los colgadores junto al muro?',sec:null,ok:false,modo:'manual',voto:'mal'}];
+      const lam=aprenderDeLamina(M,'¿dónde van los colgadores junto al muro?',5,'c5');
+      fila('aprende','la lámina tocada deja atajo y «colgadores» → «percheros» por confirmar',
+        !!lam.atajo&&lam.pares.some(p=>p.piso==='colgadores'&&p.manual==='percheros'&&!palabraActiva(p))&&tablero[0].pl===5);
+      fila('aprende','con dos láminas en la página, se empareja con la que coincide con la pregunta',!lam.pares.some(p=>p.manual==='espejos'),lam.pares.map(p=>p.manual).join());
+      const ex=preguntasRealesParaExamen(tablero);
+      fila('aprende','y esa página queda como la esperada en «Preguntas para examen»',ex[0].p.join()==='5'&&ex[0].visto.paginaDelPiso===5);
+      /* Reformulación: no llegó, y en un minuto llegó dicha de otro modo. */
+      const ref=aprenderDeReformulacion({id:'r1',q:'¿dónde van los tendederos?',doc:M,ok:false,t:0},{id:'r2',q:'¿dónde van los percheros?',doc:M,ok:true,t:60e3});
+      const tarde=aprenderDeReformulacion({id:'r3',q:'¿dónde van los ganchos largos?',doc:M,ok:false,t:0},{id:'r4',q:'¿dónde van los percheros?',doc:M,ok:true,t:10*60e3});
+      fila('aprende','una reformulación deja una candidata; una pregunta de hace diez minutos no',
+        ref.length===1&&ref[0].piso==='tendederos'&&ref[0].manual==='percheros'&&!tarde.length,JSON.stringify(ref.map(p=>p.piso+'>'+p.manual)));
+      /* «Sí, eso» y las propuestas de la IA. */
+      fila('aprende','«✓ Sí, eso» solo se ofrece si enseña algo',
+        !botonSiEso([{dijo:'mesa',como:'isla'}],M,'c6')&&!!botonSiEso([{dijo:'tubos',como:'percheros'}],M,'c6'));
+      const prop=aprenderPalabra(M,'racks','percheros','ia',null,{propuesta:true});
+      fila('aprende','lo que propone la IA no se usa hasta confirmarlo',!!prop&&!palabraActiva(prop)&&!palabrasAprendidasPara('racks',M).length);
+      confirmarAprendido(prop.id);
+      fila('aprende','confirmado en el Tablero, se activa',palabrasAprendidasPara('racks',M).length===1);
+      /* Sacarlo y cargarlo. */
+      const exp=vocabularioParaExportar();
+      const plano=JSON.stringify(exp);
+      fila('aprende','el vocabulario sale sin preguntas ni ids de consulta',!/consultas|donde van|novedad del mes\?/.test(plano)&&exp.palabras.length>=3,plano.slice(0,200));
+      aprendido=aprendidoVacio();
+      const n=importarVocabulario({...exp,palabras:[...exp.palabras,{sec:secDe(M),piso:'seis',manual:'6',conf:9}]});
+      fila('aprende','y se carga en otro teléfono con los mismos candados',n>=3&&palabrasAprendidasPara('burros',M).length===1&&!aprendido.palabras.some(p=>p.manual==='6'));
+      const id=aprendido.palabras.find(p=>p.piso==='burros').id;
+      borrarAprendido('palabra',id);
+      fila('aprende','borrar una palabra la quita de la búsqueda',!palabrasAprendidasPara('burros',M).length&&top(q1,M)!==5);
+      fila('aprende','un archivo raro no mete nada',limpiarAprendido({palabras:[{sec:'x',piso:'<b>',manual:'y'},'z'],atajos:[{sec:'x',pagina:-3,terminos:['a']}]}).palabras.length===0);
+      /* La memoria vieja se borra del teléfono al cargar. */
+      try{localStorage.setItem('ap_memory_v5','{"fails":[]}')}catch{}
+      const guardado=aprendido;cargarAprendido();aprendido=guardado;
+      let vieja=null;try{vieja=localStorage.getItem('ap_memory_v5')}catch{}
+      fila('aprende','la memoria vieja se borra del teléfono',vieja===null);
+    }finally{
+      docs=g.docs;docChunks=g.docChunks;appState.manualActivo=g.activo;history=g.history;rutaActual=g.ruta;
+      aprendido=g.ap;tablero=g.tab;appState.aprendeEnabled=g.en;midiendo=g.mid;medicionActual=g.med;ultimaConsultaAprende=g.ult;
+      guardarAprendido();guardarTablero();
       rebuildCorpus();
     }
   }
