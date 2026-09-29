@@ -309,6 +309,10 @@ node eval/comparar.mjs eval/resultados/base__….json eval/resultados/cambio__�
 algo se rompió) y en qué capa siguen las fallas. Con el modo manual y los 5 manuales reales, el
 banco reproduce la medición de la app: 56/86 con sección elegida, 52/86 sin elegirla.
 
+**Qué sigue:** la [hoja de ruta](docs/HOJA-DE-RUTA.md) dice cómo trabajamos (nada mejora sin
+número), dónde estamos por capa y el orden de lo que viene: la línea base con modelo real y
+después la app aprendiendo del piso.
+
 ## Cómo está hecho
 
 - **Un solo archivo `index.html`.** Sin build, sin bundler, sin backend propio, sin
