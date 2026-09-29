@@ -46,6 +46,15 @@ const b = await pw.chromium.launch({
   executablePath: process.env.CHROMIUM || undefined,
   channel: process.env.CANAL || undefined,
 });
+/* La versión que viaja en los resultados de medición (index.html) tiene que ser
+   la del service worker: si no, dos corridas con código distinto se leerían
+   como la misma. */
+const vSw = (fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8').match(/VERSION='([^']+)'/) || [])[1];
+const vApp = (fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8').match(/const VERSION_APP='([^']+)'/) || [])[1];
+if (!vSw || vSw !== vApp) {
+  console.log(`✗ [versión] sw.js dice ${vSw} e index.html dice ${vApp}`);
+  await b.close(); srv.close(); process.exit(1);
+}
 let malas = [{}];
 try {
   const p = await b.newPage();

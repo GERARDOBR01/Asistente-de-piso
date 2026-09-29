@@ -1737,7 +1737,31 @@ function textoDeGemini(obj){
 function errorDeProveedor(status,data){
   const e=new Error(data?.error?.message||`Error ${status}`);
   e.status=status;
+  const c=claseDeError(status,data);
+  e.clase=c.clase;e.espera=c.espera;
   return e
+}
+/* No todo 429 es lo mismo, y tratarlo igual ensuciaba la medición. El límite
+   POR MINUTO del plan gratis se pasa esperando lo que el proveedor dice
+   (Gemini lo manda en `RetryInfo.retryDelay`); la cuota DEL DÍA no se pasa
+   esperando ni cambiando de modelo: hay que parar. Antes los dos eran
+   «saturación»: tras dos seguidos se cambiaba a Flash-Lite diez minutos y la
+   medición mezclaba modelos sin saberlo, y el día agotado seguía marcando
+   error pregunta tras pregunta. */
+function claseDeError(status,data){
+  const err=data&&data.error||{};
+  const msg=String(err.message||'')+' '+String(err.code||'')+' '+String(err.status||'');
+  const det=Array.isArray(err.details)?err.details:[];
+  const ids=det.flatMap(d=>Array.isArray(d.violations)?d.violations.map(v=>String(v.quotaId||'')+' '+String(v.quotaMetric||'')):[]).join(' ');
+  const seg=t=>{const m=String(t||'').match(/([\d.]+)\s*s\b/);return m?Math.ceil(parseFloat(m[1])*1000):null};
+  const espera=seg(det.map(d=>d.retryDelay).find(Boolean))??seg((String(err.message||'').match(/(?:retry|try again) in ([\d.]+\s*s)/i)||[])[1]);
+  if(status===429||/resource.?exhausted|quota|rate.?limit/i.test(msg)){
+    if(/per.?day|perday/i.test(ids+' '+msg)||/insufficient_quota|billing/i.test(msg))return{clase:'cuota-dia',espera:null};
+    return{clase:'limite-minuto',espera};
+  }
+  if(status===503||/high demand|overloaded|over capacity|unavailable/i.test(msg))return{clase:'saturado',espera:null};
+  if(status===401||status===403||/api.?key not valid|unauthori[sz]ed|permission denied/i.test(msg))return{clase:'key',espera:null};
+  return{clase:status?'otro':'red',espera:null};
 }
 
 /* ════════════════════════════════════════════════
@@ -5639,6 +5663,10 @@ function txDB(modo,fn){
    guardado. La ficha y las descripciones de láminas, que costaron llamadas,
    pasan a la lectura nueva. */
 const LECTURA_VERSION=2;
+/* La versión de la app viaja en cada resultado de medición: dos corridas solo
+   se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
+   (eval/arnes.mjs comprueba que coincidan). */
+const VERSION_APP='ap-v1.5.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -6426,6 +6454,7 @@ const ERROR_KEYWORDS=[
 ];
 function formatError(err){
   const msg=err.message||'';
+  if(err.clase==='cuota-dia')return`⛔ Se acabó la cuota de hoy de tu key.\n\n<div class="err-detail"><span class="err-code">${escapeHtml(msg.slice(0,200))}</span><span class="err-solution">💡 Esperar no sirve hasta mañana. Mientras, el modo manual sigue contestando: quita la key en Ajustes o prueba otro proveedor.</span></div>`;
   const code=err.status?String(err.status):msg.match(/(\d{3})/)?.[1];
   /* El texto dice más que el número. Gemini saturado responde 503 con «high
      demand», que por el código se leería como «en mantenimiento»; y una key
@@ -6451,6 +6480,7 @@ function formatError(err){
    v7.0 — C1
 ════════════════════════════════════════════════ */
 let currentAbort = null;
+let ultimoErrorProveedor = null;   // el de la última pregunta: la medición lo lee para saber si paró la cuota
 
 function buildOpenAIStreamBody(messages, model, maxTokens, temperature) {
   return JSON.stringify({model, messages, max_tokens: maxTokens, temperature: temperature ?? 0.2, stream: true});
@@ -6577,6 +6607,7 @@ function modeloEfectivo(provider, model) {
 function marcarModelo(msgEl,model,esRespaldo){
   const label=msgEl?.querySelector('.msg-label');
   if(!label||!model)return;
+  msgEl.dataset.modelo=model;
   const pill=document.createElement('span');
   pill.className='msg-tokens msg-modelo';
   pill.textContent=nombreCortoDeModelo(model)+(esRespaldo?' · respaldo':'');
@@ -6608,19 +6639,33 @@ async function sleep(ms, signal) {
 
 /* Un solo bucle para las dos formas de llamar. `intento(modelo)` hace la
    petición; lo que regresa lleva además `model`, el que de verdad contestó. */
+const LIMITE_MINUTO_ESPERA_MAX=65000;   // el límite por minuto se reinicia a los 60 s
+const LIMITE_MINUTO_ESPERAS=2;          // dos esperas completas sin éxito: es el día, no el minuto
 async function conReintentos(provider, model, intento, {signal, onRetry, onRespaldo} = {}) {
-  let actual = modeloEfectivo(provider.id, model);
+  /* Midiendo, el modelo es la variable del experimento: no se cambia solo. */
+  const sinRespaldo = typeof midiendo !== 'undefined' && midiendo;
+  let actual = sinRespaldo ? model : modeloEfectivo(provider.id, model);
   if (actual !== model) onRespaldo?.(model, actual);
-  let saturaciones = 0;
+  let saturaciones = 0, esperas = 0;
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try {
       const r = await intento(actual);
       return {...r, model: actual};
     } catch (err) {
       if (err.name === 'AbortError') throw err;
+      if (err.clase === 'cuota-dia') throw err;
+      if (err.clase === 'limite-minuto') {
+        if (++esperas > LIMITE_MINUTO_ESPERAS) { err.clase = 'cuota-dia'; throw err; }
+        const ms = Math.min(LIMITE_MINUTO_ESPERA_MAX, Math.max(2000, (err.espera || 60000) + 1000));
+        if (onRetry) onRetry(ms, 'limite-minuto');
+        else showToast(`⏳ Límite por minuto del proveedor · sigo en ${Math.round(ms / 1000)} s`, 'warn', Math.min(ms, 6000));
+        await sleep(ms, signal);
+        attempt--;                       // esperar el minuto no gasta un reintento
+        continue;
+      }
       if (!isRetryable(err)) throw err;
-      saturaciones = esSaturacion(err) ? saturaciones + 1 : 0;
-      const respaldo = modeloDeRespaldo(provider.id, actual);
+      saturaciones = (err.clase === 'saturado' || (!err.clase && esSaturacion(err))) ? saturaciones + 1 : 0;
+      const respaldo = sinRespaldo ? null : modeloDeRespaldo(provider.id, actual);
       if (respaldo && saturaciones >= RESPALDO_TRAS) {
         respaldoActivo = {de: actual, a: respaldo, hasta: Date.now() + RESPALDO_MEMORIA};
         if (onRespaldo) onRespaldo(actual, respaldo);
@@ -6634,8 +6679,8 @@ async function conReintentos(provider, model, intento, {signal, onRetry, onRespa
         if (respaldoActivo && respaldoActivo.a === actual) respaldoActivo = null;
         throw err;
       }
-      if (onRetry) onRetry();
       const delay = RETRY_DELAYS[attempt];
+      if (onRetry) onRetry(delay, err.clase || 'otro');
       showToast(`⏳ Reintento ${attempt + 1}/${RETRY_DELAYS.length} en ${delay / 1000}s…`, 'warn', delay);
       await sleep(delay, signal);
     }
@@ -7751,7 +7796,8 @@ async function sendMessage(){
      ESPERA_MAX, se corta la espera en vez de esperar para siempre. */
   const nombreModelo=(PROVIDERS[appState.provider]?.name||'el modelo').replace(/^Google /,'');
   const inicio=Date.now();
-  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null;
+  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null,esperaLimite=0;
+  ultimoErrorProveedor=null;
   /* Con el agente, la tarjeta dice lo que está haciendo: qué página lee, qué
      lámina mira, qué busca. Es la misma espera, pero se ve el trabajo. */
   let estadoAgente='';
@@ -7766,7 +7812,8 @@ async function sendMessage(){
     const etapa=etapas.length?etapas[etapas.length-1][1]:null;
     const modeloVivo=respaldo?respaldo.a:appState.chatModel;
     caja.querySelector('.espera-txt').textContent=
-      reintento&&!streamedText?`${nombreModelo} ${nombreCortoDeModelo(modeloVivo)} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
+      esperaLimite>Date.now()&&!streamedText?`Límite por minuto de ${nombreModelo} · sigo en ${Math.ceil((esperaLimite-Date.now())/1000)} s`
+      :reintento&&!streamedText?`${nombreModelo} ${nombreCortoDeModelo(modeloVivo)} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
       :respaldo&&!streamedText?`${nombreCortoDeModelo(respaldo.de)} saturado · contesta ${nombreCortoDeModelo(respaldo.a)}`
       :estadoAgente?estadoAgente
       :etapa?`Razonando con el manual · etapa ${etapa} de 6`
@@ -7814,7 +7861,7 @@ async function sendMessage(){
         onDelta:t=>{if(!streamedText)estadoAgente='Escribiendo la respuesta con lo que leyó…';renderChunk(t)},
         onRonda:()=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);ultimoDato=Date.now()},
         onEstado:t=>{estadoAgente=t;ultimoDato=Date.now();pintarEspera()},
-        onRetry:()=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);reintento++;ultimoDato=Date.now()+(RETRY_DELAYS[reintento-1]||0);pintarEspera()},
+        onRetry:(ms,clase)=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);if(clase==='limite-minuto'){esperaLimite=Date.now()+ms}else reintento++;ultimoDato=Date.now()+(ms||RETRY_DELAYS[reintento-1]||0);pintarEspera()},
         onRespaldo:(de,a)=>{streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);respaldo={de,a};reintento=0;ultimoDato=Date.now();pintarEspera()}});
       if(chatDescartado)return;
       if(pendingSanitize)clearTimeout(pendingSanitize);
@@ -7828,6 +7875,8 @@ async function sendMessage(){
       return;
     }catch(err){
       if(err.name==='AbortError'||chatDescartado)throw err;
+      /* Sin cuota o sin key, el clásico tampoco va a poder: se dice una vez. */
+      if(err.clase==='cuota-dia'||err.clase==='key')throw err;
       console.warn('agente → motor clásico',err);
       ultimaTrazaAgente={motor:'clasico',fallo:String(err.message||err).slice(0,200)};
       if(pendingSanitize)clearTimeout(pendingSanitize);
@@ -7895,9 +7944,10 @@ async function sendMessage(){
       /* Un corte a media respuesta se reintenta desde cero, pero el texto del
          intento fallido seguía en streamedText: la respuesta salía con media
          copia pegada delante. */
-      onRetry:()=>{
+      onRetry:(ms,clase)=>{
         streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
-        reintento++;ultimoDato=Date.now()+(RETRY_DELAYS[reintento-1]||0);pintarEspera();
+        if(clase==='limite-minuto')esperaLimite=Date.now()+ms;else reintento++;
+        ultimoDato=Date.now()+(ms||RETRY_DELAYS[reintento-1]||0);pintarEspera();
       },
       /* El elegido salió saturado y contesta otro: la tarjeta lo dice y los
          reintentos vuelven a contar desde cero con el nuevo. */
@@ -7943,6 +7993,8 @@ async function sendMessage(){
         loaderEl.remove();
       }
     } else {
+      ultimoErrorProveedor=err;
+      if(err.clase)loaderEl.dataset.claseError=err.clase;
       loaderEl.classList.remove('loading');
       msgBody.style.color='var(--amber)';
       msgBody.innerHTML=safeMarkdown(formatError(err));
@@ -9287,7 +9339,7 @@ async function medirPregunta(x,motor,doc,opc={}){
       const el=[...box.querySelectorAll('.msg.assistant')].pop();
       if(tPrimer===null&&el&&!el.classList.contains('loading')&&(el.querySelector('.msg-body')?.textContent||'').trim())tPrimer=performance.now()-t0;
     },50);
-    ultimaTrazaAgente=null;
+    ultimaTrazaAgente=null;ultimoErrorProveedor=null;
     try{await preguntar(x.q,true)}finally{clearInterval(iv)}
     const tTotal=performance.now()-t0;
     const el=[...box.querySelectorAll('.msg.assistant')].pop();
@@ -9304,6 +9356,8 @@ async function medirPregunta(x,motor,doc,opc={}){
       traza:el?.querySelector('.msg-traza')?.innerText||'',
       contesto:el?.querySelector('.msg-modelo')?.textContent||'',
       error:!!el?.querySelector('.err-detail'),
+      claseError:(el&&el.dataset.claseError)||(ultimoErrorProveedor&&ultimoErrorProveedor.clase)||null,
+      modeloReal:(el&&el.dataset.modelo)||null,
       agente:ultimaTrazaAgente};
   }finally{appState.motor=motorPrevio;rutaForzada=null}
 }
@@ -9355,7 +9409,8 @@ async function correrMedicion(){
       }
     }
     const claveFila=(motor,libre,x)=>motor+'|'+(libre?1:0)+'|'+x.seccion+'|'+x.q;
-    const hechas=new Set(m.filas.map(f=>claveFila(f.motor,f.libre,f)));
+    /* Una fila con error no es un resultado: al reanudar se vuelve a preguntar. */
+    const hechas=new Set(m.filas.filter(f=>!f.error).map(f=>claveFila(f.motor,f.libre,f)));
     const tanda=[];
     for(const x of m.preguntas)for(const motor of m.motores)if(!hechas.has(claveFila(motor,m.libre,x)))tanda.push({x,motor});
     const guardar=()=>{try{localStorage.setItem(m.clave,JSON.stringify({filas:m.filas,motores:m.motores,libre:m.libre}))}catch{}};
@@ -9367,16 +9422,22 @@ async function correrMedicion(){
       m.estado=`${motor}${m.libre?' sin sección':''} · ${i+1} de ${tanda.length} · ${x.q.slice(0,60)}`;pintarMedicion();
       const r=await medirPregunta(x,motor,doc,{libre:m.libre,esperadoDoc});
       r.esperado=esperadoDoc?nombreDeSeccion(esperadoDoc):null;
-      const fila={...x,motor,libre:m.libre,...r,...calificarMedicion(x,r),modelo:motor==='manual'?'sin modelo':appState.chatModel,fecha:new Date().toISOString()};
+      const fila={...x,motor,libre:m.libre,...r,...calificarMedicion(x,r),
+        modelo:motor==='manual'?'sin modelo':(r.modeloReal||appState.chatModel),modeloPedido:motor==='manual'?null:appState.chatModel,
+        lectura:LECTURA_VERSION,version:VERSION_APP,fecha:new Date().toISOString()};
+      const k=claveFila(motor,m.libre,x);
+      m.filas=m.filas.filter(f=>claveFila(f.motor,f.libre,f)!==k);
       m.filas.push(fila);
       guardar();
       pintarMedicion();
       /* Lo que cortó la cuota del día no es un resultado: se quita, y mañana
          se retoma desde aquí con el mismo examen. */
-      if(r.error&&/quota|per day|resource.?exhausted|cuota/i.test(r.cuerpo)){
+      if(r.error&&(r.claseError==='cuota-dia'||r.claseError==='key'||/quota|per day|resource.?exhausted|cuota/i.test(r.cuerpo))){
         m.filas.pop();
         guardar();
-        showToast('Se acabó la cuota del día de tu key. Vuelve a abrir el mismo examen mañana: sigue donde se quedó.','warn',9000);
+        showToast(r.claseError==='key'
+          ?'La key no sirve (el proveedor la rechazó). Revísala en Ajustes y vuelve a abrir el examen: sigue donde se quedó.'
+          :'Se acabó la cuota del día de tu key. Vuelve a abrir el mismo examen mañana: sigue donde se quedó.','warn',9000);
         break;
       }
       /* La pausa es por la cuota por minuto del proveedor: el modo manual no la gasta. */
@@ -9393,8 +9454,10 @@ async function correrMedicion(){
 }
 function resultadoMedicion(){
   const m=medicionActual;
-  return{examen:m.nombre,fecha:new Date().toISOString(),proveedor:appState.provider,modelo:appState.chatModel,
-    manuales:docs.map(d=>({seccion:nombreDeSeccion(d.name),paginas:d.pageCount||null,ficha:estadoDeFicha(d.name).replace(/^ · /,'')||'sin ficha'})),
+  return{examen:m.nombre,fecha:new Date().toISOString(),version:VERSION_APP,lectura:LECTURA_VERSION,
+    proveedor:appState.provider,modelo:appState.chatModel,libre:!!m.libre,
+    manuales:docs.map(d=>({seccion:nombreDeSeccion(d.name),paginas:d.pageCount||null,lectura:(d.lectura||1),
+      paginasSinFicha:paginasSinFicha(d.name).length,ficha:estadoDeFicha(d.name).replace(/^ · /,'')||'sin ficha'})),
     resumen:resumenMedicion(m.filas),resultados:m.filas}
 }
 async function compartirMedicion(soloDescargar){
@@ -10176,6 +10239,22 @@ function pruebasRobustez(){
       votarConsulta('z','mal','esperaba la pág. 12');
       fila('medición','el 👎 guarda su nota en el registro',tablero[0].voto==='mal'&&tablero[0].nota==='esperaba la pág. 12');
     }finally{tablero=gT;guardarTablero()}
+  }
+  /* Errores del proveedor: el minuto se espera, el día se para, la saturación cambia de modelo. */
+  {
+    const gMin={error:{code:429,status:'RESOURCE_EXHAUSTED',message:'You exceeded your current quota. Please retry in 37.2s.',
+      details:[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'}]},
+        {'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'37s'}]}};
+    const gDia={error:{code:429,status:'RESOURCE_EXHAUSTED',message:'You exceeded your current quota.',
+      details:[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}]}]}};
+    const a=claseDeError(429,gMin),b=claseDeError(429,gDia);
+    fila('errores','Gemini, límite por minuto: se espera lo que dice (37 s)',a.clase==='limite-minuto'&&a.espera===37000,JSON.stringify(a));
+    fila('errores','Gemini, cuota del día: se para',b.clase==='cuota-dia',JSON.stringify(b));
+    const c=claseDeError(429,{error:{message:'Rate limit reached for gpt-4o-mini. Please try again in 20s.',code:'rate_limit_exceeded'}});
+    const d=claseDeError(429,{error:{message:'You exceeded your current quota, please check your plan and billing details.',code:'insufficient_quota'}});
+    fila('errores','OpenAI: límite por minuto y cuota agotada se distinguen',c.clase==='limite-minuto'&&c.espera===20000&&d.clase==='cuota-dia',JSON.stringify([c,d]));
+    fila('errores','503 «high demand» es saturación',claseDeError(503,{error:{message:'This model is currently experiencing high demand.'}}).clase==='saturado');
+    fila('errores','la cuota del día se dice como tal',/cuota de hoy/.test(formatError(errorDeProveedor(429,gDia))));
   }
   /* Ruta: tres manuales inventados y ninguno elegido. */
   {

@@ -62,7 +62,7 @@ try {
     }
     vistas.push(body);
     const res = guion(body, vistas.length);
-    if (res.status) return r.fulfill({ status: res.status, contentType: 'application/json', body: JSON.stringify({ error: { message: res.msg } }) });
+    if (res.status) return r.fulfill({ status: res.status, contentType: 'application/json', body: JSON.stringify(res.cuerpo || { error: { message: res.msg } }) });
     return r.fulfill({ status: 200, contentType: 'text/event-stream', body: sse(res) });
   });
 
@@ -174,6 +174,56 @@ try {
   });
   revisa(medM.motor === 'manual' && medM.libre && medM.ok && medM.seccionOk && vistas.length === 0,
     'el modo manual se mide «como el asesor» sin llamar al modelo y dice qué sección eligió', JSON.stringify(medM));
+
+  /* 9 · Límite por minuto: espera lo que dice el proveedor y sigue con el MISMO modelo */
+  const minuto = { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Please retry in 1s.',
+    details: [{ violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier' }] }, { retryDelay: '1s' }] } };
+  const dia = { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota.',
+    details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } };
+  const OK15 = [parte('[PENSAMIENTO INTERNO]\nEVIDENCIA: pág. 6 · SENSORES · «el sensor va oculto a 15 cm de la bastilla»\n[RESPUESTA FINAL]\nVa a **15 cm** de la bastilla (pág. 6).\nCERTEZA: ALTA')];
+  let pedidos = [];
+  guion = (body, n) => n === 1 ? { status: 429, cuerpo: minuto } : OK15;
+  vistas = [];
+  await p.route('**/models/**', async (r, req) => { pedidos.push(req.url()); return r.fallback(); });
+  await p.evaluate(() => { history = []; respaldoActivo = null; });
+  await preguntar('¿a qué altura va el sensor?');
+  u = await ultimo();
+  revisa(/15 cm/.test(u.cuerpo) && vistas.length === 2 && pedidos.every(x => /gemini-3\.5-flash:/.test(x) || !/flash-lite/.test(x)),
+    'un límite por minuto espera y contesta el mismo modelo, sin pasar al respaldo', `${vistas.length} pedidos`);
+
+  /* 10 · Cuota del día en plena medición: para, no ensucia y se retoma */
+  guion = () => ({ status: 429, cuerpo: dia });
+  vistas = [];
+  const medD = await p.evaluate(async () => {
+    medicionActual = { nombre: 'examen cuota', clave: 'ap_medicion_prueba_d', motores: ['clasico'], estado: 'listo', filas: [],
+      preguntas: validarExamen([{ q: '¿a qué altura va el sensor?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] },
+        { q: '¿cuánto pasillo dejo?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['80 cm'], p: [9] }]) };
+    mostrarPanelMedicion();
+    await correrMedicion();
+    const out = { filas: medicionActual.filas.length, respaldo: !!respaldoActivo };
+    cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba_d');
+    return out;
+  });
+  revisa(medD.filas === 0 && vistas.length === 1 && !medD.respaldo,
+    'la cuota del día para la medición en la primera pregunta, sin guardarla como resultado ni cambiar de modelo', JSON.stringify({ ...medD, pedidos: vistas.length }));
+
+  /* 11 · Midiendo, la saturación no cambia de modelo: la fila es error, no otro modelo */
+  guion = () => ({ status: 503, msg: 'This model is currently experiencing high demand.' });
+  pedidos = [];
+  const medS = await p.evaluate(async () => {
+    respaldoActivo = null;
+    medicionActual = { nombre: 'examen saturado', clave: 'ap_medicion_prueba_s', motores: ['clasico'], estado: 'listo', filas: [],
+      preguntas: validarExamen([{ q: '¿a qué altura va el sensor?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] }]) };
+    mostrarPanelMedicion();
+    await correrMedicion();
+    const f = medicionActual.filas[0] || {};
+    const out = { error: f.error, modelo: f.modelo, respaldo: !!respaldoActivo };
+    cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba_s');
+    return out;
+  });
+  revisa(medS.error && medS.modelo === 'gemini-3.5-flash' && !medS.respaldo && !pedidos.some(x => /flash-lite/.test(x)),
+    'midiendo, un modelo saturado queda como error y no se contesta con otro', JSON.stringify(medS));
+  await p.unroute('**/models/**');
 
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
