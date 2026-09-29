@@ -19,6 +19,9 @@
 //   --modelo <m>         por defecto gemini-3.5-flash / gpt-4o-mini.
 //   --etiqueta <e>       nombre de la corrida, para compararla después.
 //   --salida <dir>       por defecto eval/resultados (fuera de git).
+//   --aprendido <json>   un «⬇ Vocabulario del piso» exportado de la app: se
+//                        carga y se mide «con lo aprendido», para compararlo
+//                        con la misma corrida sin él.
 //   --continuar <json>   un resultado anterior del banco o de la app: lo que ya
 //                        está bien medido no se vuelve a preguntar (la cuota del
 //                        día del plan gratis corta a media tanda).
@@ -44,6 +47,7 @@ const MODELO = arg('modelo', PROVEEDOR === 'openai' ? 'gpt-4o-mini' : 'gemini-3.
 const ETIQUETA = arg('etiqueta', 'banco');
 const SALIDA = arg('salida', path.join(RAIZ, 'eval/resultados'));
 const CONTINUAR = arg('continuar');
+const APRENDIDO = arg('aprendido');
 
 if (!MANUALES || !EXAMEN) { console.error('Faltan --manuales <carpeta> y --examen <json>.'); process.exit(2); }
 if (MOTORES.some(m => !['clasico', 'agente', 'manual'].includes(m))) { console.error('Motores: clasico, agente, manual.'); process.exit(2); }
@@ -58,6 +62,7 @@ if (path.resolve(MANUALES).startsWith(RAIZ + path.sep)) {
 const pdfs = fs.readdirSync(MANUALES).filter(f => /\.pdf$/i.test(f)).map(f => path.join(MANUALES, f));
 if (!pdfs.length) { console.error('No hay PDF en ' + MANUALES); process.exit(2); }
 const examen = JSON.parse(fs.readFileSync(EXAMEN, 'utf8'));
+const vocab = APRENDIDO ? JSON.parse(fs.readFileSync(APRENDIDO, 'utf8')) : null;
 const previo = CONTINUAR ? JSON.parse(fs.readFileSync(CONTINUAR, 'utf8')) : null;
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json',
@@ -108,12 +113,16 @@ try {
     appState.provider = prov; appState.apiKey = key; appState.chatModel = modelo;
   }, { prov: PROVEEDOR, key: KEY, modelo: MODELO });
 
-  await p.evaluate(({ examen, motores, libre, previo }) => {
+  if (vocab) {
+    const n = await p.evaluate(v => importarVocabulario(v), vocab);
+    console.log(`· vocabulario del piso: ${n} caminos cargados`);
+  }
+  await p.evaluate(({ examen, motores, libre, previo, conAprendido }) => {
     const preguntas = validarExamen(examen);
     const filas = previo && Array.isArray(previo.resultados) ? previo.resultados.filter(f => !f.error) : [];
-    medicionActual = { nombre: examen.examen || 'banco', clave: 'ap_medicion_banco', preguntas, filas, motores, libre, estado: 'listo' };
+    medicionActual = { nombre: examen.examen || 'banco', clave: 'ap_medicion_banco', preguntas, filas, motores, libre, conAprendido, estado: 'listo' };
     mostrarPanelMedicion();
-  }, { examen, motores: MOTORES, libre: LIBRE, previo });
+  }, { examen, motores: MOTORES, libre: LIBRE, previo, conAprendido: !!vocab });
 
   const reloj = setInterval(async () => {
     try { console.log('  ' + await p.evaluate(() => medicionActual.estado)); } catch {}

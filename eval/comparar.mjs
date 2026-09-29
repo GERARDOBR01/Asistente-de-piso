@@ -13,14 +13,18 @@ const [A, B] = process.argv.slice(2);
 if (!A || !B) { console.error('Uso: node eval/comparar.mjs antes.json despues.json'); process.exit(2); }
 const leer = f => JSON.parse(fs.readFileSync(f, 'utf8'));
 const a = leer(A), b = leer(B);
+// Lo aprendido del piso no entra en la clave: comparar la misma corrida sin y
+// con lo aprendido es justo para lo que sirve. Sí se dice arriba si cambió.
 const clave = f => [f.motor, f.libre ? 'libre' : 'fija', f.seccion, f.q].join('|');
 const grupo = f => f.motor + (f.libre ? ' · sin sección' : '');
+const ap = r => typeof r.aprendizaje === 'object' && r.aprendizaje ? `${r.aprendizaje.palabras} palabras, ${r.aprendizaje.atajos} atajos` : (r.aprendizaje || 'apagado');
 const filasA = new Map((a.resultados || []).map(f => [clave(f), f]));
 const filasB = new Map((b.resultados || []).map(f => [clave(f), f]));
 
 const linea = (k, va, vb) => va === vb ? null : `  ${k}: ${va ?? '—'} → ${vb ?? '—'}`;
 const cambios = [linea('versión', a.version, b.version), linea('lectura', a.lectura, b.lectura),
-  linea('modelo', a.modelo, b.modelo), linea('proveedor', a.proveedor, b.proveedor)].filter(Boolean);
+  linea('modelo', a.modelo, b.modelo), linea('proveedor', a.proveedor, b.proveedor),
+  linea('lo aprendido del piso', ap(a), ap(b))].filter(Boolean);
 console.log(`Antes:   ${A}\nDespués: ${B}`);
 if (cambios.length) console.log('Cambió:\n' + cambios.join('\n'));
 

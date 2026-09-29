@@ -51,6 +51,11 @@ try {
   const parte = t => ({ candidates: [{ content: { parts: [{ text: t }] } }] });
   await p.route('https://generativelanguage.googleapis.com/**', r => {
     const url = r.request().url(), body = JSON.parse(r.request().postData() || '{}');
+    if (url.includes(':generateContent') && /PALABRAS DEL PISO/.test(body.contents[0].parts[0].text)) {
+      /* La IA propone: una buena, una con cifra y una palabra que nadie escribió. */
+      const pares = [{ piso: 'cascabel', manual: 'sensor' }, { piso: 'cascabel', manual: '99' }, { piso: 'inventada', manual: 'sensor' }];
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parte(JSON.stringify({ pares }))) });
+    }
     if (url.includes(':generateContent')) {
       const n = Number((body.contents[0].parts[0].text.match(/PÁGINA (\d+)\./) || [])[1]);
       const ficha = n === 8
@@ -248,6 +253,42 @@ try {
   });
   revisa(chq.some(t => /key responde/.test(t)) && chq.some(t => /Costo estimado/.test(t)) && !chq.some(t => t.startsWith('✗')),
     'el chequeo antes de medir prueba la key con una llamada y estima el costo', chq.join(' | '));
+
+  /* 14 · Aprende del piso: la medición es del código salvo que pida lo aprendido */
+  vistas = [];
+  const ap = await p.evaluate(async () => {
+    const D = docs[0].name, gT = tablero;
+    aprendido = aprendidoVacio();
+    aprenderPalabra(D, 'pitador', 'sensor', 'lamina', 'sim1');
+    aprenderPalabra(D, 'pitador', 'sensor', 'reformulacion', 'sim2');
+    const antes = JSON.stringify(aprendido);
+    const medir = async conAprendido => {
+      medicionActual = { nombre: 'examen del piso', clave: 'ap_medicion_prueba_a', motores: ['manual'], conAprendido, estado: 'listo', filas: [],
+        preguntas: validarExamen([{ q: '¿a qué altura va el pitador?', tipo: 'dato', seccion: '140 CASUAL HOMBRE', k: ['15 cm'], p: [6] }]) };
+      mostrarPanelMedicion();
+      const cb = document.getElementById('med-aprendido'); if (cb) cb.checked = conAprendido;
+      await correrMedicion();
+      const f = medicionActual.filas[0] || {}, r = resultadoMedicion();
+      cerrarPanelMedicion(); localStorage.removeItem('ap_medicion_prueba_a');
+      return { ok: f.ok, aprendido: f.aprendido, global: r.aprendizaje, grupos: Object.keys(r.resumen) };
+    };
+    const sin = await medir(false), con = await medir(true);
+    const intacto = JSON.stringify(aprendido) === antes;
+    /* La IA propone con las palabras raras del tablero; nada queda activo. */
+    tablero = [{ id: 'sim3', t: Date.now(), q: '¿dónde va el cascabel del pantalón?', sec: secDe(D), ok: false, modo: 'manual', voto: null }];
+    const n = await proponerConIA(D, { silencioso: true });
+    const prop = aprendido.palabras.filter(x => x.origen === 'ia').map(x => ({ piso: x.piso, manual: x.manual, activa: palabraActiva(x) }));
+    tablero = gT; guardarTablero();
+    aprendido = aprendidoVacio(); guardarAprendido();
+    return { sin, con, intacto, n, prop };
+  });
+  revisa(ap.sin.ok === false && ap.sin.aprendido === 'apagado' && ap.sin.global === 'apagado',
+    'la medición por defecto no usa lo aprendido en el teléfono', JSON.stringify(ap.sin));
+  revisa(ap.con.ok === true && /1 palabras/.test(ap.con.aprendido) && ap.con.global?.palabras === 1 && ap.con.grupos.includes('manual · con lo aprendido'),
+    '«con lo aprendido» la palabra del piso llega y queda dicho en el resultado', JSON.stringify(ap.con));
+  revisa(ap.intacto, 'medir no enseña nada');
+  revisa(ap.n === 1 && ap.prop.length === 1 && ap.prop[0].manual === 'sensor' && !ap.prop[0].activa,
+    'la IA propone con los candados y lo propuesto queda sin usar', JSON.stringify(ap.prop));
 
   /* ── OpenAI simulado: tool_calls que llegan en trozos ── */
   const vistasOpenAI = [];
