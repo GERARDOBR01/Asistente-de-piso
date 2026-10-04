@@ -1285,7 +1285,7 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
     <div class="api-experta-row">
       <span class="api-experta-label">Modelo</span>
       <div class="api-experta-btns">
-        <button class="api-btn active" data-provider="gemini" data-model="gemini-3.5-flash" onclick="switchExpert(this)" title="Gemini vía Google AI Studio">Gemini</button>
+        <button class="api-btn active" data-provider="gemini" data-model="gemini-3.5-flash-lite" onclick="switchExpert(this)" title="Gemini vía Google AI Studio">Gemini</button>
         <button class="api-btn" data-provider="openai" data-model="gpt-4o-mini" onclick="switchExpert(this)" title="GPT-4o mini vía OpenAI">OpenAI</button>
       </div>
     </div>
@@ -1360,6 +1360,15 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
           <option value="agente">Agente lector: la IA lee tu manual y mira las láminas</option>
           <option value="clasico">Clásico: búsqueda local y razonamiento en 6 etapas</option>
         </select>
+      </div>
+
+      <div>
+        <div class="fld-label">Modo de respuesta (motor clásico)</div>
+        <select class="model-select" id="modo-respuesta-select" onchange="pintarNotaDelModo()">
+          <option value="razonado">Razonado · seis etapas</option>
+          <option value="rapido">Rápido · un paso de lectura</option>
+        </select>
+        <div class="cfg-nota" id="modo-respuesta-nota"></div>
       </div>
 
       <details class="avanzado">
@@ -1651,8 +1660,14 @@ const PROVIDERS={
     hint:'API key de Google AI Studio. <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>',
     /* Solo modelos estables que cualquier key nueva puede usar. Los 2.5 quedaron
        limitados a cuentas que ya los usaban, 3-flash-preview lo reemplaza
-       3.6-flash y 3.1-flash-lite se apaga en mayo de 2027. */
-    chatModels:['gemini-3.5-flash','gemini-3.6-flash','gemini-3.8-flash','gemini-3.5-flash-lite'],
+       3.6-flash y 3.1-flash-lite se apaga en mayo de 2027.
+       El primero es el de fábrica. Es 3.5 Flash-Lite porque es el que contestó
+       todas las mediciones —3.5 Flash salía saturado y respondía su respaldo, que
+       es este—: 55/60 con los 30 manuales reales y 24/24 con el demo, en 1-2 s.
+       3.8 Flash no baja de pensamiento LOW: en el demo tardó ~6 s de mediana,
+       sacó 23/24, dos de sus respuestas llegaron cortadas y se saturó a media
+       prueba. Queda en la lista para quien lo quiera. */
+    chatModels:['gemini-3.5-flash-lite','gemini-3.5-flash','gemini-3.6-flash','gemini-3.8-flash'],
     _toGeminiMessages(messages){
       const sys=messages.find(m=>m.role==='system');
       const rest=messages.filter(m=>m.role!=='system');
@@ -1917,7 +1932,15 @@ const SYNONYMS={
   'decorar':['props','estilo de vida','composicion','ambientar'],
   'combinar':['cruce mercancia','cross merchandising','silueta','coordinar'],
   'mover':['rotar','reubicar','cambiar','trasladar'],
-  'vestir':['montar maniqui','armar silueta','coordinar outfit'],
+  /* «¿Cada cuánto se viste el maniquí?» y la lámina dice «actualiza la
+     vestimenta cada 15 días»: ni «viste» llega a «vestir» —la derivación no va
+     al infinitivo— ni nadie escribe «vestimenta». Las formas del asesor van en
+     la lista, como en «revisar». «visto» no: los manuales dicen «visto de
+     frente». */
+  'vestir':['montar maniqui','armar silueta','coordinar outfit','vestimenta','viste','visten','vestirlo'],
+  /* «La ropa del maniquí»: los manuales dicen prendas o vestimenta, casi nunca
+     ropa. ACCESORIOS HOMBRE no la escribe ni una vez. */
+  'ropa':['prenda','prendas','vestimenta'],
   'armar':['montar','instalar','hacer','construir','organizar'],
   'montar':['armar','instalar','exhibir','colocar'],
   'limpiar':['limpieza','basicos exhibicion','mantenimiento'],
@@ -2083,6 +2106,7 @@ function rebuildCorpus(){
   bm25.df=df;
   vocabTrigramas=null;
   vocabFonetico=null;
+  vocabLeido=null;
   foneticoPorDoc=new Map();
   verbosVistos=new Map();
   nombresEnTexto=null;
@@ -2187,7 +2211,35 @@ function indiceFoneticoDeDoc(doc){
   foneticoPorDoc.set(doc,m);
   return m
 }
+/* Las palabras en inglés se escriben como suenan: «snikers» es SNEAKERS, y los
+   trigramas lo llevaban a «stickers» —de Papelería, a dos letras— con lo que «ke
+   marcas ban en snikers» salía en blanco en ZAPATOS. Se indexa cómo se lee la
+   palabra del manual en voz alta: «ea» y «ee» suenan i, «oo» suena u. Solo
+   cuenta el sonido idéntico, nunca el parecido. */
+const COMO_SE_LEE=t=>t.replace(/ea|ee/g,'i').replace(/oo/g,'u');
+let vocabLeido=null;
+function indiceLeido(){
+  if(vocabLeido)return vocabLeido;
+  const m=new Map();
+  for(const t in bm25.df){
+    if(t.length<4||COMO_SE_LEE(t)===t)continue;
+    const k=fonetica(COMO_SE_LEE(t)),a=m.get(k);
+    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
+  }
+  return vocabLeido=m
+}
+/* El índice también lee así palabras españolas —«proveedor» sonaría
+   «probidor»—, que nadie pronuncia de esa forma. Por eso la lectura en inglés
+   solo gana a una apuesta floja: si el corrector de siempre encuentra algo a una
+   letra o que suena igual en español, manda él («probidor» → «probador»). */
 function masParecida(w){
+  const porLetras=masParecidaPorLetras(w);
+  const leida=w.length>=4&&indiceLeido().get(fonetica(w));
+  if(!leida||leida===w)return porLetras;
+  if(porLetras&&(distanciaEdicion(w,porLetras)<=1||fonetica(porLetras)===fonetica(w)))return porLetras;
+  return leida
+}
+function masParecidaPorLetras(w){
   const activo=docChunks.length&&appState.manualActivo?appState.manualActivo:null;
   const delActivo=activo?vocabDeDoc(activo):null;
   const enActivo=t=>!!delActivo&&delActivo.has(t);
@@ -2224,6 +2276,11 @@ function masParecida(w){
       if(t.length!==w.length||t[0]!==w[0]||t===w)continue;
       if(activo&&!enActivo(t))continue;
       if([...t].sort().join('')!==firma)continue;
+      /* Letras movidas, no otra palabra con las mismas letras: «cartón» es
+         anagrama de «contar» (a cuatro ediciones) y se corregía a ella, así que
+         «¿las plumas se quedan en su caja de cartón?» perdía el aviso de que el
+         manual no habla de cartón. «Trevsik» está a una. */
+      if(distanciaEdicion(w,t)>2)continue;
       if(bm25.df[t]>anaDf){anaDf=bm25.df[t];ana=t}
     }
     if(ana&&(activo||!mejor))return ana;
@@ -2534,9 +2591,51 @@ function seccionesNombradasEnPregunta(q){
   /* Con un solo manual cargado no hay con qué confundirse. */
   if(lista.length<2)return[];
   const toks=new Set(tokenize(q||''));
-  return lista.filter(id=>id.terminos.some(t=>toks.has(t)))
+  /* Singular o plural da igual: «la corbata en camisas» nombra CAMISAS Y
+     CORBATAS igual que «las corbatas». El género no: «fino» no es MESA FINA.
+     Cada sección recuerda con qué palabra se la nombró (`termino`): con otra
+     sección activa, `decidirSeccion` mira si esa palabra también es de la
+     activa antes de mandar al asesor a otra. */
+  const nombra=t=>toks.has(t)||toks.has(t+'s')||toks.has(t+'es')||(t.length>4&&t.endsWith('s')&&(toks.has(t.slice(0,-1))||(t.endsWith('es')&&toks.has(t.slice(0,-2)))));
+  const out=[];
+  for(const id of lista){const t=id.terminos.find(nombra);if(t)out.push({...id,termino:t})}
+  return out
 }
 function seccionNombradaEnPregunta(q){return seccionesNombradasEnPregunta(q)[0]||null}
+/* ¿La palabra va dicha como nombre de sección? Al principio de la pregunta o
+   justo detrás de «en», «de» o «para», sin artículo: «en muebles», «papelería
+   qué va en el POS». Con artículo —«los muebles», «la ropa»— es un tema. */
+function dichaComoSeccion(q,formas){
+  const t=normalizeText(q||'').split(/\s+/).filter(Boolean);
+  return t.some((w,i)=>formas.includes(w)&&(i===0||/^(en|de|para)$/.test(t[i-1])))
+}
+/* La sección que no tiene ni una palabra propia —101 MUEBLES solo tiene su
+   número, GOURMET ni eso— también se nombra en el piso: «en muebles, ¿qué
+   pasillo dejo?». La palabra suelta no identifica, porque todos los manuales
+   hablan de muebles; pero dicha COMO sección sí (`dichaComoSeccion`). «¿Qué va
+   en los muebles del POS?» no la nombra. Y solo para elegir dónde buscar cuando
+   no hay sección activa (`enrutarSeccion`): con una elegida, «muebles» es tema
+   de esa sección y no un motivo para mandar al asesor a otra. La palabra tiene
+   que ser exclusiva de un nombre: «hombres» no vale, porque está en ZAPATOS
+   HOMBRES y en ACCESORIOS HOMBRE. */
+function seccionNombradaComoTal(q){
+  if(docs.length<2)return null;
+  const ids=identificadoresDeSeccion();
+  const conPalabra=new Set(ids.filter(i=>i.terminos.some(t=>!/^\d+$/.test(t))).map(i=>i.docName));
+  const palabras=docs.map(d=>({docName:d.name,nombre:nombreDeSeccion(d.name),
+    toks:tokenize(nombreDeSeccion(d.name)).filter(t=>t.length>=4&&!/^\d+$/.test(t)&&t!=='manual')}));
+  const ajenas=d=>new Set(palabras.filter(p=>p.docName!==d.docName).flatMap(p=>p.toks.flatMap(t=>variantes(t))));
+  const hallados=new Set();
+  for(const p of palabras){
+    if(conPalabra.has(p.docName))continue;
+    const otras=ajenas(p);
+    const suyas=p.toks.filter(t=>!variantes(t).some(v=>otras.has(v)));
+    if(suyas.some(t=>dichaComoSeccion(q,[t,t+'s',t+'es',t.replace(/e?s$/,'')])))hallados.add(p.docName);
+  }
+  if(hallados.size!==1)return null;
+  const docName=[...hallados][0];
+  return{docName,nombre:nombreDeSeccion(docName),terminos:[]}
+}
 function seccionActiva(){
   if(!docChunks.length)return null;
   if(appState.manualActivo)return nombreDeSeccion(appState.manualActivo);
@@ -2619,6 +2718,10 @@ function variantes(w){
        misma persona gramatical que usa el manual para dar la regla, y no va
        hacia el infinitivo, que es por donde se colaba «cambio» → «cambiar». */
     if(/[^aeiou](?:an|en)$/.test(w))v.push(w.slice(0,-1));
+    /* Y al revés, de la primera persona del asesor a la del manual: «¿cómo
+       etiqueto…?» y la lámina dice «se etiquetan en la costura». Misma regla de
+       arriba: la persona con que el manual da la regla, nunca el infinitivo. */
+    if(conj&&/o$/.test(w))for(const t of['an','en'])v.push(conj[1]+t);
     /* Solo se deriva hacia el sustantivo, nunca hacia el verbo. La primera
        versión probaba también el infinitivo y reabrió un agujero que ya estaba
        cerrado: «cambio» alcanzaba «cambiar», y «¿cómo cambio la llanta del
@@ -2768,6 +2871,79 @@ const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separaci
    con 30 o más sale peor que sin tope, porque entonces los fragmentos largos
    tapan la respuesta. */
 const LARGO_MINIMO=12;
+/* «¿A qué altura va el sensor?» se contesta con «de 8 a 12 cm de la
+   bastilla», y la lámina nunca escribe «altura». Esa palabra dice qué tipo de
+   respuesta se busca —una medida—, igual que «porcentaje» pide una cifra: una
+   lámina con una medida la cumple. Sin esto, en DISEÑADORES la lámina de
+   SENSORES puntuaba primera y aun así se quedaba fuera, porque de las dos
+   palabras que se le exigían solo traía «sensor». */
+const PALABRAS_DE_MEDIDA=new Set(['altura','alturas','distancia','distancias','separacion','separaciones','medida','medidas']);
+const CON_MEDIDA=/\d\s*(?:cm|centimetros?|mts?|metros?|mm)\b/;
+/* Un rótulo es un fragmento sin una sola frase: la lista de marcas de un
+   planograma, «Izquierda / Arriba / Adelante», «Nórdico / Industrial / Mid
+   Century». Muchas veces ES la respuesta —«¿qué marcas van en premium?», «30%
+   de participación»—, pero no a un «¿dónde…?» ni a un «¿cómo…?»: ahí ganaba por
+   corto y por llevar la palabra en el título. En ROPA INTERIOR, «¿dónde van los
+   básicos?» salía con la lista de marcas de BÁSICOS y no con
+   «va en el interior de la sección o en la parte trasera». Los renglones se unen
+   como en la tarjeta: el PDF corta la frase donde cortó la maqueta. */
+const PIDE_INSTRUCCION=/\b(?:donde|como|cuando|por ?que|para que)\b/;
+/* Lo mismo con el precio: «¿a partir de qué precio va un vino en la cava?» se
+   contesta con «mayor a $1,200.00», y salía antes MUEBLES TIPO CAVA, que dice
+   «punto de precio» sin dar ninguno. Solo cuando se pregunta una cantidad:
+   «¿dónde va la etiqueta de precio?» no pide ninguna. */
+function pideUnPrecio(q){
+  return /\b(?:que|cual|cuanto|minimo|maximo|mayor|menor)\s+(?:es\s+el\s+)?precio|\bcuest(?:a|an)\b|\bpesos\b/.test(normalizeText(q).replace(/\s+/g,' '))
+}
+function esRotulo(c){
+  if(c.rotulo===undefined){
+    const corrido=(c.text||'').replace(/([^.:;!?\n])\n(?=[a-záéíóúñ0-9(])/g,'$1 ');
+    /* Frase: seis palabras, o tres que cierran con punto. Lo segundo es por
+       las listas numeradas de características —«1. Varias formas y tamaños.»—,
+       que son frases cortas y no rótulos. */
+    c.rotulo=!corrido.split('\n').some(l=>{
+      const n=(l.match(/\p{L}{2,}/gu)||[]).length;
+      return n>=6||(n>=3&&/\.\s*$/.test(l))
+    });
+  }
+  return c.rotulo
+}
+/* La lámina que se llama como lo que se preguntó. «¿Cómo etiqueto un producto
+   SIN CAJA?» tiene su respuesta en una lámina titulada SIN CAJA —«se etiquetan
+   en la costura»—, y salían primero CON CAJA y CAJA CON COLGADOR, que traen más
+   palabras de la pregunta. El título contrario es la otra mitad: quien pregunta
+   «sin caja» ya descartó la de «con caja». Solo títulos de dos palabras o más,
+   porque los de una —BÁSICOS, PREMIUM, CORNER— son justo los rótulos que ya
+   ganan de más. */
+const OPUESTOS={sin:'con',con:'sin'};
+function titulosDeLaPregunta(query){
+  const q=normalizeText(query).split(/\s+/).filter(Boolean);
+  const formas=q.map(w=>new Set(w.length>3?variantes(w):[w]));
+  const pares=[];
+  for(let i=0;i+1<q.length;i++)if(OPUESTOS[q[i]]&&q[i+1].length>=3&&!STOPWORDS.has(q[i+1]))pares.push({pol:q[i],formas:formas[i+1]});
+  return{
+    nombrado(h){
+      if(h.length<2)return false;
+      for(let i=0;i+h.length<=q.length;i++)if(h.every((t,j)=>formas[i+j].has(t)))return true;
+      return false
+    },
+    /* +1 si el título trae la pareja de la pregunta («sin caja»), −1 si trae la
+       contraria («con caja»). Con «sin», también un título que nombra la cosa
+       y dice «con» en otro sitio: CAJA CON COLGADOR es un producto con caja.
+       Nombrarla a secas no basta para descartarla: SACOS Y PANTALONES no es lo
+       contrario de «saco sin pantalón», es la sección entera. */
+    polaridad(h){
+      let r=0;
+      for(const{pol,formas:f}of pares)for(let j=0;j<h.length;j++){
+        if(!f.has(h[j]))continue;
+        const antes=h[j-1];
+        if(antes===pol)r=Math.max(r,1);
+        else if(antes===OPUESTOS[pol]||(pol==='sin'&&h.includes('con')))return -1;
+      }
+      return r
+    }
+  }
+}
 function bm25Score(c,terms){
   let s=0;
   const largo=Math.max(c.len,LARGO_MINIMO);
@@ -2791,6 +2967,10 @@ function bm25Score(c,terms){
    donde aparecen, pero no cuentan como acierto ni como palabra que exigir: si
    contaran, «¿dónde van los perros?» pasaría por contestable solo por el «van». */
 const VERBOS_DE_PISO=new Set(['va','van','vaya','vayan','pongo','pone','ponen','poner','pongan','ponga','acomodo','acomoda','acomodan','acomodar','acomodamos','hago','hace','hacen','hacer','exhibo','exhibe','exhiben','exhibir','armo','arma','arman','armar','ordeno','ordena','ordenan','ordenar','coloco','coloca','colocan','colocar','sirve','sirven','servir','uso','usa','usan','usar','lleva','llevan','llevar','cuanto','cuanta','cuantos','cuantas','quito','quita','quitan','quitar','necesito','debo','deben','tengo','tienen','tener','dejo','deja','dejan','dejar',
+  /* «¿Puedo poner…?» pregunta si se permite, y el tema viene después. Desde que
+     la primera persona alcanza la tercera del plural —«etiqueto» → «etiquetan»—,
+     «puedo» acertaba en cualquier lámina con «pueden» y contaba como palabra. */
+  'puedo','pueden','podemos',
   /* Y las que dicen QUÉ TIPO de respuesta se busca, no DE QUÉ: los manuales
      escriben «56% de participación», casi nunca «porcentaje». Contando como
      acierto, «¿qué porcentaje tiene contempo?» ponía primero a LIBRERÍA —«menor
@@ -2848,11 +3028,16 @@ function retrieve(query,opts){
   const flojos=terms.filter(t=>t.w!==1);
   const palabrasEscritas=new Set(strong.filter(x=>!esVerboDePiso(x.g)).map(x=>x.g)).size||1;
   const shingles=queryShingles(query);
-  const wantsNumber=NUMERIC_INTENT.test(query);
   /* Los manuales dan la participación siempre igual: «30% de participación».
      Si se pregunta por el porcentaje, esa frase es la respuesta, y no el
      planograma de la página siguiente con «50%+ 20%», que ganaba por corto. */
-  const pidePorcentaje=/porcentaje|porciento|participacion/.test(normalizeText(query))||query.includes('%');
+  /* «que porsentaje tiene premium»: la errata también pide la cifra. */
+  const pidePorcentaje=/porcentaje|porciento|participacion/.test(normalizeText(query))||query.includes('%')
+    ||palabrasDeConsulta(query).some(w=>palabraDeCifra(w));
+  const wantsNumber=NUMERIC_INTENT.test(query)||pidePorcentaje;
+  const pidePrecio=pideUnPrecio(query);
+  const pideInstruccion=PIDE_INSTRUCCION.test(normalizeText(query));
+  const titulos=titulosDeLaPregunta(query);
   const out=[];
   for(const c of corpus){
     if(source&&c.source!==source)continue;
@@ -2873,7 +3058,8 @@ function retrieve(query,opts){
     const norm=' '+normalizeText((c.heading?c.heading+' ':'')+c.text).replace(/\s+/g,' ')+' ';
     const contiene=t=>norm.includes(' '+t+' ');
     const gAcierto=new Set();
-    for(const{t,g}of strong)if(strongContables.has(t)&&contiene(t))gAcierto.add(g);
+    const conMedida=CON_MEDIDA.test(norm);
+    for(const{t,g}of strong)if(strongContables.has(t)&&(contiene(t)||(conMedida&&PALABRAS_DE_MEDIDA.has(g))))gAcierto.add(g);
     const hits=gAcierto.size;
     /* Los aciertos por sinónimo se cuentan aparte: valen menos que la palabra
        que el asesor escribió, pero un fragmento que solo se encontró por el
@@ -2892,11 +3078,23 @@ function retrieve(query,opts){
     }
     if(wantsNumber&&c.hasDigits)score+=1.5;
     if(pidePorcentaje&&/\d\s*%\s*de\s+participaci[oó]n/i.test(c.text))score+=3;
+    if(pidePrecio&&/\$\s?\d/.test(c.text))score+=3;
     /* El check list repite en un renglón cada regla del manual, y en una página
        corta: BM25 lo subía por encima de la lámina que la explica. «¿para dónde
        va el gancho?» contestaba con «Ganchos hacia la izquierda y 3 cm…» en vez
        de ENGANCHADO, con su dibujo. Baja salvo que se pregunte por él. */
     if(c.heading&&CHECKLIST.test(normalizeText(c.heading))&&!PIDE_CHECKLIST.test(normalizeText(query)))score*=0.6;
+    if(pideInstruccion&&esRotulo(c))score*=0.6;
+    if(c.heading){
+      const h=normalizeText(c.heading).split(/\s+/).filter(Boolean);
+      const pol=titulos.polaridad(h);
+      /* La pareja exacta pesa más que el título nombrado: además de nombrar,
+         descarta el caso contrario. A ×1.5, SIN CAJA seguía detrás de dos
+         láminas que llegan por «caja» → «punto de venta», que es otra caja. */
+      if(pol<0)score*=0.5;
+      else if(pol>0)score*=2;
+      else if(titulos.nombrado(h))score*=1.5;
+    }
     /* Estos dos bonos suben un fragmento por lo que ES, no por lo que se
        preguntó. Sin evidencia léxica de por medio convertían cualquier regla
        obligatoria en la respuesta a todo, que es como una pregunta de cocina
@@ -3389,9 +3587,34 @@ function decidirSeccion(query){
   }
   /* Con la pregunta ESCRITA, nunca con la ampliada: si la ampliación pegó la
      pregunta anterior, sus palabras señalarían a la sección de aquel turno. */
-  const nombrada=seccionNombradaEnPregunta(query);
+  const nombradas=seccionesNombradasEnPregunta(query);
+  /* Si nombra varias y una es la activa, manda la activa. */
+  const nombrada=nombradas.some(n=>n.docName===activo)?null:nombradas[0]||null;
   if(!nombrada)return{doc:activo,otraSeccion:null,porPregunta:false};
   if(nombrada.docName===activo)return{doc:activo,otraSeccion:null,porPregunta:false};
+  /* Si el manual activo también usa esa palabra, puede ser tema suyo y no el
+     nombre de otra sección: en MESA FINA, «¿dónde van los accesorios de bar?»
+     mandaba a ACCESORIOS HOMBRE, y en FLORES Y VELAS, «los accesorios» —que es
+     un título de su propio manual— también. Ahí solo manda a otra sección si la
+     palabra va dicha como sección: «en accesorios, ¿cada cuánto…?». La palabra
+     que la activa no escribe nunca sigue mandando siempre: «¿dónde van los
+     vinos?» en ZAPATOS es de VINOS Y LICORES. Medido con 1938 preguntas de los
+     títulos de cada manual: 12 cambios de sección sin motivo, ahora 0. */
+  if(nombrada.termino&&!/^\d+$/.test(nombrada.termino)){
+    const voc=vocabDeDoc(activo);
+    const t=nombrada.termino;
+    const formas=[t,t+'s',t+'es',t.replace(/e?s$/,'')];
+    /* Y si la activa la usa en un TÍTULO, es suya aunque se diga como sección:
+       en FLORES Y VELAS, «¿qué va en accesorios?» pregunta por su lámina
+       ACCESORIOS, no por el manual de ACCESORIOS HOMBRE. */
+    const enTitulo=docChunks.some(c=>c.docName===activo&&c.heading&&normalizeText(c.heading).split(/\s+/).some(w=>formas.includes(w)));
+    /* Y también si la activa la dice con otra palabra: ACCESORIOS HOMBRE no
+       escribe «ropa» ni una vez, pero «¿cada cuánto le cambio la ropa al
+       maniquí?» es suya —«actualiza la vestimenta cada 15 días»— y no de ROPA
+       INTERIOR. Solo sinónimos de una palabra: «ropa de dormir» no cuenta. */
+    const porSinonimo=expandKeywords(formas).filter(s=>!/\s/.test(s)).some(s=>voc.has(normalizeText(s).trim()));
+    if((formas.some(v=>voc.has(v))||porSinonimo)&&(enTitulo||!dichaComoSeccion(query,formas)))return{doc:activo,otraSeccion:null,porPregunta:false};
+  }
   return{doc:activo,porPregunta:false,
     otraSeccion:{docName:nombrada.docName,nombre:nombrada.nombre,motivo:'nombrada'}}
 }
@@ -3443,10 +3666,19 @@ function enrutarSeccion(q){
     const doc=rutaForzada.doc;rutaForzada=null;
     return ruta(doc,'elegida-por-ti');
   }
-  if(esPreguntaDeEstado(q)||isCreatorQuestion(q))return ruta(null,'ninguna');
+  /* Lo de operación de tienda —la luz, la caja, el horario de uno— no es de
+     ninguna sección: sin esto, «mi jefe me cambió el horario» empataba entre
+     dos manuales y la app preguntaba «¿en cuál estás?». */
+  if(esPreguntaDeEstado(q)||isCreatorQuestion(q)||esOperacionDeTienda(q))return ruta(null,'ninguna');
   const scope=assessQuestionScope(q);
   if(scope.isGreeting||scope.clearlyOff)return ruta(null,'ninguna');
   const nombradas=seccionesNombradasEnPregunta(q);
+  if(!nombradas.length){
+    /* «en muebles, ¿qué pasillo dejo?»: MUEBLES no tiene palabra propia, pero
+       dicha como sección la nombra (`seccionNombradaComoTal`). */
+    const comoTal=seccionNombradaComoTal(q);
+    if(comoTal)return ruta(comoTal.docName,'nombrada');
+  }
   if(nombradas.length===1)return ruta(nombradas[0].docName,'nombrada');
   let cand=evidenciaPorSeccion(consultaDeBusqueda(q));
   if(nombradas.length>1){
@@ -3616,6 +3848,51 @@ function paresDeConsulta(query){
   }
   return out
 }
+/* Lo que el asesor HACE y cómo lo dice, no DE QUÉ pregunta. Medido con 14
+   manuales reales y 110 preguntas con respuesta: 9 de los 11 avisos falsos de
+   «el manual no menciona» eran esto. «¿las plumas se pueden QUEDAR en su caja?»,
+   «no me ALCANZA el inventario», «¿puedo GUARDAR cajas en la vitrina?», «¿en
+   qué SENTIDO va el entallado?», «las piernas… en OTRA SECCIÓN»: la tarjeta
+   correcta salía, pero con la advertencia encima, y con API key el aviso le
+   ganaba a la regla —«las cervezas cómo se ACOMODAN» contestaba «eso está en
+   Mesa Fina»—. El manual no escribe esas palabras porque no son el tema.
+   VERBOS_DE_PISO no se toca: allí un verbo deja de contar como acierto en la
+   búsqueda, y «se AGRUPAN en los tapetes» sí ayuda a encontrar ÁRBOLES. */
+const PALABRAS_DE_RELACION=new Set(['sentido','lado','lados','orden','forma','formas','manera','modo','parte','partes','lugar','tipo','cosa','cosas',
+  'otra','otro','otras','otros','seccion','secciones','caso','veces','algo','nada','junto','juntos','juntas']);
+/* Sin «sacar», «bajar», «juntar» ni «pasar»: por la conjugación se llevaban
+   «saco» (la prenda), «bajo» (BAJO PLATO), «partes bajas», «junta» y «pasas»
+   (las del POS), que en estos manuales sí son el tema. */
+const VERBOS_DE_ACCION=new Set(['quedar','guardar','alcanzar','agrupar','acomodar','poner','meter','mover','cambiar','pegar',
+  'subir','llegar','tocar','faltar','sobrar','caber','poder','querer','traer','encontrar']);
+/* «porcentaje» va en VERBOS_DE_PISO para que no cuente como acierto, pero aquí
+   sí dice algo: en MESA FINA o FLORES Y VELAS, que no traen ni un «% de
+   participación», «¿qué porcentaje tiene formal?» tiene que avisar. Se reconoce
+   también mal escrita («porsentaje») por cómo suena. */
+const PALABRAS_DE_CIFRA=['porcentaje','porcentajes','porciento','participacion'];
+const palabraDeCifra=w=>PALABRAS_DE_CIFRA.find(p=>p===w||fonetica(p)===fonetica(w))||null;
+function esPalabraDeAccion(w){
+  if(palabraDeCifra(w))return false;
+  if(PALABRAS_DE_RELACION.has(w)||VERBOS_DE_ACCION.has(w)||esVerbo(w))return true;
+  /* «alcanza», «acomodan», «agrupo», «puedo»: la conjugación vuelve al
+     infinitivo, con el diptongo deshecho (pued- → pod-). */
+  const m=w.match(/^(.{3,})(?:amos|emos|imos|ando|iendo|an|en|as|es|o|a|e)$/);
+  if(!m)return false;
+  const r=m[1],dip=r.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
+  for(const x of new Set([r,dip]))for(const t of['ar','er','ir'])if(VERBOS_DE_ACCION.has(x+t))return true;
+  return false
+}
+/* Un par de la pregunta, en las formas en que lo puede escribir el manual:
+   «mesa show» está en Mesa Fina como «mesas show», y «primera etapa» como
+   «1° ETAPA». Sin esto, las dos salían como frases de OTRO manual. */
+const ORDINAL_A_CIFRA={primera:'1',primer:'1',primero:'1',segunda:'2',segundo:'2',tercera:'3',tercer:'3',tercero:'3'};
+function formasDePar(par){
+  const[a,b]=par.split(' ');
+  const de=w=>[...new Set(variantes(w).concat(ORDINAL_A_CIFRA[w]||[]))];
+  const out=[];
+  for(const x of de(a))for(const y of de(b))out.push(' '+x+' '+y+' ');
+  return out
+}
 function terminosAusentes(query,activo){
   if(!activo||!docChunks.length)return[];
   const propio=vocabDeDoc(activo),propioRaiz=raicesDeDoc(activo);
@@ -3628,12 +3905,16 @@ function terminosAusentes(query,activo){
      «de preferencia, coloca…», que no tiene nada que ver—. El par «marca
      preferencial» no está en ningún manual, y eso sí es una respuesta. */
   for(const par of paresDeConsulta(query)){
-    if(textoDeDoc(activo).includes(' '+par+' '))continue;
+    if(par.split(' ').some(esPalabraDeAccion))continue;
+    /* Las otras formas solo sirven para EXIMIR al manual del asesor. Para
+       señalar a otro manual se exige el par tal cual: con plurales, «colección
+       nueva» daba a MUEBLES por dueño —que dice «colecciones nuevas de cada
+       mes»— y el aviso saltaba en Diseñadores, que lo dice al revés. */
+    if(formasDePar(par).some(f=>textoDeDoc(activo).includes(f)))continue;
     const duenos=[];
     for(const d of docs){
       if(d.name===activo)continue;
-      const t=textoDeDoc(d.name);
-      if(t.includes(' '+par+' '))duenos.push({docName:d.name,n:1});
+      if(textoDeDoc(d.name).includes(' '+par+' '))duenos.push({docName:d.name,n:1});
     }
     if(duenos.length){
       fuera.push({palabra:par,duenos,frase:true});
@@ -3650,9 +3931,12 @@ function terminosAusentes(query,activo){
 
   /* 2 · La PALABRA sin ningún camino hasta este manual. */
   for(const k of palabrasDeConsulta(query)){
-    if(k.length<5||/^\d/.test(k)||enFrase.has(k))continue;
+    if(k.length<5||/^\d/.test(k)||enFrase.has(k)||ORDINAL_A_CIFRA[k]||esPalabraDeAccion(k))continue;
     const formas=new Set();
-    for(const v of variantes(k).concat(infinitivos(k))){
+    /* «porsentaje» no está en ningún índice, así que el corrector no la lleva a
+       «porcentaje»; por el sonido sí, y con ella llega «participación». */
+    const cifra=palabraDeCifra(k);
+    for(const v of variantes(k).concat(infinitivos(k),cifra&&cifra!==k?[cifra]:[])){
       formas.add(v);
       for(const frase of expandKeywords([v]))for(const x of tokenize(frase))formas.add(x);
     }
@@ -3800,6 +4084,19 @@ function buildContext(query){
     ultimaSeccionPorPregunta=false;
     return{texto:contextoDeEstado(),sinCoincidencias:false,flojo:false,ampliada:false,
       nivel:2,otraSeccion:null,variasSecciones:false,ausentes:[],estado:true,
+      seccionUsada:appState.manualActivo,seccionPorPregunta:false}
+  }
+  /* Operación de tienda —la luz, la caja registradora, el horario de uno—: el
+     modo manual ya no enseñaba láminas, pero con API key la búsqueda seguía y el
+     modelo recibía EQUILIBRIO por «la luz del focal». Medido: «se fue la luz,
+     ¿qué hago?» contestaba con el peso visual de cada sección. Ningún manual de
+     exhibición la contesta, así que se trata como lo que no coincide con nada. */
+  if(docChunks.length&&esOperacionDeTienda(query)){
+    consultaDeBusqueda(query);
+    ultimaSeccionUsada=appState.manualActivo;
+    ultimaSeccionPorPregunta=false;
+    return{texto:avisoSinCoincidencias(query),sinCoincidencias:true,flojo:false,ampliada:false,
+      nivel:0,otraSeccion:null,variasSecciones:false,ausentes:[],
       seccionUsada:appState.manualActivo,seccionPorPregunta:false}
   }
   let consulta=consultaDeBusqueda(query);
@@ -4009,6 +4306,51 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 10. ÚLTIMA LÍNEA OBLIGATORIA: toda respuesta termina con "CERTEZA: ALTA", "CERTEZA: MEDIA" o
    "CERTEZA: GAP", sola en su línea. Se lee automáticamente y decide lo que ve el asesor.`;
 
+/* ── MODO DE RESPUESTA ────────────────────────────
+   «razonado» es el prompt tal cual, con sus seis etapas: el que se midió con
+   los 30 manuales reales (55/60 datos con su página, 49/50 «no está»).
+   «rapido» cambia las seis etapas por un solo paso de LECTURA —ubicar la
+   página y el rótulo del dato, o decir que no está— antes de responder. Con el
+   manual demo empata en aciertos y el primer texto sale en la mitad de tiempo;
+   con los manuales reales falta medirlo, y por eso no es el predeterminado.
+   El cambio se hace al enviar, sobre el rol que haya en Ajustes: el texto
+   guardado no se toca y no hace falta subir PROMPT_VERSION. */
+const MODOS_RESPUESTA=['razonado','rapido'];
+const ETAPAS_DESDE='ALGORITMO OBLIGATORIO',ETAPAS_HASTA='[RESPUESTA FINAL AL ASESOR]';
+const LECTURA_EN_VEZ_DE_ETAPAS=`FORMATO OBLIGATORIO — cada respuesta usa este formato:
+
+[PENSAMIENTO INTERNO]
+LECTURA: una sola línea con la página y el rótulo del fragmento que trae el dato ("pág. N · RÓTULO"), o "no está" si después de revisar TODO el contexto no aparece. El asesor pregunta como habla en piso: "alarma" es sensor, "espacio para que pase la gente" es pasillo, "entayado" es entallado.
+Si la LECTURA encontró una regla que contesta la pregunta, aunque sea en negativo ("nunca", "no va"), la respuesta es esa regla con su página. "El manual no especifica" es solo para cuando la LECTURA dice "no está".
+
+`;
+function modoValido(m){return MODOS_RESPUESTA.includes(m)?m:'razonado'}
+/* Un rol reescrito a mano, sin el bloque de etapas, se respeta tal cual: mejor
+   el rol del asesor que un formato armado a medias. */
+function promptDelModo(system,modo){
+  if(modo!=='rapido')return system;
+  const i=system.indexOf(ETAPAS_DESDE),j=system.indexOf(ETAPAS_HASTA);
+  if(i<0||j<i)return system;
+  return system.slice(0,i)+LECTURA_EN_VEZ_DE_ETAPAS+system.slice(j);
+}
+/* «pág. 6 · SENSORES» mientras el modelo escribe: en el modo rápido es lo
+   primero que llega, y decirlo en la tarjeta vale más que tres puntitos. Con
+   `completa`, solo cuando la línea ya terminó: a media línea salía «pág. 6 · SEN». */
+function lecturaDe(texto,completa){
+  const m=(texto||'').match(completa?/LECTURA\s*:\s*([^\n]*\S)\s*\n/i:/LECTURA\s*:\s*([^\n]*\S)\s*(?:\n|$)/i);
+  return m?m[1].replace(/^["«“]\s*|\s*["»”]$/g,'').trim():null;
+}
+/* En Ajustes, debajo del selector: con qué se midió cada modo. Elegir sin ese
+   dato sería elegir a ciegas. */
+const NOTA_DEL_MODO={
+  razonado:'Medido con 30 manuales reales: 55/60 datos con su página y 49/50 «no está».',
+  rapido:'PENDIENTE_MEDICION'
+};
+function pintarNotaDelModo(){
+  const sel=document.getElementById('modo-respuesta-select'),nota=document.getElementById('modo-respuesta-nota');
+  if(sel&&nota)nota.textContent=NOTA_DEL_MODO[modoValido(sel.value)];
+}
+
 const GREETING_PATTERNS=/^(?:\s*(?:hola|hey|hi|hello|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?|qu[eé]\s+tal|saludos?|buen\s+d[ií]a))[\s!.?]*$/i;
 
 const VM_SCOPE_KEYWORDS=[
@@ -4071,6 +4413,16 @@ function sinCorchetesDePlantilla(texto){
   return(texto||'').replace(/(no\s+especifica\s+)\[([^\]\n]*)\]?/gi,
     (_,antes,dentro)=>antes+(/^\s*x\s*$/i.test(dentro)?'ese dato':dentro));
 }
+/* El prompt dibuja la respuesta como «[Respuesta directa en 2-4 oraciones…]» y
+   a veces el modelo copia también esos corchetes: la contestación entera salía
+   envuelta en [ ]. Una cita [manual · pág. N] no es envoltura: lleva la página
+   al principio. Mientras se escribe, el corchete de cierre todavía no llega. */
+function sinEnvolturaDePlantilla(texto){
+  const t=(texto||'').trim();
+  const m=t.match(/^\[([^\[\]]{40,})\]?$/);
+  if(!m||/p[áa]g\.?\s*\d/i.test(m[1].slice(0,60)))return texto;
+  return m[1].trim();
+}
 
 function sanitizeFinalAnswer(final,question){
   let text=sinCorchetesDePlantilla(sinLineaDeCerteza(final));
@@ -4082,10 +4434,12 @@ function sanitizeFinalAnswer(final,question){
       .trim();
   }
   text=text
-    .replace(/^\[PENSAMIENTO\s+INTERNO[^\]]*\]\s*/i,'')
-    .replace(/^\[RESPUESTA\s+FINAL[^\]]*\]\s*/i,'')
+    .replace(/^\[PENS\w*\s+\w+[^\]]*\]\s*/i,'')
+    .replace(/^LECTURA\s*:[^\n]*\n/i,'')
+    .replace(/^\[RESP\w*\s+FINAL[^\]]*\]\s*/i,'')
     .replace(/^ETAPA\s+\d[^\n]*\n/gm,'')
     .trim();
+  text=sinEnvolturaDePlantilla(text);
   return text||final.trim();
 }
 function parseAIResponse(text){
@@ -4093,16 +4447,19 @@ function parseAIResponse(text){
   if(!raw)return{thinking:null,final:'',parsed:false};
 
   // Caso 1 — Formato ideal: ambos bloques con corchetes presentes
-  const thinkMatch=raw.match(/\[PENSAMIENTO\s+INTERNO[^\]]*\]([\s\S]*?)(?=\[RESPUESTA\s+FINAL)/i);
-  const finalMatch=raw.match(/\[RESPUESTA\s+FINAL[^\]]*\]([\s\S]*?)$/i);
+  /* Las marcas toleran erratas del modelo: «[PENSAMIENTO NTRNO]» y «[RESPUESTA
+     FINAL AL SESOR]» salieron en una respuesta medida, y como no casaban con
+     nada, el asesor recibió la plantilla entera, corchetes incluidos. */
+  const thinkMatch=raw.match(/\[PENS\w*\s+\w+[^\]]*\]([\s\S]*?)(?=\[RESP\w*\s+FINAL)/i);
+  const finalMatch=raw.match(/\[RESP\w*\s+FINAL[^\]]*\]([\s\S]*?)$/i);
   if(thinkMatch&&finalMatch){
     return{thinking:thinkMatch[1].trim(),final:finalMatch[1].trim(),parsed:true};
   }
 
   // Caso 2 — RESPUESTA FINAL sin corchetes de cierre
-  const lineFinal=raw.match(/(?:\[)?RESPUESTA\s+FINAL(?:\s+AL\s+ASESOR)?(?:\])?\s*\n([\s\S]*)$/i);
+  const lineFinal=raw.match(/(?:\[)?RESP\w*\s+FINAL(?:\s+AL\s+\w+)?(?:\])?\s*\n([\s\S]*)$/i);
   if(lineFinal){
-    const idx=raw.search(/(?:\[)?RESPUESTA\s+FINAL/i);
+    const idx=raw.search(/(?:\[)?RESP\w*\s+FINAL/i);
     return{thinking:raw.slice(0,idx).trim(),final:lineFinal[1].trim(),parsed:true};
   }
 
@@ -4133,6 +4490,12 @@ function parseAIResponse(text){
     }
   }
 
+  /* Caso 3b — modo rápido sin la marca de respuesta: la LECTURA y, debajo, la
+     respuesta. Sin este caso, la línea de LECTURA salía pegada encima de la
+     contestación como si fuera parte de ella. */
+  const conLectura=raw.match(/^(?:\[PENSAMIENTO\s+INTERNO[^\]]*\]\s*)?(LECTURA\s*:[^\n]*)\n+([\s\S]*\S[\s\S]*)$/i);
+  if(conLectura)return{thinking:conLectura[1].trim(),final:conLectura[2].trim(),parsed:true};
+
   /* Caso 4 — fallback: devolver texto completo sin parsear.
 
      Con una salvedad: si el texto trae las marcas del razonamiento por etapas
@@ -4140,14 +4503,17 @@ function parseAIResponse(text){
      es una respuesta que se cortó. Devolverla tal cual dejaba en pantalla el
      razonamiento a medias haciéndose pasar por contestación, que es la peor
      forma de fallar: parece que contestó. */
-  const razonando=/\[PENSAMIENTO\s+INTERNO|\bETAPA\s+[1-5]\b|Clasifico la pregunta|Busco en el contexto/i.test(raw);
+  const razonando=/\[PENSAMIENTO\s+INTERNO|\bETAPA\s+[1-5]\b|Clasifico la pregunta|Busco en el contexto|^\s*LECTURA\s*:/i.test(raw);
   return{thinking:null,final:raw,parsed:false,cortada:razonando};
 }
+/* Una sola repetición por pregunta: si la segunda también llega cortada, se
+   enseña con su aviso en vez de insistir. */
+function debeRepetirPorCorte(texto,yaSeRepitio){return!yaSeRepitio&&!!parseAIResponse(texto).cortada}
 function getStreamingDisplayText(streamedText){
   const parsed=parseAIResponse(streamedText);
-  if(parsed.parsed&&parsed.final)return sinCorchetesDePlantilla(sinLineaDeCerteza(parsed.final));
-  const partial=streamedText.match(/\[RESPUESTA\s+FINAL[^\]]*\]([\s\S]*)$/i);
-  if(partial)return sinCorchetesDePlantilla(sinLineaDeCerteza(partial[1]));
+  if(parsed.parsed&&parsed.final)return sinEnvolturaDePlantilla(sinCorchetesDePlantilla(sinLineaDeCerteza(parsed.final)));
+  const partial=streamedText.match(/\[RESP\w*\s+FINAL[^\]]*\]([\s\S]*)$/i);
+  if(partial)return sinEnvolturaDePlantilla(sinCorchetesDePlantilla(sinLineaDeCerteza(partial[1])));
   return null;
 }
 
@@ -4155,9 +4521,10 @@ function getStreamingDisplayText(streamedText){
    ESTADO DE LA APP
 ════════════════════════════════════════════════ */
 const appState={
-  provider:'gemini',apiKey:'',chatModel:'gemini-3.5-flash',
+  provider:'gemini',apiKey:'',chatModel:'gemini-3.5-flash-lite',
   system:'',extra:'',tokenLimit:80000,
   aprendeEnabled:true,extraEnabled:true,temperature:0.2,
+  modoRespuesta:'razonado',
   /* `null` = todos los manuales. En el piso se trabaja UNA sección: con cinco
      manuales de la misma plantilla cargados, la respuesta se armaba con los
      cinco y el dato salía citado a la página de un manual que no era el suyo. */
@@ -4202,7 +4569,7 @@ function selectProvider(id,btn){
   document.getElementById('api-key-input').placeholder=PROVIDERS[id].placeholder;
   const chatSel=document.getElementById('chat-model-select');
   const p=PROVIDERS[id];
-  chatSel.innerHTML=p.chatModels.map(m=>`<option value="${m}">${m}</option>`).join('');
+  chatSel.innerHTML=p.chatModels.map(m=>`<option value="${m}">${etiquetaDeModelo(m)}</option>`).join('');
   /* Si el modelo no existe en este proveedor se queda el primero de la lista.
      Antes appState seguía con el anterior: elegir Gemini y volver al chat sin
      guardar mandaba «gpt-4o-mini» a Google, que contestaba «modelo no
@@ -4234,7 +4601,9 @@ function loadSaved(){
     if (!appState.apiKey) {
       try { localStorage.removeItem('ap_api_key'); } catch {}
     }
-    appState.chatModel=localStorage.getItem('ap_chat_model')||PROVIDERS[appState.provider].chatModels[0];
+    const alCargar=modeloAlCargar(localStorage.getItem('ap_chat_model'),localStorage.getItem('ap_modelo_v2'),appState.provider);
+    appState.chatModel=alCargar.modelo;
+    try{localStorage.setItem('ap_modelo_v2','1');if(alCargar.migrar)localStorage.setItem('ap_chat_model',alCargar.modelo)}catch{}
     if(localStorage.getItem('ap_prompt_version')!==PROMPT_VERSION){
       appState.system=document.getElementById('system-prompt').value;
       try{localStorage.setItem('ap_system',appState.system);localStorage.setItem('ap_prompt_version',PROMPT_VERSION);}catch{}
@@ -4262,6 +4631,9 @@ function loadSaved(){
     appState.aprendeEnabled=!apagado(localStorage.getItem('ap_aprende_enabled'));
     appState.extraEnabled=!apagado(localStorage.getItem('ap_extra_enabled'));
     appState.temperature=parseFloat(localStorage.getItem('ap_temperature')||'0.2');
+    appState.modoRespuesta=modoValido(localStorage.getItem('ap_modo_respuesta'));
+    document.getElementById('modo-respuesta-select').value=appState.modoRespuesta;
+    pintarNotaDelModo();
     document.getElementById('toggle-aprende').checked=appState.aprendeEnabled;
     document.getElementById('toggle-extra').checked=appState.extraEnabled;
     document.getElementById('temp-slider').value=Math.round(appState.temperature*100);
@@ -4400,8 +4772,10 @@ function saveConfig(evt){
   appState.aprendeEnabled=document.getElementById('toggle-aprende').checked;
   appState.extraEnabled=document.getElementById('toggle-extra').checked;
   appState.temperature=parseInt(document.getElementById('temp-slider').value,10)/100;
+  appState.modoRespuesta=modoValido(document.getElementById('modo-respuesta-select').value);
   try{
     localStorage.setItem('ap_provider',appState.provider);
+    localStorage.setItem('ap_modo_respuesta',appState.modoRespuesta);
     // v7.0 paso 3: API key por proveedor en sessionStorage
     const provKey = 'ap_api_key_' + activeProv;
     if (appState.apiKey) {
@@ -7103,6 +7477,26 @@ function nombreCortoDeModelo(model) {
   if (m) return `${m[1]} Flash${m[2] ? '-Lite' : ''}`;
   return (model || '').replace(/^gpt-/, 'GPT-').replace(/-mini$/, ' mini');
 }
+/* En el selector de Ajustes va para qué sirve cada uno, no solo su nombre: con
+   cuatro Flash casi iguales, elegir sin eso es adivinar. */
+const PARA_QUE_MODELO = {
+  'gemini-3.5-flash-lite': 'el más rápido, el de las mediciones',
+  'gemini-3.5-flash': 'suele salir saturado',
+  'gemini-3.8-flash': 'piensa más, ~6 s por respuesta',
+};
+function etiquetaDeModelo(model) {
+  const para = PARA_QUE_MODELO[model];
+  return nombreCortoDeModelo(model) + (para ? ` · ${para}` : '');
+}
+/* 3.5 Flash era el de fábrica, y casi todos lo tienen guardado solo porque
+   pulsaron «Guardar» al pegar la key. Una sola vez se pasa al de fábrica nuevo;
+   quien después elija 3.5 a propósito, se lo queda. */
+function modeloAlCargar(guardado, yaMigrado, proveedor) {
+  const deFabrica = PROVIDERS[proveedorValido(proveedor)].chatModels[0];
+  if (!guardado) return {modelo: deFabrica, migrar: false};
+  if (guardado === 'gemini-3.5-flash' && !yaMigrado) return {modelo: PROVIDERS.gemini.chatModels[0], migrar: true};
+  return {modelo: guardado, migrar: false};
+}
 
 function isRetryable(err) {
   if (err?.name === 'AbortError') return false;
@@ -7283,8 +7677,13 @@ const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
 function seccionesPorRelevancia(q){
   /* En modo manual el filtro de sección vale igual: si el asesor dijo con qué
      manual trabaja —o la pregunta lo dijo por él—, no tiene por qué recibir la
-     lámina de otro. */
-  const doc=docChunks.length?rutaDe(q).doc:null;
+     lámina de otro. Y si la pregunta nombra otra sección que la activa, no se
+     enseña la lámina de la activa: con catorce manuales de la misma plantilla,
+     es una cifra creíble y de otra sección. `decidirSeccion` es la misma
+     decisión que con API key (sin sección activa, `rutaDe`). */
+  const sec=docChunks.length?decidirSeccion(q):{doc:null,otraSeccion:null};
+  if(sec.otraSeccion)return[];
+  const doc=sec.doc;
   /* Con manuales cargados, solo manuales: sin `source` el manual interno de
      demostración se colaba entre las tarjetas cuando no había sección elegida. */
   const source=docChunks.length?'pdf':null;
@@ -7308,6 +7707,10 @@ function seccionesPorRelevancia(q){
 /* Una tarjeta por fragmento del manual. Todo por DOM y textContent: el texto
    viene de un PDF ajeno y no pasa por innerHTML. */
 let invitoApi=false;
+/* Lo que enseñaron de verdad las últimas tarjetas —el texto ya recortado al
+   presupuesto y unido por lámina—, para medir lo que ve el asesor y no lo que
+   puntuó la búsqueda. */
+let ultimasTarjetas=[];
 function rotuloDeFragmento(c){
   const partes=[c.source==='pdf'?nombreDeSeccion(c.docName):c.docName];
   if(c.page)partes.push('pág. '+c.page);
@@ -7544,17 +7947,48 @@ function hablaDe(texto,titulo,x){
 const OPERACION_DE_TIENDA=[
   /\bse (va|fue|vaya|iba) la luz\b/,/\b(sin|no hay) luz\b/,/\bapagon/,
   /\bcaja registradora\b/,/\bcorte de caja\b/,/\bcuadrar (la )?caja\b/,
+  /* Lo de recursos humanos, dicho en primera persona. «Jefe» y «horario» sí
+     salen en los manuales —PROCESOS DE IMPLEMENTACIÓN habla del jefe de
+     departamento y del horario de surtido—, así que «mi jefe me cambió el
+     horario, ¿se puede?» encontraba esa lámina con dos aciertos. Lo que la
+     hace ajena es el «mi»: el manual no habla del jefe ni del horario de nadie. */
+  /\bmi (jefe|jefa|gerente|supervisora?|horario|turno|sueldo|salario|nomina|quincena|comision|contrato|descanso|vacaciones)\b/,
+  /\bcuanto (gana|ganan|ganamos|gano|pagan|cobra|cobran)\b/,/\bdias de vacaciones\b/,
 ];
 /* La palabra como la escribió el asesor —«maniquíes», «góndola»— y no como
    queda normalizada para buscar. */
 function palabraOriginal(q,x){
   return(q.match(/[\p{L}\p{N}]+/gu)||[]).find(w=>normalizeText(w).trim()===x)||x
 }
-function avisoSinCifra(q,x){
+/* El aviso de «¿cuántos?» para unas tarjetas ({c,texto}) de la sección
+   `activo`, o '' si alguna trae la cifra. */
+function avisoDeCuenta(q,tarjetas,activo){
+  /* Lo mismo con el porcentaje: «¿qué porcentaje tiene Elemento Uomo?» —que es
+     la sección entera— enseñaba MOBILIARIO, MERCADEO y CLASIFICACIÓN, sin un
+     solo % entre las tres. Si ninguna tarjeta trae un porcentaje, se dice. */
+  const pidePct=palabrasDeConsulta(q).some(w=>palabraDeCifra(w))||/%/.test(q);
+  if(pidePct&&!tarjetas.some(t=>/\d\s*%/.test(t.texto)))
+    return '⚠ Estas láminas no dan ningún porcentaje. Te enseño lo más cercano que encontré: revisa si te sirve.';
+  const cuenta=cosaQueSeCuenta(q);
+  if(!cuenta)return'';
+  /* El título solo dice de qué es la lámina si no es el nombre de la sección:
+     en SACOS Y PANTALONES todas las láminas «son de sacos», y con eso cualquier
+     número de la página pasaba por cuántos sacos van por barra. */
+  const delNombre=!!activo&&tokenize(nombreDeSeccion(activo)).some(w=>mismaCosa(w,cuenta));
+  if(tarjetas.some(t=>traeCifraDe(t.texto,delNombre?'':t.c.heading,cuenta)))return'';
+  /* Y si ninguna tarjeta habla siquiera de lo que se cuenta, tampoco lo
+     contesta: «¿cuántos maniquíes van en la sección?» en DISEÑADORES enseñaba
+     TEMPORADA BARATA y DISPLAY, que no nombran maniquíes, sin ningún aviso. */
+  const hablan=tarjetas.some(t=>hablaDe(t.texto,t.c.heading,cuenta));
+  return avisoSinCifra(q,cuenta,hablan)
+}
+function avisoSinCifra(q,x,habla=true){
   const pal=q.match(/[\p{L}\p{N}]+/gu)||[];
   const original=palabraOriginal(q,x);
   const cuantos=/^cu[aá]ntas$/i.test(pal.find(w=>/^cu[aá]nt[oa]s$/i.test(w))||'')?'cuántas':'cuántos';
-  return `⚠ El manual habla de «${original}», pero no dice ${cuantos}. Te enseño lo que sí dice: revisa si te sirve.`
+  return habla
+    ?`⚠ El manual habla de «${original}», pero no dice ${cuantos}. Te enseño lo que sí dice: revisa si te sirve.`
+    :`⚠ No encontré en el manual ${cuantos} «${original}». Te enseño lo más cercano: revisa si te sirve.`
 }
 function esOperacionDeTienda(q){
   const n=normalizeText(q||'').replace(/\s+/g,' ');
@@ -7587,6 +8021,9 @@ function responderSinModelo(q){
   }
   const ruta=rutaDe(q);
   if(ruta.motivo==='empate'){preguntarSeccion(q,ruta.alternativas);return}
+  /* La misma decisión que toma seccionesPorRelevancia, para saber en qué sección
+     se buscó y si la pregunta nombraba otra que la activa. */
+  const sec=docChunks.length?decidirSeccion(q):{doc:null,otraSeccion:null,porPregunta:false};
   const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
   let fragmentos='',chars=0;
   const tarjetas=[];
@@ -7603,13 +8040,15 @@ function responderSinModelo(q){
     if(misma)misma.texto+='\n'+trozo;
     else tarjetas.push({c:r.c,texto:trozo});
   }
+  ultimasTarjetas=tarjetas;
   fragmentos=fragmentos.trim();
   /* Sin modelo también hay que decirle dónde está lo que busca. Se veía en
      pantalla: con CASUAL activo, «¿cómo acomodo las sábanas?» contestaba "nada
      coincide" mientras BLANCOS —cargado, a un clic— tenía la lámina. La misma
      comprobación que ya se hace con API key, aquí sin gastar nada. */
   let enOtra=null;
-  if(!fragmentos&&docChunks.length&&ruta.doc&&docs.length>1&&!esOperacionDeTienda(q)){
+  const nombrada=sec.otraSeccion;
+  if(!nombrada&&!fragmentos&&docChunks.length&&ruta.doc&&docs.length>1&&!esOperacionDeTienda(q)){
     const otra=otraSeccionConEvidencia(consultaDeBusqueda(q),ruta.doc);
     if(otra)enOtra=otra.nombre;
     else{
@@ -7630,12 +8069,10 @@ function responderSinModelo(q){
      contestaran. Se enseñan igual —puede que sirvan— pero con la advertencia
      arriba, sin lámina que las respalde, y al tablero va como duda que el
      manual no explica. */
-  const activo=ruta.doc||(docs.length===1?docs[0].name:null);
+  const activo=sec.doc||(docs.length===1?docs[0].name:null);
   const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
-  const cuenta=fragmentos&&!ausentes.length?cosaQueSeCuenta(q):null;
-  const sinCifra=!!cuenta&&tarjetas.some(t=>hablaDe(t.texto,t.c.heading,cuenta))
-    &&!tarjetas.some(t=>traeCifraDe(t.texto,t.c.heading,cuenta));
-  const avisoAusente=sinCifra?avisoSinCifra(q,cuenta):ausentes.length?(()=>{
+  const avisoCuenta=fragmentos&&!ausentes.length?avisoDeCuenta(q,tarjetas,activo):'';
+  const avisoAusente=avisoCuenta?avisoCuenta:ausentes.length?(()=>{
     const lista=a=>a.map(i=>'«'+i.palabra+'»').join(' ni ');
     const deNadie=ausentes.filter(i=>i.enNinguno),deOtra=ausentes.filter(i=>!i.enNinguno);
     const partes=[];
@@ -7682,8 +8119,11 @@ function responderSinModelo(q){
      teléfono y ahora no la hay, se dice en cada respuesta, en una línea. */
   let keyPerdida=false;
   try{keyPerdida=!appState.apiKey&&navigator.onLine&&localStorage.getItem('ap_ia_usada')==='1'}catch{}
+  const activa=sec.doc?nombreDeSeccion(sec.doc):'';
   const cuerpo=fragmentos
     ?`${avisoVisible?`> ${avisoVisible}\n`:''}> ${aviso}\n\n${fragmentos}`
+    :nombrada
+    ?`**Preguntas por ${nombrada.nombre}, y tienes activa ${activa}.** No te enseño la lámina de ${activa}: estos manuales comparten plantilla y la misma regla puede traer otra cifra. Cambia de sección con el botón y te contesto con ${nombrada.nombre}.`
     :`**Nada${enOtra?' de esta sección':' del manual'} coincide con esa pregunta.** Prefiero decírtelo a contestarte con la sección equivocada: o el manual no lo especifica, o no lo dice con esas palabras.${enOtra?` **Pero eso sí aparece en ${enOtra}**, que también tienes cargada: cámbiala arriba y vuelve a preguntar.`:' Prueba con otras palabras o con un acceso rápido.'}`;
   const msgEl=appendMsg('assistant',fragmentos?'':cuerpo,false);
   /* Sin fragmentos es un «no está»: se pinta distinto, sin brillo de acento. */
@@ -7704,6 +8144,20 @@ function responderSinModelo(q){
     const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
     cuerpoEl.appendChild(av);
     for(const t of tarjetas)cuerpoEl.appendChild(tarjetaDeFragmento(t.c,t.texto,terminos));
+  }
+  /* El mismo botón que con API key: cambia la sección y repite la pregunta. */
+  if(nombrada&&docs.some(d=>d.name===nombrada.docName)){
+    const cambiar=document.createElement('button');
+    cambiar.className='ref-general';cambiar.type='button';
+    cambiar.textContent=`📕 Cambiar a ${nombrada.nombre} y repetir la pregunta`;
+    cambiar.onclick=()=>{
+      cambiar.disabled=true;
+      cambiarSeccion(nombrada.docName);
+      const input=document.getElementById('user-input');
+      input.value=q;
+      sendMessage();
+    };
+    cuerpoEl.appendChild(cambiar);
   }
   if(keyPerdida){
     const k=document.createElement('div');k.className='frag-ausente frag-parecidas';
@@ -8312,8 +8766,9 @@ async function sendMessage(){
      qué está pasando y cuánto lleva, y si el proveedor se queda callado
      ESPERA_MAX, se corta la espera en vez de esperar para siempre. */
   const nombreModelo=(PROVIDERS[appState.provider]?.name||'el modelo').replace(/^Google /,'');
+  const modo=modoValido(appState.modoRespuesta);
   const inicio=Date.now();
-  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null,esperaLimite=0;
+  let ultimoDato=Date.now(),reintento=0,sinRespuesta=false,respaldo=null,esperaLimite=0,llegoCortada=false;
   ultimoErrorProveedor=null;
   /* Con el agente, la tarjeta dice lo que está haciendo: qué página lee, qué
      lámina mira, qué busca. Es la misma espera, pero se ve el trabajo. */
@@ -8327,14 +8782,17 @@ async function sendMessage(){
     }
     const etapas=[...streamedText.matchAll(/ETAPA\s+(\d)/gi)];
     const etapa=etapas.length?etapas[etapas.length-1][1]:null;
+    const lectura=modo==='rapido'?lecturaDe(streamedText,true):null;
     const modeloVivo=respaldo?respaldo.a:appState.chatModel;
     caja.querySelector('.espera-txt').textContent=
       esperaLimite>Date.now()&&!streamedText?`Límite por minuto de ${nombreModelo} · sigo en ${Math.ceil((esperaLimite-Date.now())/1000)} s`
+      :llegoCortada&&!streamedText?'La respuesta llegó cortada · la pido otra vez'
       :reintento&&!streamedText?`${nombreModelo} ${nombreCortoDeModelo(modeloVivo)} está saturado · reintento ${reintento} de ${RETRY_DELAYS.length}`
       :respaldo&&!streamedText?`${nombreCortoDeModelo(respaldo.de)} saturado · contesta ${nombreCortoDeModelo(respaldo.a)}`
       :estadoAgente?estadoAgente
+      :lectura?(/^no\s+est/i.test(lectura)?'No aparece en el manual · redactando':`Leyendo ${lectura}`)
       :etapa?`Razonando con el manual · etapa ${etapa} de 6`
-      :streamedText?'Razonando con el manual…'
+      :streamedText?(modo==='rapido'?'Leyendo el manual…':'Razonando con el manual…')
       :`Esperando a ${nombreModelo}…`;
     caja.querySelector('.espera-seg').textContent=Math.round((Date.now()-inicio)/1000)+' s';
   };
@@ -8403,7 +8861,9 @@ async function sendMessage(){
   }
   const ctx=buildContext(q);
   context=ctx.texto;
-  const system=(appState.system||document.getElementById('system-prompt').value.trim());
+  /* El modo de respuesta (Ajustes) cambia las seis etapas por un paso de
+     lectura en el motor clásico; el agente lector tiene su propio guion. */
+  const system=promptDelModo(appState.system||document.getElementById('system-prompt').value.trim(),modo);
   const hasPdfs=docChunks.length>0;
   const scope=assessQuestionScope(q);
   /* La identidad sale del manual, no de una constante: delante de un manual de
@@ -8428,14 +8888,16 @@ async function sendMessage(){
   if(scope.isGreeting){
     userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre la sección del manual cargado. NO uses la redirección de fuera de tema.]';
   }else if(scope.clearlyOff&&!isCreatorQuestion(q)){
-    userContent+='\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio de visual merchandising. Responde con la redirección corta, sin formato de 6 etapas.]';
+    userContent+=`\n\n[NOTA DEL SISTEMA: Esta pregunta parece fuera del dominio de visual merchandising. Responde con la redirección corta, sin ${modo==='rapido'?'LECTURA':'formato de 6 etapas'}.]`;
   }else if(scope.otherStore){
     userContent+='\n\n[NOTA DEL SISTEMA: Menciona otra tienda. Aclara que solo conoces manuales Mercadep; si la pregunta incluye un producto VM (corbata, sensor, etc.), responde la regla de Mercadep del contexto.]';
   }else if(scope.isVmQuestion){
-    userContent+='\n\n[NOTA DEL SISTEMA: Pregunta válida de visual merchandising. Usa el formato de 6 etapas y basa la respuesta en el contexto. Si hay conflicto documentado, cítalo — no digas "no especifica".]';
+    userContent+=modo==='rapido'
+      ?'\n\n[NOTA DEL SISTEMA: Pregunta válida de visual merchandising. Empieza con la LECTURA y basa la respuesta en el contexto. Si hay conflicto documentado, cítalo — no digas "no especifica".]'
+      :'\n\n[NOTA DEL SISTEMA: Pregunta válida de visual merchandising. Usa el formato de 6 etapas y basa la respuesta en el contexto. Si hay conflicto documentado, cítalo — no digas "no especifica".]';
   }
   if(ctx.estado){
-    userContent+='\n\n[NOTA DEL SISTEMA: Esto es una pregunta sobre la app o sobre el manual en sí. Responde con el bloque ESTADO DE LA APP, breve y sin el formato de 6 etapas. No cites páginas.]';
+    userContent+=`\n\n[NOTA DEL SISTEMA: Esto es una pregunta sobre la app o sobre el manual en sí. Responde con el bloque ESTADO DE LA APP, breve y sin ${modo==='rapido'?'LECTURA':'el formato de 6 etapas'}. No cites páginas.]`;
   }else if(ctx.sinCoincidencias){
     userContent+='\n\n[NOTA DEL SISTEMA: La búsqueda no encontró ni un fragmento que coincida con esta pregunta. Responde "El manual no especifica [X]" y cierra con CERTEZA: GAP. No improvises una regla.]';
   }else if(ctx.flojo){
@@ -8473,8 +8935,20 @@ async function sendMessage(){
       },
       signal:currentAbort.signal
     };
-    const{tokens,model:contesto}=await callWithRetryStream(provider,streamParams);
+    let recibido=await callWithRetryStream(provider,streamParams);
     if(chatDescartado)return;
+    /* A veces llega el razonamiento sin la contestación, con el proveedor
+       diciendo que terminó bien. Medido con el demo: 2 de 18 respuestas de 3.8
+       Flash. Antes de enseñarle al asesor el aviso de «se cortó», se pide una
+       vez más; casi siempre la segunda llega entera. */
+    if(debeRepetirPorCorte(streamedText,llegoCortada)){
+      llegoCortada=true;
+      streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
+      ultimoDato=Date.now();pintarEspera();
+      recibido=await callWithRetryStream(provider,streamParams);
+      if(chatDescartado)return;
+    }
+    const{tokens,model:contesto}=recibido;
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
@@ -8774,7 +9248,7 @@ function switchExpert(btn){
   document.getElementById('prov-info').innerHTML=PROV_INFO[provider];
   document.getElementById('api-key-input').placeholder=PROVIDERS[provider].placeholder;
   const chatSel=document.getElementById('chat-model-select');
-  chatSel.innerHTML=PROVIDERS[provider].chatModels.map(m=>`<option value="${m}">${m}</option>`).join('');
+  chatSel.innerHTML=PROVIDERS[provider].chatModels.map(m=>`<option value="${m}">${etiquetaDeModelo(m)}</option>`).join('');
   chatSel.value=elegido;
   /* El campo de la key también cambia de proveedor. Si se quedaba la del
      anterior, «Guardar cambios» la escribía encima de la buena del nuevo. */
@@ -9143,7 +9617,12 @@ function entidadesDelCorpus(){
   const mayus=new Map(),minus=new Set();
   /* Lo que va detrás de un punto, un guion de viñeta o un salto de línea puede
      ir en mayúscula por gramática, no por ser un nombre. */
-  const inicioDeFrase=/[.!?:;•·➔→\-–—(\[\n]/;
+  /* «¡Recuerda!» abre frase igual que tras un punto. Sin el «¡», «Recuerda»
+     —que en los manuales solo va así o en «RECUERDA:»— quedaba fichado como
+     nombre propio, y cada respuesta que cerraba con «Recuerda que…» salía con
+     «⚠ No pude verificar el nombre Recuerda»: 18 de 26 avisos en 268 respuestas
+     medidas con 14 manuales reales, casi todos en respuestas correctas. */
+  const inicioDeFrase=/[.!?:;•·➔→\-–—(\[\n¡¿"“«'*]/;
   for(const c of docChunks){
     const txt=(c.heading?c.heading+'. ':'')+(c.text||'');
     for(const m of txt.matchAll(/[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/g)){
@@ -9159,7 +9638,11 @@ function entidadesDelCorpus(){
     }
   }
   entidadesCorpus=new Set();
-  for(const[t]of mayus)if(!minus.has(t))entidadesCorpus.add(t);
+  /* Que no aparezca en minúscula en NINGUNA de sus formas: «Colchones»,
+     «Pijamas» o «Avances» van en mayúscula en las listas de las láminas, pero
+     «colchón», «pijama» y «avance» se escriben en minúscula en el texto. Una
+     marca no tiene plural ni femenino escritos en minúscula. */
+  for(const[t]of mayus)if(!variantes(t).some(v=>minus.has(v)))entidadesCorpus.add(t);
   return entidadesCorpus
 }
 function nombresSinRespaldo(respuesta,contexto){
@@ -9168,7 +9651,11 @@ function nombresSinRespaldo(respuesta,contexto){
   const ctx=' '+normalizeText(contexto).replace(/\s+/g,' ')+' ';
   const enContexto=t=>ctx.includes(' '+t+' ');
   /* Vienen del prompt, no del manual, así que no son invenciones. */
-  const propios=new Set(['mercadep','certeza','gap','alta','media'].concat(tokenize(seccionActiva()||'')));
+  /* Y los nombres de todas las secciones cargadas: «eso sí está en 246, 247
+     SACOS Y PANTALONES» lo dice la app —es la sección que tiene la palabra—, no
+     el modelo de su cosecha. */
+  const propios=new Set(['mercadep','certeza','gap','alta','media'].concat(tokenize(seccionActiva()||''),
+    ...(docs||[]).map(d=>tokenize(nombreDeSeccion(d.name)||''))));
   const out=new Map();
   const texto=respuesta;
   /* La respuesta llega en markdown: «**Recuerda:**», «- Coloca», «¿Dónde…?» o
@@ -9192,15 +9679,39 @@ function nombresSinRespaldo(respuesta,contexto){
   return[...out.values()]
 }
 
+/* «Vinos debe ser mayor a $1,200.00»: el cotejo partía la cifra en «1,200» y
+   «00» y no encontraba «1,200» porque detrás venía «.00». Se escriben igual de
+   los dos lados antes de comparar: sin separador de miles y sin decimales en
+   cero. «20.8» y «1.50» no cambian. */
+function cifrasCanonicas(t){
+  return(t||'').replace(/(\d)[.,](?=\d{3}(?!\d))/g,'$1').replace(/(\d)[.,]0+(?![\d])/g,'$1')
+}
+/* «la sección de 101 Muebles»: el número es el de la sección, que la app sabe
+   por el propio manual, y no tiene por qué estar en los fragmentos enviados.
+   Solo se quita delante de la palabra con que empieza el nombre de su sección,
+   para que un «101» suelto se siga cotejando. */
+function sinNumerosDeSeccion(texto){
+  let t=texto||'';
+  for(const d of docs||[]){
+    const s=nombreDeSeccion(d.name)||'';
+    const cifras=s.match(/^[\d,\sy]+(?=\s)/);
+    if(!cifras)continue;
+    const nums=cifras[0].match(/\d+/g),palabra=s.slice(cifras[0].length).trim().split(/\s+/)[0];
+    if(!nums||!palabra)continue;
+    const re=new RegExp('(?<![\\d.,])(?:'+nums.join('|')+')((?:\\s*(?:,|y)\\s*\\d+)*\\s+'+palabra.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    t=t.replace(re,(_,resto)=>resto.replace(/\d+/g,''));
+  }
+  return t
+}
 function verificarContraContexto(respuesta,contexto){
   const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set(),atadas:[]};
   if(!respuesta||!contexto)return vacio;
 
-  const texto=respuesta
-    .replace(/^\s*\d+[.)]\s/gm,'')                 // "1." de una lista no es un dato
-    .replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?/gi,' '); // las páginas se revisan aparte
+  const texto=cifrasCanonicas(sinNumerosDeSeccion(respuesta
+    .replace(/^\s*\d+[.)]\s/gm,'')                  // "1." de una lista no es un dato
+    .replace(/\(?\s*p[áa]g\.?\s*\d+\s*\)?/gi,' '))); // las páginas se revisan aparte
 
-  const ctx=contexto.replace(/\s+/g,' ');
+  const ctx=cifrasCanonicas(contexto.replace(/\s+/g,' '));
 
   /* Primero los pares. Lo que ya quedó verificado —o marcado— como par no se
      vuelve a revisar como número suelto: «80 cm» se señala una vez, con su
@@ -9210,6 +9721,16 @@ function verificarContraContexto(respuesta,contexto){
   const marcadosPorUnidad=[];
   const yaVistos=new Set();
   for(const[clave,legible]of paresResp){
+    /* «Piezas» es la palabra con que se cuenta, no una medida: «máximo 8 piezas
+       en nichos» dice lo mismo que el manual —«en nichos máximo 8»—, que cuenta
+       camisas. Si el par no está, se coteja el número solo; en cm o % la
+       unidad sí cambia el dato y se sigue exigiendo. */
+    if(clave.endsWith('|pieza')&&!paresCtx.has(clave)){
+      /* …pero el número tiene que estar contando algo, no midiendo: «12 piezas»
+         no se respalda con un «12 cm». */
+      const esc=clave.split('|')[0].replace(/[.,]/g,'[.,]');
+      if(new RegExp('(?<![\\d.,])'+esc+'(?![\\d]|[.,]\\d)(?!\\s*(?:cm|mm|mts?|m\\b|cent|mil[ií]m|metros?|%|por\\s*ciento|d[ií]as?|semanas?|mes|horas?|min))','i').test(ctx))continue;
+    }
     yaVistos.add(clave.split('|')[0]);
     if(!paresCtx.has(clave))marcadosPorUnidad.push(legible);
   }
@@ -9537,12 +10058,15 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   if(parsed&&thinking&&!assessQuestionScope(originalQuestion).clearlyOff){
     const block=document.createElement('div');block.className='reasoning-block';
     block.innerHTML=safeMarkdown(thinking);
+    /* En el modo rápido el razonamiento es una sola línea: dónde lo leyó. */
+    const soloLectura=/^\s*LECTURA\s*:/i.test(thinking);
+    const ver=soloLectura?'Ver dónde lo leyó':'Ver razonamiento',ocultar=soloLectura?'Ocultar lectura':'Ocultar razonamiento';
     const btn=document.createElement('button');btn.className='reasoning-toggle';
-    btn.innerHTML=`<span class="rt-icon">▶</span> Ver razonamiento`;
+    btn.innerHTML=`<span class="rt-icon">▶</span> ${ver}`;
     btn.onclick=()=>{
       const open=block.classList.toggle('open');
       btn.classList.toggle('open',open);
-      btn.innerHTML=open?`<span class="rt-icon" style="transform:rotate(90deg)">▶</span> Ocultar razonamiento`:`<span class="rt-icon">▶</span> Ver razonamiento`;
+      btn.innerHTML=open?`<span class="rt-icon" style="transform:rotate(90deg)">▶</span> ${ocultar}`:`<span class="rt-icon">▶</span> ${ver}`;
     };
     footer.appendChild(btn);
     loaderEl.appendChild(block);
@@ -10376,6 +10900,189 @@ function pruebasOrden(){
   return casos;
 }
 
+/* Los avisos de «el manual no menciona» y la verificación, con los casos que
+   salieron mal con 14 manuales reales (benchmark del 03-oct-2026): avisaban
+   de palabras que no son el tema y fichaban «Recuerda» como nombre. Y los que
+   tienen que seguir avisando, para que callar no sea el arreglo. */
+function pruebasAvisos(){
+  const gChunks=docChunks,gDocs=docs,gManual=manualSections,gActivo=appState.manualActivo;
+  const frag=(id,docName,page,heading,text)=>({id,source:'pdf',docName,page,heading,text});
+  docs=[{name:'MESA.pdf'},{name:'SHOW.pdf'}];manualSections=[];appState.manualActivo='MESA.pdf';
+  docChunks=[
+    frag('a1','MESA.pdf',2,'101 MUEBLES','Manual de exhibición de la sección de muebles y mesas.'),
+    frag('a2','MESA.pdf',26,'MESA FINA','No colocar cojines sobre las mesas, mesas show y partes altas de perímetros.'),
+    frag('a3','MESA.pdf',17,'TEMPORADA BARATA 1° ETAPA','Los descuentos son del 25%. La exhibición por mundos se mantiene.'),
+    frag('a4','MESA.pdf',9,'CERVEZAS','Las cervezas se exhiben en refrigeradores, separadas por país y marca. Cada colección va al frente.'),
+    frag('a5','MESA.pdf',10,'LIMPIEZA','Limpia todo: mesas, entrepaños y cristales. ¡Recuerda! Servir al cliente en TODO LUGAR.'),
+    frag('a6','MESA.pdf',11,'SERVICIO','Tipo de producto Colchones y bases. El colchón se exhibe sin plástico.'),
+    frag('b1','SHOW.pdf',4,'MESA SHOW','Coloca la mesa show al centro de la sección. Las piezas se acomodan por color.'),
+    frag('b2','SHOW.pdf',5,'BARATA','En la primera etapa de barata los descuentos van del 15% al 45%. Se acomodan de mayor a menor.'),
+    frag('b3','SHOW.pdf',6,'MANIQUÍES','Cambia la ropa del maniquí cada 15 días. Las prendas se acomodan por mundo.'),
+    frag('b4','SHOW.pdf',7,'MANIQUÍES','El maniquí va al frente. Retira los sensores del maniquí antes de vestirlo.'),
+    frag('b5','SHOW.pdf',8,'PROPS','El maniquí se viste con la mercancía de la mesa. Colecciones nuevas de cada mes.'),
+  ];
+  rebuildCorpus();
+  const avisa=q=>terminosAusentes(q,'MESA.pdf').map(i=>i.palabra);
+  const verif=(r,c)=>{const v=verificarContraContexto(r,c);return v.cifras.concat(v.nombres)};
+  const cava='[V.pdf · pág. 21 · CAVA]\nVinos debe ser mayor a $1,200.00. Destilados mayor a $2,400.00.';
+  const nicho='[C.pdf · pág. 19 · MESA]\nEn las mesas colocar máximo 10 camisas por fila y en nichos máximo 8.';
+  const casos=[
+    {nombre:'«mesa show» no es de otro manual si el propio dice «mesas show»',ok:avisa('¿puedo poner cojines en la mesa show?').length===0},
+    {nombre:'«primera etapa» se encuentra como «1° ETAPA»',ok:avisa('¿de cuánto es el descuento en la primera etapa?').length===0},
+    {nombre:'«acomodan» es cómo pregunta el piso, no el tema',ok:avisa('¿las cervezas cómo se acomodan?').length===0},
+    {nombre:'«guardar», «alcanza», «sentido» y «otra sección» no avisan',ok:['¿puedo guardar cajas en los refrigeradores?','no me alcanzan las mesas para las cervezas','¿en qué sentido van las cervezas?','¿las cervezas las puedo usar en otra sección?'].every(q=>avisa(q).length===0)},
+    {nombre:'«colección nueva» no culpa a quien dice «colecciones nuevas»',ok:avisa('llegó colección nueva, ¿qué hago?').length===0},
+    {nombre:'«saco», «bajo» y «pasas» son tema, no acción',ok:!esPalabraDeAccion('saco')&&!esPalabraDeAccion('bajo')&&!esPalabraDeAccion('bajas')&&!esPalabraDeAccion('pasas')&&!esPalabraDeAccion('junta')&&esPalabraDeAccion('alcanza')&&esPalabraDeAccion('agrupo')&&esPalabraDeAccion('puedo')},
+    {nombre:'el tema que es de otro manual sigue avisando («maniquí»)',ok:avisa('¿cada cuánto cambio el maniquí?').includes('maniqui')},
+    {nombre:'«porcentaje» avisa donde ningún manual da participación, también mal escrito',ok:avisa('¿qué porcentaje tiene formal?').includes('porcentaje')&&avisa('¿qué porsentaje tiene formal?').includes('porsentaje')},
+    {nombre:'«¡Recuerda!» no ficha «Recuerda» como nombre',ok:!entidadesDelCorpus().has('recuerda')&&nombresSinRespaldo('Recuerda que la mesa va al centro.','[MESA.pdf · pág. 4]\nLa mesa va al centro.').length===0},
+    {nombre:'una palabra que en minúscula va en singular no es un nombre («Colchones»)',ok:!entidadesDelCorpus().has('colchones')},
+    {nombre:'«$1,200.00» del manual respalda «$1,200» y «$1,200.00»',ok:verif('Debe costar más de $1,200 (pág. 21).',cava).length===0&&verif('Más de $1,200.00 y destilados más de $2,400.',cava).length===0},
+    {nombre:'un precio inventado sigue marcado',ok:verif('Debe costar más de $1,500.',cava).length===1},
+    {nombre:'«máximo 8 piezas» se respalda con «en nichos máximo 8»',ok:verif('En nichos van máximo 8 piezas.',nicho).length===0},
+    {nombre:'«12 piezas» no se respalda con «12 cm»',ok:verif('Van 12 piezas por nicho.','[C.pdf · pág. 19]\nDeja 12 cm entre camisas.').length===1},
+    {nombre:'«101 Muebles» es el nombre de la sección, no un dato; «101» suelto sí se coteja',ok:verif('Van al fondo de 101 Muebles.','[MESA.pdf · pág. 2]\nVan al fondo.').length===0&&verif('Caben 101 sillas.','[MESA.pdf · pág. 2]\nVan al fondo.').length===1},
+  ];
+  docChunks=gChunks;docs=gDocs;manualSections=gManual;appState.manualActivo=gActivo;
+  rebuildCorpus();
+  return casos;
+}
+
+/* El orden de las tarjetas con láminas como las de los manuales reales: rótulos
+   sueltos junto a la lámina que explica, títulos con «sin» y «con», la medida
+   que nunca dice «altura». El relleno es para que el corpus pase de 40
+   fragmentos y se exijan dos aciertos, como con los manuales de verdad. */
+function pruebasOrdenDeTarjetas(){
+  const gChunks=docChunks,gDocs=docs,gManual=manualSections,gActivo=appState.manualActivo;
+  const frag=(id,page,heading,text,docName='TIENDA.pdf')=>({id,source:'pdf',docName,page,heading,text});
+  docs=[{name:'TIENDA.pdf'},{name:'RELLENO.pdf'}];manualSections=[];appState.manualActivo='TIENDA.pdf';
+  docChunks=[
+    frag('s1',11,'SENSORES','Orienta el sensor de 8 a 12 cm de la bastilla hacia arriba, sobre la costura.'),
+    frag('s2',13,'ALTURAS Y NIVELES','Se refiere a la elevación de la mercancía para dar visibilidad al cliente.'),
+    frag('b1',2,'BÁSICOS','Brastow\nOndera\nMarca\nVelmira Home\nKalinde'),
+    frag('b2',14,'BÁSICOS','22% de participación. Este espacio va en el interior de la sección o en la parte trasera, nunca en perímetro.'),
+    frag('p1',3,'PREMIUM','Tresvik\nOndera\nMarca\nBrastow'),
+    frag('p2',15,'PREMIUM','41% de participación. Es el mundo más importante, se coloca al frente de la sección.'),
+    frag('c1',10,'CON CAJA','Viendo el producto de frente, la etiqueta adherible se coloca del lado izquierdo.'),
+    frag('c2',10,'CAJA CON COLGADOR','Se coloca la etiqueta adherible en la parte posterior del producto.'),
+    frag('c3',10,'SIN CAJA','Se etiquetan en la costura.'),
+    /* La competencia de verdad: «caja» → «punto de venta» por el diccionario. */
+    frag('c4',19,'MUEBLES EN POS','Este mueble va al costado del punto de venta (POS) para exhibir productos de venta cruzada con su etiqueta.'),
+    frag('v1',22,'MUEBLES TIPO CAVA','Se colocan los vinos en los muebles tipo cava por país, región y punto de precio.'),
+    frag('v2',21,'CAVA','El precio del producto en la cava: vinos mayor a $1,200.00 y destilados mayor a $2,400.00.'),
+    frag('e1',9,'ETIQUETADO DE PRECIO','La etiqueta de precio se coloca en el costado derecho de la prenda.'),
+  ];
+  for(let i=0;i<36;i++)docChunks.push(frag('r'+i,i+1,'NOTA '+i,'Revisa la vitrina número '+i+' antes de abrir y deja el piso despejado.','RELLENO.pdf'));
+  rebuildCorpus();
+  const primera=q=>{const r=seccionesPorRelevancia(q)[0];return r?r.c.page+' '+r.c.heading:''};
+  const casos=[
+    {nombre:'«altura» se cumple con una medida: SENSORES contesta «¿a qué altura va el sensor?»',ok:primera('¿a qué altura va el sensor?')==='11 SENSORES'},
+    {nombre:'una medida sola no contesta una pregunta ajena («¿a qué altura va el techo?»)',ok:seccionesPorRelevancia('¿a qué altura va el techo?').length===0},
+    {nombre:'a un «¿dónde…?» contesta la lámina que explica, no la lista de marcas',ok:primera('¿dónde van los básicos?')==='14 BÁSICOS'},
+    {nombre:'a un «¿qué marcas…?» la lista de marcas sigue primero',ok:primera('¿qué marcas son básicos?')==='2 BÁSICOS'},
+    {nombre:'«sin caja» va a SIN CAJA, no a CON CAJA ni a CAJA CON COLGADOR',ok:primera('¿cómo etiqueto un producto sin caja?')==='10 SIN CAJA'},
+    {nombre:'«con caja» no va a SIN CAJA',ok:primera('¿cómo etiqueto un producto con caja?')!=='10 SIN CAJA'},
+    {nombre:'«porsentaje» mal escrito también pide la participación',ok:primera('que porsentaje tiene premium')==='15 PREMIUM'},
+    {nombre:'«¿a partir de qué precio…?» va a la lámina con el precio, no a «punto de precio»',ok:primera('¿a partir de qué precio va un vino en la cava?')==='21 CAVA'},
+    {nombre:'«la etiqueta de precio» no pide una cantidad; «qué precio» y «cuánto cuesta» sí',ok:!pideUnPrecio('¿dónde va la etiqueta de precio?')&&!pideUnPrecio('¿el precio va a la derecha?')
+      &&pideUnPrecio('¿a partir de qué precio va un vino?')&&pideUnPrecio('¿cuánto cuesta?')&&primera('¿dónde va la etiqueta de precio?')==='9 ETIQUETADO DE PRECIO'},
+    {nombre:'«etiqueto» alcanza «etiquetan»; «puedo» es verbo de piso, no tema',ok:variantes('etiqueto').includes('etiquetan')&&esVerbo('puedo')},
+  ];
+  docChunks=gChunks;docs=gDocs;manualSections=gManual;appState.manualActivo=gActivo;
+  rebuildCorpus();
+  return casos;
+}
+
+/* La sección que nombra la pregunta, con cuatro manuales de la misma plantilla:
+   todos tienen SENSORES y todos hablan de muebles de exhibición. */
+function pruebasSeccionNombrada(){
+  const gChunks=docChunks,gDocs=docs,gManual=manualSections,gActivo=appState.manualActivo;
+  const frag=(id,docName,page,heading,text)=>({id,source:'pdf',docName,page,heading,text});
+  docs=[{name:'V.pdf'},{name:'M.pdf'},{name:'A.pdf'},{name:'F.pdf'}];manualSections=[];appState.manualActivo=null;
+  docChunks=[
+    frag('v1','V.pdf',1,'388 VINOS Y LICORES','Manual de exhibición de vinos y licores.'),
+    frag('v2','V.pdf',10,'SENSORES','En vinos el sensor va en la parte trasera de la botella.'),
+    frag('v3','V.pdf',12,'CAVA','Los vinos van en muebles tipo cava. Los accesorios de bar van junto a la cava.'),
+    frag('v4','V.pdf',13,'LICORES','Los licores van en muebles de pared.'),
+    frag('m1','M.pdf',1,'101 MUEBLES','Manual de exhibición de muebles.'),
+    frag('m2','M.pdf',9,'ALINEACIÓN','Deja un pasillo de 80 cm entre los muebles.'),
+    frag('m3','M.pdf',10,'SENSORES','El sensor de los muebles va debajo del asiento.'),
+    frag('a1','A.pdf',1,'213 ACCESORIOS HOMBRE','Accesorios de hombre: cinturones y carteras.'),
+    frag('a2','A.pdf',11,'SENSORES','El sensor de los cinturones va en la hebilla.'),
+    frag('a3','A.pdf',12,'MANIQUÍES','Los accesorios del maniquí se cambian cada 15 días. Van en muebles bajos.'),
+    frag('a4','A.pdf',13,'CARTERAS','Las carteras y accesorios de piel van en muebles con cristal.'),
+    frag('a5','A.pdf',14,'GORRAS','Los accesorios de cabeza van en el perímetro.'),
+    frag('a6','A.pdf',15,'CORBATAS','Los accesorios formales van junto a las camisas.'),
+    frag('f1','F.pdf',1,'120 FLORES Y VELAS','Manual de exhibición de flores y velas.'),
+    frag('f2','F.pdf',14,'ACCESORIOS','Los accesorios florales van en la mesa de entrada.'),
+    frag('f3','F.pdf',15,'VELAS','Las velas van en muebles bajos y en muebles de centro.'),
+    frag('f4','F.pdf',10,'SENSORES','El sensor de las velas va en la base.'),
+  ];
+  rebuildCorpus();
+  /* Todas las tarjetas del manual nombrado: los cuatro tienen SENSORES. */
+  const soloDe=(q,d)=>{const r=seccionesPorRelevancia(q);return r.length>0&&r.every(x=>x.c.docName===d)};
+  const con=(activo,f)=>{appState.manualActivo=activo;try{return f()}finally{appState.manualActivo=null}};
+  const otra=(activo,q)=>con(activo,()=>{const s=decidirSeccion(q);return s.otraSeccion?s.otraSeccion.docName:''});
+  const casos=[
+    {nombre:'sin sección activa, «en vinos» busca solo en VINOS (también en modo manual)',ok:soloDe('en vinos, ¿dónde va el sensor?','V.pdf')},
+    {nombre:'«vino» en singular nombra VINOS igual que «vinos»',ok:(seccionNombradaEnPregunta('¿el vino lleva sensor?')||{}).docName==='V.pdf'},
+    {nombre:'MUEBLES no tiene palabra propia, pero «en muebles» dicho como sección la nombra',ok:soloDe('en muebles, ¿dónde va el sensor?','M.pdf')},
+    {nombre:'«los muebles» con artículo es un tema, no la sección',ok:!seccionNombradaComoTal('¿qué va en los muebles del pasillo?')},
+    {nombre:'con otra sección activa, «en vinos» no enseña la lámina de la activa y señala VINOS',ok:otra('M.pdf','en vinos, ¿dónde va el sensor?')==='V.pdf'&&con('M.pdf',()=>seccionesPorRelevancia('en vinos, ¿dónde va el sensor?').length===0)},
+    {nombre:'«en muebles» no manda a otra sección si ya hay una activa',ok:otra('V.pdf','en muebles, ¿qué pasillo dejo?')===''},
+    {nombre:'«los accesorios de bar» en VINOS son tema de VINOS; «en accesorios, …» sí nombra la sección',ok:otra('V.pdf','¿dónde van los accesorios de bar?')===''&&otra('V.pdf','en accesorios, ¿dónde va el sensor?')==='A.pdf'},
+    {nombre:'en FLORES, «en accesorios» es su lámina ACCESORIOS, no el manual de accesorios',ok:otra('F.pdf','¿qué va en accesorios?')===''},
+  ];
+  docChunks=gChunks;docs=gDocs;manualSections=gManual;appState.manualActivo=gActivo;
+  identificadores=null;rebuildCorpus();
+  return casos;
+}
+
+/* Erratas de oído, vocabulario del piso, «¿cuántos?» y lo que no es del
+   manual: lo que quedaba fallando con los catorce manuales reales. */
+function pruebasVocabularioYTrampas(){
+  const gChunks=docChunks,gDocs=docs,gManual=manualSections,gActivo=appState.manualActivo;
+  const frag=(id,docName,page,heading,text)=>({id,source:'pdf',docName,page,heading,text});
+  docs=[{name:'Z.pdf'},{name:'A.pdf'},{name:'R.pdf'},{name:'P.pdf'},{name:'S.pdf'}];manualSections=[];appState.manualActivo=null;
+  docChunks=[
+    frag('z1','Z.pdf',1,'237 ZAPATOS HOMBRES','Manual de exhibición de zapatos.'),
+    frag('z2','Z.pdf',17,'SNEAKERS','Las sneakers van en la jaula: Tresvik, Ondera y Brastow.'),
+    frag('z3','Z.pdf',18,'PROBADOR','El probador se mantiene limpio y con banca.'),
+    /* La trampa de verdad: el manual sí habla de la luz, la del focal. */
+    frag('z5','Z.pdf',20,'MARCAS','Tresvik va junto a Kalinde. Hay que contar las piezas antes de abrir.'),
+    frag('z4','Z.pdf',19,'EQUILIBRIO','La luz del focal ilumina la mesa. Si la luz se va hacia un lado, equilibra el peso visual.'),
+    frag('a1','A.pdf',1,'213 ACCESORIOS HOMBRE','Manual de exhibición de accesorios.'),
+    frag('a2','A.pdf',39,'PROPS Y MANIQUÍES','Actualiza la vestimenta del maniquí cada 15 días. Retira los sensores de las prendas.'),
+    frag('r1','R.pdf',1,'285 ROPA INTERIOR','Manual de exhibición de ropa interior.'),
+    frag('r2','R.pdf',5,'BÁSICOS','La ropa interior básica va al fondo. Ropa de algodón en góndola.'),
+    frag('r3','R.pdf',6,'PREMIUM','La ropa premium va al frente.'),
+    frag('p1','P.pdf',1,'338 PAPELERÍA','Manual de exhibición de papelería.'),
+    frag('p2','P.pdf',8,'STICKERS','Los stickers van junto al proveedor de libretas.'),
+    frag('s1','S.pdf',1,'246 SACOS Y PANTALONES','Manual de exhibición de sacos y pantalones.'),
+  ];
+  rebuildCorpus();
+  const con=(activo,f)=>{appState.manualActivo=activo;try{return f()}finally{appState.manualActivo=null}};
+  const tarjeta=(heading,texto)=>({c:{heading},texto});
+  const casos=[
+    {nombre:'«snikers» se lee SNEAKERS, no «stickers»',ok:masParecida('snikers')==='sneakers'},
+    {nombre:'el anagrama corrige letras movidas («trevsik» → «tresvik») pero no inventa otra palabra («carton» no es «contar»)',ok:masParecida('trevsik')==='tresvik'&&masParecida('carton')!=='contar'},
+    {nombre:'la lectura en inglés no gana a una letra: «probidor» es «probador», no «proveedor»',ok:masParecida('probidor')==='probador'},
+    {nombre:'«la ropa del maniquí» llega a «vestimenta»; «se viste» también',ok:weightedTerms('¿cada cuánto le cambio la ropa al maniquí?').some(t=>t.t==='vestimenta')&&weightedTerms('¿cada cuánto se viste el maniquí?').some(t=>t.t==='vestimenta')},
+    {nombre:'en ACCESORIOS, «la ropa del maniquí» es suya (vestimenta), no de ROPA INTERIOR',ok:con('A.pdf',()=>!decidirSeccion('¿cada cuánto le cambio la ropa al maniquí?').otraSeccion)},
+    {nombre:'«en ropa interior, …» sí manda a ROPA INTERIOR',ok:con('A.pdf',()=>(decidirSeccion('en ropa interior, ¿dónde van los básicos?').otraSeccion||{}).docName==='R.pdf')},
+    {nombre:'«¿cuántos maniquíes?» con tarjetas que no los nombran avisa',ok:/No encontré en el manual cuántos «maniquíes»/.test(avisoDeCuenta('¿cuántos maniquíes van en la sección?',[tarjeta('DISPLAY','El cliente busca marcas.')],'Z.pdf'))},
+    {nombre:'«¿cuántos sacos por barra?»: el título SACOS de la sección no vuelve cifra de sacos cualquier número de la lista',ok:!!avisoDeCuenta('¿cuántos sacos van por barra?',[tarjeta('SACOS Y PANTALONES','Considera estos puntos:\n1\nExhibe el saco con su pantalón.\n2\nColoca los sacos arriba y los pantalones abajo.\n1\n2')],'S.pdf')},
+    {nombre:'«¿qué porcentaje…?» (también «porsentaje») avisa si ninguna tarjeta trae un %; con «41% de participación» no',ok:/no dan ningún porcentaje/.test(avisoDeCuenta('¿qué porsentaje tiene la sección?',[tarjeta('MERCADEO','Se mercadea por colección mensual.')],'Z.pdf'))&&avisoDeCuenta('¿qué porcentaje tiene premium?',[tarjeta('PREMIUM','41% de participación. Va al frente.')],'R.pdf')===''},
+    {nombre:'una tarjeta con la cifra sigue sin aviso («un zapato por charola»)',ok:avisoDeCuenta('¿cuántos zapatos pongo por charola?',[tarjeta('SNEAKERS','Coloca un zapato por charola.')],'Z.pdf')===''},
+    {nombre:'«mi jefe me cambió el horario», «cuánto gana un asesor» y «días de vacaciones» no son del manual; «el horario de surtido» sí',ok:esOperacionDeTienda('mi jefe me cambió el horario, ¿se puede?')&&esOperacionDeTienda('¿cuánto gana un asesor?')&&esOperacionDeTienda('¿cuántos días de vacaciones tengo?')&&!esOperacionDeTienda('¿a qué hora es el horario de surtido?')&&!esOperacionDeTienda('¿qué hace el jefe de departamento en la implementación?')},
+    {nombre:'con API key, «se fue la luz» no manda láminas al modelo',ok:buildContext('se fue la luz, ¿qué hago?').sinCoincidencias&&ultimosFragmentos.length===0},
+    {nombre:'«[PENSAMIENTO NTRNO]» y «[RESPUESTA FINAL AL SESOR]» no salen en la respuesta',ok:parseAIResponse('[PENSAMIENTO NTRNO]\nLECTURA: pág. 37\n\n[RESPUESTA FINAL AL SESOR]\n\nVan los lentes de lectura (pág. 37).').final==='Van los lentes de lectura (pág. 37).'},
+  ];
+  docChunks=gChunks;docs=gDocs;manualSections=gManual;appState.manualActivo=gActivo;
+  rebuildCorpus();
+  return casos;
+}
+
 /* ── SEGUNDA TANDA: LOS MANUALES DEL ASESOR ───────
    Solo corre si hay PDF cargado. No puede comprobar respuestas concretas —cada
    manual dice lo suyo—, así que mide lo que sí es igual en cualquier manual de
@@ -10533,6 +11240,11 @@ function correrPruebas(){
   const orden=pruebasOrden();
   for(const o of orden)filas.push({tipo:'orden',q:o.nombre,ok:o.ok,detalle:o.ok?'correcto':'falla'});
 
+  for(const a of pruebasAvisos())filas.push({tipo:'avisos',q:a.nombre,ok:a.ok,detalle:a.ok?'correcto':'falla'});
+  for(const a of pruebasOrdenDeTarjetas())filas.push({tipo:'tarjetas',q:a.nombre,ok:a.ok,detalle:a.ok?'correcto':'falla'});
+  for(const a of pruebasSeccionNombrada())filas.push({tipo:'nombrada',q:a.nombre,ok:a.ok,detalle:a.ok?'correcto':'falla'});
+  for(const a of pruebasVocabularioYTrampas())filas.push({tipo:'vocabulario',q:a.nombre,ok:a.ok,detalle:a.ok?'correcto':'falla'});
+
   /* Seguimiento. Lo que se rompió en el piso: el umbral viejo ampliaba con la
      pregunta anterior casi siempre —en español quedan dos o tres palabras tras
      quitar las vacías— y el asistente acabó contestando la pregunta del turno
@@ -10689,6 +11401,9 @@ function correrPruebas(){
       vencido=modeloEfectivo('gemini','gemini-3.5-flash');
     }finally{respaldoActivo=guardado}
     const csp=document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content||'';
+    /* El rol de fábrica, no el que el asesor haya guardado en Ajustes. */
+    const rol=document.getElementById('system-prompt').defaultValue;
+    const rapido=promptDelModo(rol,'rapido');
     pruebasProveedor.push(
       {nombre:'«github» guardado pasa a Gemini',ok:proveedorValido('github')==='gemini'},
       {nombre:'«openai» guardado se respeta',ok:proveedorValido('openai')==='openai'},
@@ -10711,6 +11426,24 @@ function correrPruebas(){
       {nombre:'ningún texto visible dice «Config»',ok:!/\bConfig\b/.test(sinScripts.textContent+' '+textosDeError)},
       {nombre:'el CSP ya no abre la dirección de GitHub Models',ok:!/azure/.test(csp)&&/generativelanguage/.test(csp)},
       {nombre:'ningún modelo de la lista es un 2.x',ok:!PROVIDERS.gemini.chatModels.some(m=>/^gemini-[12]\./.test(m))},
+      {nombre:'una respuesta que llega cortada se pide otra vez, una sola vez',ok:debeRepetirPorCorte('Clasifico la pregunta:\nbásicos\nV1 (técnica): sensor\nBusco en el contexto con las 3 variantes:\n[MANDATORY]',false)&&!debeRepetirPorCorte('Clasifico la pregunta:\n[MANDATORY]',true)},
+      {nombre:'una respuesta entera no se repite',ok:!debeRepetirPorCorte('[PENSAMIENTO INTERNO]\nLECTURA: pág. 6\n[RESPUESTA FINAL AL ASESOR]\nVa a 15 cm (pág. 6).\nCERTEZA: ALTA',false)&&!debeRepetirPorCorte('Solo puedo ayudarte con reglas de exhibición.',false)},
+      {nombre:'el de fábrica es 3.5 Flash-Lite, el de las mediciones',ok:modeloAlCargar(null,null,'gemini').modelo==='gemini-3.5-flash-lite'&&document.querySelector('.api-btn[data-provider="gemini"]').dataset.model==='gemini-3.5-flash-lite'},
+      {nombre:'3.5 guardado de fábrica pasa una sola vez a Flash-Lite',ok:(()=>{const a=modeloAlCargar('gemini-3.5-flash',null,'gemini'),b=modeloAlCargar('gemini-3.5-flash','1','gemini');return a.modelo==='gemini-3.5-flash-lite'&&a.migrar&&b.modelo==='gemini-3.5-flash'&&!b.migrar})()},
+      {nombre:'otro modelo guardado se respeta',ok:modeloAlCargar('gemini-3.8-flash',null,'gemini').modelo==='gemini-3.8-flash'},
+      {nombre:'OpenAI sin nada guardado arranca en su primer modelo',ok:modeloAlCargar(null,null,'openai').modelo==='gpt-4o-mini'},
+      {nombre:'el selector dice para qué sirve cada modelo',ok:etiquetaDeModelo('gemini-3.5-flash-lite')==='3.5 Flash-Lite · el más rápido, el de las mediciones'&&etiquetaDeModelo('gemini-3.6-flash')==='3.6 Flash'},
+      {nombre:'modo rápido: las seis etapas se cambian por la LECTURA',ok:/LECTURA:/.test(rapido)&&!/ETAPA 1/.test(rapido)&&rapido.includes('[RESPUESTA FINAL AL ASESOR]')&&rapido.includes('CERTEZA: ALTA | MEDIA | GAP')},
+      {nombre:'modo razonado: el rol va tal cual',ok:promptDelModo(rol,'razonado')===rol},
+      {nombre:'un rol sin el bloque de etapas no se toca en modo rápido',ok:promptDelModo('Eres un asistente.','rapido')==='Eres un asistente.'},
+      {nombre:'un modo desconocido guardado vuelve a razonado',ok:modoValido('turbo')==='razonado'&&modoValido(null)==='razonado'&&modoValido('rapido')==='rapido'},
+      {nombre:'la LECTURA no sale como respuesta',ok:sanitizeFinalAnswer(parseAIResponse('[PENSAMIENTO INTERNO]\nLECTURA: pág. 6 · SENSORES\n[RESPUESTA FINAL AL ASESOR]\nVa a 15 cm de la bastilla (pág. 6).\nCERTEZA: ALTA').final,'sensor')==='Va a 15 cm de la bastilla (pág. 6).'},
+      {nombre:'sin la marca de respuesta, la LECTURA se separa de la contestación',ok:(()=>{const r=parseAIResponse('LECTURA: pág. 6 · SENSORES\nVa a 15 cm de la bastilla (pág. 6).\nCERTEZA: ALTA');return r.parsed&&/^LECTURA/.test(r.thinking)&&/^Va a 15 cm/.test(r.final)})()},
+      {nombre:'una LECTURA sin respuesta es una respuesta cortada',ok:parseAIResponse('[PENSAMIENTO INTERNO]\nLECTURA: pág. 6 · SENSORES').cortada===true},
+      {nombre:'una marca con errata («RESPTESTA») no sale en la respuesta, ni los corchetes de la plantilla',ok:sanitizeFinalAnswer(parseAIResponse('[PENSAMIENTO INTERNO]\nLECTURA: pág. 8 · CHECK LIST\n[RESPTESTA FINAL AL ASESOR]\n\n[Para preparar tu área, revisa que los muebles estén alineados con 80 cm de pasillo (pág. 8).]\nCERTEZA: ALTA').final,'reviso')==='Para preparar tu área, revisa que los muebles estén alineados con 80 cm de pasillo (pág. 8).'},
+      {nombre:'mientras se escribe, tampoco sale el corchete de la plantilla',ok:getStreamingDisplayText('[PENSAMIENTO INTERNO]\nLECTURA: pág. 8\n[RESPUESTA FINAL AL ASESOR]\n[Para preparar tu área, revisa que los muebles estén')==='Para preparar tu área, revisa que los muebles estén'},
+      {nombre:'una cita [manual · pág. N] no se toma por envoltura',ok:sinEnvolturaDePlantilla('[140 CASUAL HOMBRE.pdf · pág. 6 · SENSORES]')==='[140 CASUAL HOMBRE.pdf · pág. 6 · SENSORES]'},
+      {nombre:'la tarjeta de espera lee «pág. 6 · SENSORES» y no media línea',ok:lecturaDe('LECTURA: pág. 6 · SENSORES\n[RESPUESTA',true)==='pág. 6 · SENSORES'&&lecturaDe('LECTURA: pág. 6 · SEN',true)===null},
     );
     for(const p of pruebasProveedor)filas.push({tipo:'proveedor',q:p.nombre,ok:p.ok,detalle:p.ok?'correcto':'falla'});
   }

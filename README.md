@@ -19,7 +19,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 232 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20232%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 296 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20296%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -88,25 +88,53 @@ También probé quitarle las seis etapas para que la respuesta saliera mientras 
 primer texto bajó a 0.9 s, pero acertó 51/60 en vez de 55: dos veces dijo «no está» cuando
 sí estaba. La regla era no perder más de un acierto a cambio de velocidad, así que no entró.
 
-Los números de los 30 manuales son de antes de cambiar el orden de las láminas (arriba). Ese
-cambio no movió cuántas preguntas llevan el dato al modelo (182 de 186), pero sí el orden en
-que llega. **Con el manual demo ya está medido de nuevo** (26-sep, también todo por el
-respaldo 3.5 Flash-Lite): **22/24 y 12/12, igual que antes**, con el primer texto en 2.0 s de
-mediana. De los dos que fallan, uno es del modelo y otro de la búsqueda. «La barra se ve muy
-llena» sí trae la lámina de SATURACIÓN, en primer lugar, pero el modelo contestó con la de
-alineación. «¿Qué reviso antes de que llegue la regional?» no traía nada, porque el CHECK
-LIST nunca escribe «revisar». Ya lo trae: el diccionario lleva «reviso» al CHECK LIST, y de
-las 36 preguntas del demo es la única cuyo contexto cambia. Lo que conteste el modelo con eso
-está sin medir. Falta la medición con los 30 manuales.
+Los números de los 30 manuales son de antes de cambiar el orden de las láminas (arriba) y de
+los dos arreglos de la búsqueda de abajo. Falta volver a medirlos con esos manuales.
 
-Hay una segunda prueba de velocidad, sin tocar la app: `eval/modo-ia.mjs --variante
-lectura-corta` cambia las seis etapas por un solo paso («ubica la página y el rótulo del
-dato, o di que no está») antes de responder. Con el manual demo empata en aciertos (22/24,
-12/12) y con el mismo modelo tarda la mitad (1.0 s contra 2.0 s de mediana). Pero una
-respuesta nueva salió contradictoria: dice «el manual no especifica» y luego da la regla. Para
-eso está `--variante lectura-corta-2`, que agrega una línea: si el contexto trae la regla,
-se contesta con ella. Está sin medir. Ninguna de las dos entra a la app hasta medirlas con los
-30 manuales reales.
+### Dos modos de respuesta, y el modelo de fábrica
+
+Desde el 26-sep, en **Ajustes → Modo de respuesta** hay dos:
+
+- **Razonado** (el de fábrica): las seis etapas de arriba. Es el medido con los 30 manuales.
+- **Rápido**: un solo paso de **lectura** —la página y el rótulo donde está el dato, o «no
+  está»— y la respuesta. Mientras escribe, la tarjeta dice «Leyendo pág. 6 · SENSORES».
+
+Con el manual demo (`eval/preguntas-demo.json`, 36 preguntas), el 26-sep, con
+`node eval/modo-ia.mjs --modo razonado|rapido`:
+
+| | Razonado | Rápido |
+|---|---|---|
+| Trae el dato y cita su página | **24/24** | **23/24** |
+| Dice «no está» en las que no están y en las trampas | **12/12** | **12/12** |
+| Avisos de «no pude verificar» | 0 | 0 |
+| Primer texto en pantalla, mediana / 95 % | 2.0 s / 6.7 s | **0.9 s** / 2.2 s |
+
+La que se le escapa al rápido es «la barra se ve muy llena»: la búsqueda trae SATURACIÓN en
+primer lugar, pero Flash-Lite a veces contesta con la lámina de alineación. En la corrida
+anterior del rápido salió bien (24/24), y en el razonado ya había fallado por la mañana. Es la
+pregunta más inestable del demo.
+
+El rápido no es el de fábrica todavía: el #26, que también quitaba las etapas, empataba con el
+demo y perdió aciertos justo con los manuales reales (51/60 contra 55). Hasta medirlo con esos
+30, queda como opción.
+
+**El modelo de fábrica ahora es 3.5 Flash-Lite.** Era el que contestaba de verdad: en todas las
+mediciones 3.5 Flash salió saturado y respondió su respaldo, que es Flash-Lite. Ponerlo primero
+quita los reintentos de la primera pregunta. 3.8 Flash sigue en la lista, pero en el demo no
+contestó mejor: 23/24, ~6 s de mediana, se saturó a media prueba y dos de sus respuestas
+llegaron cortadas (el razonamiento sin la contestación).
+
+Tres arreglos salieron de estas mediciones:
+
+- **«¿Qué reviso antes de que llegue la regional?»** no traía ningún fragmento: el CHECK LIST
+  nunca escribe «revisar». El diccionario lleva «reviso» hasta él, y de las 36 preguntas del
+  demo es la única cuyo contexto cambia. «La barra se ve muy llena», en cambio, sí traía
+  SATURACIÓN en primer lugar: esa falla había sido del modelo.
+- **Una respuesta que llega cortada se pide otra vez**, una sola, antes de enseñarle al asesor
+  el aviso.
+- **Las marcas con errata ya no se cuelan en la respuesta.** Flash-Lite escribió dos veces
+  «[RESPTESTA FINAL AL ASESOR]» y envolvió la contestación entre los corchetes de la plantilla;
+  el asesor veía la marca y el verificador la tomaba por un nombre sin respaldo.
 
 ## Cómo funciona, en 13 segundos
 
@@ -127,7 +155,7 @@ pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de di
 
 | | **Modo manual** (sin API key) | **Modo razonado** (con API key) |
 |---|---|---|
-| Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Dos motores, a elegir en Ajustes. **Agente lector**: la IA lee el manual con herramientas —páginas, láminas, búsqueda— y contesta citando lo que leyó. **Clásico**: la búsqueda local elige los fragmentos y el modelo responde en 6 etapas |
+| Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Dos motores, a elegir en Ajustes. **Agente lector**: la IA lee el manual con herramientas —páginas, láminas, búsqueda— y contesta citando lo que leyó. **Clásico**: la búsqueda local elige los fragmentos y el modelo responde en 6 etapas o, en modo rápido, con un solo paso de lectura |
 | Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | Las herramientas corren en tu dispositivo; la lectura y la respuesta, en el proveedor que elijas |
 | Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
 | Qué cuesta | Nada | Tu propia key y tus propios tokens. Preparar un manual de 25 láminas con Gemini Flash-Lite: unos 5 centavos de dólar, una vez |
@@ -467,7 +495,7 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 232 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
+alguna de las 296 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
 en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
 Playwright).
 
