@@ -20,11 +20,13 @@ import * as aprendido from './motor/aprendido.js';
 import * as busqueda from './motor/busqueda.js';
 import * as puerta from './motor/puerta.js';
 import * as ruta from './motor/ruta.js';
+import * as conversacion from './motor/conversacion.js';
+import * as respuesta from './motor/respuesta.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
 
 Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
-  secciones, solidez, aprendido, busqueda, puerta, ruta);
+  secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta);
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre

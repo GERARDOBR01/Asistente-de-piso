@@ -96,12 +96,31 @@ const tabla = (a, b) => {
 out('## eval-gate · corpus público\n');
 out(`Batería \`${huella}\` · ${preguntas.length} preguntas · app ${actual.version}\n`);
 
+/* ── Paridad: el motor en Node contesta lo mismo que la app ───────────────────
+   lab/motor-node.mjs es con lo que se barren las ideas de la puerta en
+   segundos. Si deja de dar lo mismo que el navegador, esos barridos miden
+   otra cosa: no pasa. */
+let paridad = null;
+if (corpus.motor) {
+  execFileSync(process.execPath, [path.join(RAIZ, 'lab', 'motor-node.mjs'), '--corpus', DATOS,
+    '--preguntas', BATERIA, '--salida', DATOS, '--etiqueta', 'node'], { stdio: 'ignore' });
+  try {
+    execFileSync(process.execPath, [path.join(RAIZ, 'lab', 'identico.mjs'),
+      path.join(DATOS, 'gate__bateria.jsonl'), path.join(DATOS, 'node__bateria.jsonl')], { encoding: 'utf8' });
+    paridad = true;
+    out('Motor en Node: contesta igual que el navegador en las ' + preguntas.length + ' preguntas.\n');
+  } catch (e) {
+    paridad = false;
+    out('✗ **Motor en Node: no contesta igual que el navegador.**\n\n```\n' + String(e.stdout || e.message).trim() + '\n```\n');
+  }
+}
+
 if (ACTUALIZAR || !fs.existsSync(LINEA_BASE)) {
   fs.writeFileSync(LINEA_BASE, JSON.stringify(actual, null, 1) + '\n');
   tabla(null, resumen);
   out(`\nLínea base escrita en \`${path.relative(RAIZ, LINEA_BASE)}\`.`);
   escribirResumen();
-  process.exit(0);
+  process.exit(paridad === false ? 1 : 0);
 }
 
 const base = JSON.parse(fs.readFileSync(LINEA_BASE, 'utf8'));
@@ -129,6 +148,7 @@ lista('Arregladas', arregladas);
 lista('Siguen bien pero perdieron el primer puesto', sinPrimero);
 
 const fallas = [];
+if (paridad === false) fallas.push('el motor en Node no da lo mismo que el navegador');
 if (rotas.length) fallas.push(`${rotas.length} pregunta(s) rotas`);
 for (const [k, n] of [['hit3', 'Hit@3'], ['mrr', 'MRR@10']])
   if (resumen[k] < base.resumen[k] - TOLERANCIA) fallas.push(`${n} baja de ${pct(base.resumen[k])} a ${pct(resumen[k])}`);

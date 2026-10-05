@@ -22,6 +22,9 @@ import { nivelDeEvidencia } from '../src/motor/solidez.js';
 import { nombreDeSeccion } from '../src/motor/secciones.js';
 import { rutaPorEvidencia, otraSeccionNombrada } from '../src/motor/ruta.js';
 import { terminosAusentes, contratoDeDecision, VERSION_POLITICA } from '../src/motor/puerta.js';
+import { consultaAmpliada, assessQuestionScope, rutaDeLaPregunta } from '../src/motor/conversacion.js';
+import { respuestaSinModelo, contextoParaModelo } from '../src/motor/respuesta.js';
+import { preguntar } from './motor-node.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -340,3 +343,53 @@ test('la palabra que no está en la sección activa pero sí en otra dice de cu�
   assert.deepEqual([d.estado, d.faltan], ['parcial', ['vestidos']]);
   assert.ok(d.razones.includes('palabra-ausente'));
 }, reconstruirIndice));
+
+/* ── La conversación y la respuesta en Node (lab/motor-node.mjs) ───────────
+   Lo que en app.js leía el historial global ahora lo recibe: así una
+   conversación entera se contesta en Node con el mismo código que el teléfono. */
+test('un seguimiento amplía la búsqueda con la pregunta anterior; una pregunta completa no', () => {
+  const hist = [{ role: 'user', content: '¿cómo van las botellas?' }, { role: 'assistant', content: '…', seccion: 'cava.pdf' }];
+  assert.equal(consultaAmpliada('¿y las copas?', hist), '¿cómo van las botellas? ¿y las copas?');
+  assert.equal(consultaAmpliada('copas', hist), '¿cómo van las botellas? copas');
+  assert.equal(consultaAmpliada('¿cómo se cuelgan las copas?', hist), '¿cómo se cuelgan las copas?');
+  assert.equal(consultaAmpliada('¿y las copas?', []), '¿y las copas?');
+});
+
+test('el vocabulario de la sección sigue a la sección activa sin rehacerlo a mano', () => conDos(() => {
+  /* «receta» es de fuera de tema salvo que la pregunta traiga una palabra del
+     manual activo: «copas» es de la cava, no de la boutique. */
+  const q = '¿hay una receta para las copas?';
+  estado.manualActivo = 'cava.pdf';
+  assert.equal(assessQuestionScope(q).clearlyOff, false);
+  estado.manualActivo = 'boutique.pdf';
+  assert.equal(assessQuestionScope(q).clearlyOff, true);
+}));
+
+test('motor en Node: «¿y las copas?» después de una pregunta de la cava sigue en la cava', () => conDos(() => {
+  const r = preguntar({ i: 0, q: '¿y las copas?', turnos: ['¿cómo van las botellas en la cava?'] });
+  assert.equal(r.secDoc, 'cava.pdf');
+  assert.ok(r.tarjetas.some(t => t.id === 'c3'), JSON.stringify(r.tarjetas.map(t => t.id)));
+  /* Hoy el seguimiento PEGA las dos preguntas, así que las botellas siguen
+     arriba: sustituir el objeto («botellas» → «copas») es de la Fase 3. */
+  assert.equal(r.consulta, '¿cómo van las botellas en la cava? ¿y las copas?');
+  assert.equal(r.decisionManual.estado, 'respaldada');
+  /* Y sin la conversación, la misma pregunta suelta no tiene de dónde seguir. */
+  assert.equal(rutaDeLaPregunta('¿y las copas?', []).motivo === 'seguimiento', false);
+}));
+
+test('modo manual: con tarjetas la decisión es respaldada o parcial; sin ellas, sin evidencia o aclarar', () => conDos(() => {
+  fc.assert(fc.property(fc.subarray([...VOCABULARIO, 'tequila', 'cuantas'], { minLength: 1 }), fc.constantFrom('cava.pdf', 'boutique.pdf', null), (palabras, doc) => {
+    estado.manualActivo = doc;
+    const hist = [];
+    const r = respuestaSinModelo(palabras.join(' '), hist, q => rutaDeLaPregunta(q, hist));
+    if (r.tipo === 'tarjetas') {
+      assert.ok(['respaldada', 'parcial'].includes(r.decision.estado), JSON.stringify(r.decision));
+      if (doc) for (const t of r.tarjetas) assert.equal(t.c.docName, doc);
+    } else if (r.tipo === 'nada') assert.ok(['sin_evidencia', 'aclarar'].includes(r.decision.estado), JSON.stringify(r.decision));
+    /* El contexto del modelo nunca trae fragmentos de otra sección que la activa. */
+    const b = contextoParaModelo(palabras.join(' '), { hist, rutaDe: q => rutaDeLaPregunta(q, hist) });
+    if (doc) for (const c of estado.ultimosFragmentos) assert.equal(c.docName, doc);
+    assert.ok(['respaldada', 'parcial', 'aclarar', 'sin_evidencia'].includes(b.decision.estado));
+  }));
+  estado.manualActivo = null;
+}));

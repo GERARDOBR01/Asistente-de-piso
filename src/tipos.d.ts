@@ -130,6 +130,62 @@ interface Tarjeta { c: Fragmento; texto: string }
 /** El contexto que va al modelo y qué tan sólida es la evidencia (2/1/0). */
 interface Contexto { texto: string; nivel: number }
 
+/** Un turno de la conversación, como lo guarda la app. `seccion`: el manual
+    con que se respondió (de ahí sigue un «¿y en…?»). */
+interface Turno { role: 'user' | 'assistant' | string; content: string; seccion?: string | null; modo?: string }
+
+/** Contra qué sección se responde una pregunta y por qué
+    ('elegida', 'nombrada', 'evidencia', 'seguimiento', 'empate', 'ninguna'…). */
+interface Ruta { q: string; doc: string | null; motivo: string; alternativas: string[] }
+
+/** La otra sección a la que apunta una pregunta: la nombró, o tiene lo que esta no. */
+interface OtraSeccion { nombre?: string; docName?: string; motivo: string }
+
+/** La sección de la pregunta (seccionDeLaPregunta). `porPregunta`: el rótulo de
+    por qué la eligió la app, o false si la eligió el asesor. */
+interface Seccion { doc: string | null; otraSeccion: OtraSeccion | null; porPregunta: boolean | string }
+
+/** Lo que contesta el modo manual, antes de pintarlo (respuestaSinModelo). */
+interface RespuestaSinModelo {
+  tipo: 'saludo' | 'estado' | 'empate' | 'tarjetas' | 'nada';
+  decision: Decision | null;
+  ruta?: Ruta;
+  sec?: Seccion;
+  activo?: string | null;
+  relevantes?: Resultado[];
+  tarjetas?: Tarjeta[];
+  /** Las tarjetas como texto, con su rótulo: lo que se guarda en el historial. */
+  fragmentos?: string;
+  nombrada?: OtraSeccion | null;
+  enOtra?: string | null;
+  ausentes?: Ausente[];
+  /** El aviso de palabra ausente o de cifra que falta ('' si no hay). */
+  avisoAusente?: string;
+  porParecidas?: Array<{ dijo: string, k: string, como: string }>;
+  /** «Tu manual no dice X; lo encontré como Y» ('' si no hay). */
+  avisoParecidas?: string;
+  seccionDelTurno?: string | null;
+}
+
+/** Lo que recibe el modelo (contextoParaModelo). */
+interface ContextoDelModelo {
+  texto: string;
+  sinCoincidencias: boolean;
+  flojo: boolean;
+  ampliada: boolean;
+  nivel: number;
+  otraSeccion: OtraSeccion | null;
+  variasSecciones: boolean;
+  ausentes: Ausente[];
+  /** La pregunta era por la app, no por el manual. */
+  estado?: boolean;
+  seccionUsada: string | null;
+  seccionPorPregunta: boolean | string;
+  /** La única otra sección que tiene las palabras que faltan. */
+  seccionSugerida: { docName: string, nombre: string } | null;
+  decision: Decision;
+}
+
 /* El motor no puede usar el DOM (lab/motor.test.mjs lo revisa), así que lib
    no trae "dom". De la plataforma solo usa esto, que existe en el navegador y
    en Node ≥ 19. */

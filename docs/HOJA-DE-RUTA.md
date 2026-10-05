@@ -29,7 +29,7 @@ estamos y qué sigue, en orden.
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
 | Pruebas | Arnés 305, agente simulado, 21 pruebas en Node (laboratorio, frontera del motor y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
 | eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 68/78 datos y 14/15 «no está» |
-| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 5 de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección y la puerta de evidencia (con su contrato de decisión) fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso |
+| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 5 de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección, la puerta de evidencia (con su contrato de decisión) y lo que decide cada respuesta fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso. El motor contesta en Node igual que en el navegador (`lab/motor-node.mjs`) |
 
 Las decisiones están en `docs/adr/`:
 - **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
@@ -51,9 +51,12 @@ motor mientras el nivel 1 no cumpla su criterio de salida.
 2. **El motor separado y medible.**
    - Terminar de partir `app.js` hasta la puerta (ADR 0005, pasos 2 a 5), con el golden master
      idéntico en cada paso.
-   - `lab/motor-node.mjs`: el motor importado en Node mide en segundos sin navegador.
-   - Prueba de aislamiento: con la sección elegida, cargar manuales ajenos no cambia la
-     respuesta. Hoy el IDF de BM25 es de todo el corpus.
+   - Hecho: `lab/motor-node.mjs`. El motor importado en Node contesta igual que el navegador
+     (667/667, y el gate lo comprueba en cada PR) en 7 s en vez de ~5 min.
+   - Hecho: medición de aislamiento (`lab/aislamiento.mjs`). El IDF global de BM25 mueve el
+     orden de las tarjetas pero casi nunca la decisión (1 de 177 preguntas de dato). Pasar a
+     IDF por manual rompe 2 y no arregla ninguna: se queda el global, y se vuelve a medir con
+     cada cambio de la Fase 3.
 3. **Puerta de evidencia sin modelo**, con reglas medidas:
    - solidez adaptativa: una palabra rara o en el título basta
    - avisos de palabra ausente más finos

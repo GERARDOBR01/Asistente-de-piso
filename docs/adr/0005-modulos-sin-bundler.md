@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 a 5 hechos; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 5 hechos, y el motor ya contesta en Node; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -56,6 +56,7 @@ lo que está en el repo es lo que corre.
 | 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | hecho |
 | 4 | Búsqueda y router de sección | hecho |
 | 5 | Puerta de evidencia y su contrato de decisión | hecho |
+| 5b | Conversación y respuesta (lo que decide el modo manual y el contexto del modelo), con el historial como parámetro: el motor contesta en Node (`lab/motor-node.mjs`) | hecho |
 | 6 | Verificación | |
 | 7 | IA (proveedores, prompt, agente), UI, almacenamiento | |
 | 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
@@ -168,11 +169,52 @@ lo que está en el repo es lo que corre.
 - Arnés 305/305, agente simulado, eval-gate idéntico (arregla 0, rompe 0) y modo avión con los 17 archivos. ap-v1.7.4.
 - **43 pruebas en Node.** Las 5 nuevas arman la decisión sin navegador: respaldada con lo que cubre, parcial por una palabra que no es de ningún manual y por una que es de otra sección (con su dueño), aclarar y sin evidencia, y una propiedad con fast-check (respaldada nunca lleva palabras que falten ni evidencia vacía; lo demás siempre dice por qué). Comprobadas con mutaciones; una de ellas no la cazaba ninguna prueba y por eso se agregó la de la palabra de otra sección.
 
+## Medido (motor en Node)
+
+Para que `lab/motor-node.mjs` contestara igual que el teléfono faltaba lo que todavía leía el historial global de `app.js`: el seguimiento, la ruta de sección y lo que deciden el modo manual y el contexto del modelo. Salió a dos módulos encima de `ruta.js`:
+
+| Módulo | Contenido |
+|---|---|
+| `conversacion.js` | si la pregunta es del tema (`assessQuestionScope`, saludo, quién hizo la app, preguntas sobre la app), el vocabulario de la sección, el seguimiento (`consultaAmpliada`) y la ruta (`rutaDeLaPregunta`, `seccionDeLaPregunta`). El historial entra como parámetro |
+| `respuesta.js` | qué tarjetas enseña el modo manual y con qué aviso (`respuestaSinModelo`), qué recibe el modelo (`contextoParaModelo`, con sus presupuestos y avisos) y el contrato de decisión de cada uno |
+
+- `app.js` se queda con envoltorios que le pasan `history`, el proveedor y el contexto del asesor, y con lo que pinta. Baja de 8,250 a 7,720 líneas.
+- **El vocabulario de la sección ya no se rehace a mano.** Antes había nueve llamadas a `refrescarVocabularioManual` repartidas por la app (al cargar, al cambiar de sección, en la medición, en el arnés), y una que faltara dejaba el vocabulario de otra sección. Ahora se calcula cuando hace falta y se olvida con el corpus o al cambiar de sección.
+- **`lab/motor-node.mjs`** carga el corpus que deja `volcar.mjs --corpus` (ahora con los fragmentos completos y el manual interno, que también cuenta para BM25) y contesta cada pregunta con los mismos módulos y los mismos campos que el volcado del navegador.
+  - **Paridad:** 667/667 preguntas idénticas contra el navegador con los 14 manuales reales, contratos de decisión incluidos. Salió idéntica antes de tocar `app.js`, con los módulos nuevos contra la app vieja, y otra vez después.
+  - **Tarda 7 s** en lugar de los ~5 min del navegador (casi todo ese tiempo era leer los PDF).
+  - **En el CI:** el eval-gate corre `motor-node` sobre el mismo corpus público y falla si no da lo mismo que el navegador. Si los barridos de la Fase 3 midieran otra cosa que la app, no valdrían.
+- **Golden master** idéntico (667), arnés 305/305, agente simulado, eval-gate idéntico (arregla 0, rompe 0) y modo avión con los 19 archivos. ap-v1.7.5.
+- **47 pruebas en Node.** Las 4 nuevas:
+  - el seguimiento amplía la consulta y una pregunta completa no;
+  - el vocabulario sigue a la sección activa sin rehacerlo;
+  - una conversación de dos turnos en Node sigue en su sección;
+  - una propiedad con fast-check: con tarjetas, la decisión es `respaldada` o `parcial`; sin ellas, `sin_evidencia` o `aclarar`; y ni las tarjetas ni el contexto traen otra sección que la activa.
+
+  Comprobadas con mutaciones: el vocabulario que no sigue a la sección, la sección nombrada que no quita las tarjetas, el seguimiento que no amplía y el contexto que ignora la sección. Las cuatro las caza alguna prueba. Y si la app se aparta del motor (una tarjeta de menos en el navegador), el gate no pasa.
+- **Lo que la prueba de dos turnos deja escrito:** «¿y las copas?» después de una pregunta de la cava sigue en la cava, pero la consulta es las dos preguntas pegadas y la primera tarjeta sigue siendo la de las botellas. Sustituir el objeto es de la Fase 3.
+
+### Aislamiento: ¿cargar otras secciones cambia la tuya?
+
+Con la sección elegida, la búsqueda solo mira ese manual, pero BM25 pesa cada palabra con el IDF de todo lo cargado. `lab/aislamiento.mjs` lo mide con `motor-node` sobre las 550 preguntas con sección de las baterías de desarrollo:
+
+| Contra los 14 con IDF global | | cambian tarjetas | cambia la 1.ª | cambia la decisión | bien → mal | mal → bien |
+|---|---|---|---|---|---|---|
+| IDF de su manual (los 14 cargados) | dato (177) | 41 (23 %) | 7 (4 %) | 1 (0.6 %) | 2 | 0 |
+| | «no está» (373) | 22 (6 %) | 6 (2 %) | 0 | 0 | 0 |
+| Solo su manual cargado | dato (177) | 49 (28 %) | 11 (6 %) | 6 (3 %) | 2 | 2 |
+| | «no está» (373) | 41 (11 %) | 25 (7 %) | 74 (20 %) | 16 | 0 |
+
+- **El IDF global mueve el orden, casi nunca la decisión.** Cambia qué tarjetas salen en una de cada cuatro preguntas de dato, la primera en 4 % y la decisión en una sola.
+- **Pasar a IDF por manual no se justifica:** rompe 2 preguntas y no arregla ninguna. Se queda el global.
+- **Los manuales ajenos ayudan a decir «no está»:** con su manual solo, 16 «no está» que hoy salen bien dejan de salir. Sin los otros manuales ya no se puede avisar «eso es de otra sección», y la decisión cambia en una de cada cinco. Eso es lo que debe cambiar, no una fuga.
+- Así que la invariante no es «idéntico»: es que la decisión casi no se mueva. Se vuelve a medir con cada cambio de la Fase 3, para que la puerta no se vuelva más sensible a lo que haya cargado.
+
 ## Consecuencias
 
 - **A favor:**
   - El motor se puede importar en Node. Lo que viene detrás:
-    - `lab/motor-node.mjs`, que mide en segundos sin navegador
+    - `lab/motor-node.mjs`, que mide en segundos sin navegador (hecho: ver «Motor en Node»)
     - el servidor MCP
     - las pruebas de propiedades sobre la búsqueda y la puerta
   - Cada capa que sale gana tipos y pruebas propias.

@@ -14,6 +14,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const CAMPOS = ['falta', 'activa', 'secDoc', 'otraSeccion', 'operacion', 'consulta', 'nivel', 'ranking', 'rel', 'ctx', 'ctxInfo', 'tarjetas', 'sinDato', 'ausente', 'parecidas'];
+/* El contrato de decisión (src/motor/puerta.js) llegó después: los volcados
+   viejos no lo traen, así que se compara solo si los dos lo tienen. */
+const CAMPOS_SI_ESTAN = ['decision', 'decisionManual'];
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
 const leer = f => fs.readFileSync(f, 'utf8').trim().split('\n').map(l => JSON.parse(l));
@@ -41,7 +44,8 @@ for (const [fa, fb] of pares) {
   const ejemplos = [];
   for (let i = 0; i < a.length; i++) {
     if (a[i].q !== b[i].q) { console.log(`✗ ${nombre}: la pregunta ${i} no es la misma`); total++; break; }
-    for (const c of CAMPOS) if (!igual(a[i][c], b[i][c])) {
+    const campos = [...CAMPOS, ...CAMPOS_SI_ESTAN.filter(c => c in a[i] && c in b[i])];
+    for (const c of campos) if (!igual(a[i][c], b[i][c])) {
       porCampo[c] = (porCampo[c] || 0) + 1;
       if (ejemplos.length < 5) ejemplos.push(`  #${a[i].i} «${a[i].q}» · ${c}: ${JSON.stringify(a[i][c] ?? null).slice(0, 120)} → ${JSON.stringify(b[i][c] ?? null).slice(0, 120)}`);
     }

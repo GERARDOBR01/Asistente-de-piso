@@ -307,7 +307,6 @@ const DEFAULT_QUICK=[
    depende de la pantalla: el vocabulario de la sección activa. */
 function rebuildCorpus(){
   reconstruirIndice();
-  refrescarVocabularioManual();
 }
 /* Las cachés que siguen en este archivo. Las de los módulos se registran
    junto a su código, con alReiniciar (src/estado.js). */
@@ -316,37 +315,11 @@ alReiniciar(()=>{
 });
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
-   El asistente estaba cableado a «Hombres Mercadep», y delante de un manual de
-   Bebés se presentaba como algo que no es. El nombre de la sección lo lleva el
-   propio manual: estos documentos rotulan su checklist («CHECK LIST: 271
-   CASUAL») y abren con el título de la sección. El nombre de archivo es el
-   último recurso, porque suele venir con hash y guiones bajos.
-
-   El vocabulario de la sección sale de los títulos de lámina, y sustituye a la
-   lista fija de palabras de Hombres para decidir si una pregunta es del dominio:
-   medido, «¿qué se debe limpiar?» y «¿cómo acomodo las tallas?» NO se
-   reconocían con manuales de Mujer o Muebles cargados, y perdían la instrucción
-   de responder con el formato completo. */
-let vocabularioManual=new Set();
-function refrescarVocabularioManual(){
-  vocabularioManual=new Set();
-  /* Solo el manual activo. Con los once cargados la unión daba 2.952 palabras
-     —«chocolate» de dulcería, «futbol» del manual de bicis— y «dame la receta
-     del pastel de chocolate» pasaba a contar como pregunta del dominio: el
-     patrón de fuera de tema exige que la palabra NO esté en el manual, y con
-     once secciones encima ya casi todo está en algún manual. Con la sección
-     activa el vocabulario vuelve a ser el de una sección, que es además lo
-     correcto: preguntar de bebés con Muebles activo no es del dominio activo. */
-  const solo=appState.manualActivo;
-  /* Todo el índice del manual, no solo los títulos: medido, con los títulos
-     «¿qué se debe limpiar?» seguía sin reconocerse porque la lámina se titula
-     LIMPIEZA y el asesor escribe «limpiar». El cuerpo del manual sí trae la
-     palabra tal cual («¿Qué se debe limpiar? Todo: mesas de exhibición…»). */
-  for(const c of docChunks){
-    if(solo&&c.docName!==solo)continue;
-    if(c.tf)for(const t in c.tf)vocabularioManual.add(t);
-  }
-}
+   El nombre de la sección lo lleva el propio manual (nombreDeSeccion,
+   src/motor/secciones.js). El vocabulario de la sección activa —con qué se
+   reconoce una pregunta del dominio— vive en src/motor/conversacion.js y se
+   calcula cuando hace falta: ya no hay que rehacerlo a mano al cambiar de
+   sección o de corpus. */
 
 function initManualSections(){
   manualSections=MANUAL_INTERNO.trim().split(/\n(?=## )/)
@@ -382,125 +355,17 @@ let ultimaSeccionUsada=null,ultimaSeccionPorPregunta=false;
 
 /* ════════════════════════════════════════════════
    CONSTRUCCIÓN DE CONTEXTO
-   PDF: 12000 chars · Manual: 6000 · Extra: 600
+   Lo que recibe el modelo lo arma src/motor/respuesta.js
+   (contextoParaModelo), con sus presupuestos y los avisos que
+   lee. Aquí queda lo que solo sabe la app: el historial, el
+   proveedor y el contexto del asesor.
 ════════════════════════════════════════════════ */
-const PDF_BUDGET=12000,MANUAL_BUDGET=6000,EXTRA_BUDGET=600;
-const PDF_BUDGET_GEMINI=20000;
 
-/* ── PREGUNTAS DE SEGUIMIENTO ─────────────────────
-   Nadie repite la pregunta entera: se pregunta «¿y en juveniles?» y se espera
-   que el asistente siga el hilo. La búsqueda usaba solo la frase escrita, así
-   que esas tres palabras recuperaban lo que podían y la respuesta salía de
-   fragmentos que no venían al caso.
-
-   Solo se amplía la BÚSQUEDA: el turno que se le manda al modelo sigue siendo
-   lo que el asesor escribió, porque el hilo de la conversación ya viaja en el
-   historial. Y se avisa en la tira de fuentes, para que no parezca magia. */
-const SEGUIMIENTO=/^\s*(?:¿\s*)?(?:y|e|entonces|pero|ok|vale|ah|ahi|ah[ií])\b/i;
-let ultimaBusquedaAmpliada=false;
-function preguntaAnterior(hist){
-  const previas=(hist||history).filter(m=>m.role==='user');
-  const previa=previas[previas.length-1];
-  return previa&&previa.content?previa.content:''
-}
-/* El umbral anterior —menos de 4 palabras propias— ampliaba casi siempre, porque
-   en español las que quedan tras quitar «como», «se», «los», «en» son dos o
-   tres: «explicame los perimetros en juveniles» son 3 y «como se arman las
-   mesas» son 2. Medido en el piso: la ampliación pegó la pregunta anterior a una
-   pregunta nueva y el asistente contestó la anterior, palabra por palabra.
-
-   Ahora solo se amplía de entrada cuando la pregunta está literalmente
-   incompleta: empieza por conector de seguimiento, o no llega a dos palabras
-   propias. Lo demás se rescata más tarde, y solo si sale sólido. */
-function esElipsis(q){return SEGUIMIENTO.test(q||'')||tokenize(q||'').length<=1}
-function consultaDeBusqueda(q,hist){
-  ultimaBusquedaAmpliada=false;
-  if(!esElipsis(q))return q;
-  const previa=preguntaAnterior(hist);
-  if(!previa)return q;
-  ultimaBusquedaAmpliada=true;
-  return previa+' '+q
-}
-
-/* El aviso va DENTRO del contexto y en primera posición porque es donde el
-   modelo lo lee junto a la orden de "responde solo con esto". Sin él, ante una
-   pregunta que el manual no cubre recibía fragmentos sueltos y la instrucción
-   de responder con ellos: obedecía, y componía una regla que nadie escribió. */
-/* El aviso lleva la pregunta de ESTE turno escrita dentro. Sin ella, el modelo
-   recibe la orden de responder "el manual no especifica [X]" sin que nadie le
-   diga cuál es la X, y lo único parecido a una respuesta que tiene delante es la
-   suya del turno anterior: la copia entera. */
-const avisoSinCoincidencias=q=>`=== SIN COINCIDENCIAS EN EL MANUAL ===
-Ningún fragmento del manual responde a esta pregunta. Responde exactamente
-"El manual no especifica X" y nada más, donde X es lo que se preguntó en ESTE
-turno: "${(q||'').trim()}". No respondas a ninguna pregunta anterior de la
-conversación: esa ya se contestó. NO completes con conocimiento general
-de visual merchandising, ni con reglas de otras secciones, ni con lo que parezca
-razonable. Lo que sigue es una muestra del manual para que sepas de qué trata:
-NO es la respuesta y no debes tomar datos de ahí.`;
-
-/* Evidencia floja: se entrega igual, pero diciendo lo que es. El modelo sabe
-   leer si unos fragmentos vienen al caso; lo que no puede hacer es adivinar que
-   la búsqueda apenas encontró nada. */
-/* La pregunta nombra una sección que NO es la activa. Es el caso que en el piso
-   sale caro: los fragmentos de la sección activa se parecen a los de la otra
-   —misma plantilla— así que el modelo puede componer con ellos una respuesta
-   perfectamente redactada y con la cifra de la sección equivocada. No se le pide
-   que tenga cuidado: se le prohíbe responder con datos. */
-const avisoOtraSeccionNombrada=(activa,otra)=>`=== LA PREGUNTA ES DE OTRA SECCIÓN ===
-El asesor está trabajando con la sección "${activa}", pero la pregunta nombra
-"${otra}", que también tiene cargada. Los fragmentos de abajo son de "${activa}"
-y NO sirven para responder por "${otra}", por parecidos que resulten: estos
-manuales comparten plantilla y lo que cambia son justo los datos.
-Responde solo esto, sin ninguna cifra ni regla:
-"Estás trabajando en ${activa} y me preguntas por ${otra}. Cambia de sección con
-el botón de aquí abajo y te respondo con ese manual."
-Cierra con CERTEZA: GAP.`;
-
-/* La sección activa no trae nada, pero otra cargada sí. No se responde desde
-   ella —el asesor no ha dicho que quiera cambiar— pero callarlo es lo que hizo
-   que el asistente dijera "no está en el manual" con el manual bueno cargado. */
-const avisoOtraSeccionEvidencia=(activa,otra)=>`=== PUEDE ESTAR EN OTRA SECCIÓN ===
-En "${activa}" no hay nada que responda a esta pregunta. En "${otra}", que el
-asesor también tiene cargada, sí hay material que coincide.
-Responde "El manual de ${activa} no especifica [X]", di que eso sí aparece en
-"${otra}" y que puede cambiar de sección con el botón de aquí abajo. No tomes
-ningún dato de los fragmentos. Cierra con CERTEZA: GAP.`;
-
-/* Sin sección elegida, el contexto mezcla manuales que comparten plantilla. La
-   misma pregunta tiene entonces varias respuestas verdaderas a la vez: medido,
-   «¿qué porcentaje es el cliente práctico?» devuelve 44%, 38.5%, 39.3%, 35.3% y
-   43.8%, una por sección. Elegir una es acertar en una y fallar en cuatro. */
-const avisoVariasSecciones=n=>`=== ${n} SECCIONES A LA VEZ ===
-El asesor no ha elegido sección, así que abajo hay fragmentos de ${n} secciones
-distintas. Estos manuales comparten plantilla y lo que cambia son justo los
-datos: la misma pregunta puede tener una respuesta distinta y correcta en cada
-sección. NO elijas una cifra y la des como LA respuesta. Si las secciones
-difieren, da el dato POR SECCIÓN, cada uno con el nombre de su sección y su
-página. Si no puedes separarlas, dilo y pide que se elija sección arriba.`;
-
-const AVISO_COINCIDENCIA_FLOJA=`=== COINCIDENCIA DÉBIL ===
-La búsqueda encontró poco para esta pregunta. Lee los fragmentos: si responden,
-responde citando la página. Si NO responden exactamente lo que se preguntó, di
-"El manual no especifica [X]" y cierra con CERTEZA: GAP. No estires un fragmento
-parecido para que parezca una respuesta.`;
-
-/* ¿Contra qué manual se responde esta pregunta? Tres respuestas posibles, y las
-   tres se le dicen al asesor en la tira de fuentes: la sección que eligió, la
-   que nombró en la pregunta, o ninguna. */
-function decidirSeccion(query){
-  const activo=appState.manualActivo;
-  /* Sin sección elegida, la pregunta manda: si dice "en juveniles", se busca en
-     juveniles y no en los cinco manuales a la vez; y si no la nombra, manda la
-     sección que sí tiene con qué responder (`enrutarSeccion`). */
-  if(!activo||!docs.some(d=>d.name===activo)){
-    const ruta=rutaDe(query);
-    return{doc:ruta.doc,otraSeccion:null,porPregunta:RUTA_ROTULO[ruta.motivo]||false}
-  }
-  /* Con sección elegida, la pregunta solo la cambia si nombra otra
-     (`otraSeccionNombrada`, src/motor/ruta.js). */
-  return{doc:activo,otraSeccion:otraSeccionNombrada(query,activo),porPregunta:false}
-}
+/* Las preguntas de seguimiento («¿y en juveniles?») y contra qué sección se
+   responde viven en src/motor/conversacion.js, que recibe el historial. */
+function consultaDeBusqueda(q,hist){return consultaAmpliada(q,hist||history)}
+/* La sección de la pregunta, con la ruta ya calculada para este turno. */
+function decidirSeccion(query){return seccionDeLaPregunta(query,rutaDe)}
 
 /* ── LA SECCIÓN QUE ELIGE LA PREGUNTA ─────────────
    Con muchos manuales cargados y ninguno elegido, cada pregunta se buscaba en
@@ -514,36 +379,14 @@ function decidirSeccion(query){
    le pregunta al asesor con un botón por sección, sin gastar una llamada. */
 let rutaActual=null;    // la de la pregunta en curso: {q, doc, motivo, alternativas}
 let rutaForzada=null;   // {q, doc}: la eligió el asesor en un empate
-const RUTA_ROTULO={nombrada:'por tu pregunta',evidencia:'por tu pregunta',seguimiento:'sigue la conversación','elegida-por-ti':'la elegiste'};
-function seccionDelTurnoAnterior(){
-  for(let i=history.length-1;i>=0;i--){
-    const h=history[i];
-    if(h.role==='assistant')return h.seccion&&docs.some(d=>d.name===h.seccion)?h.seccion:null;
-  }
-  return null
-}
 /* La ruta depende de la pregunta y de todo lo que la rodea: la sección
-   elegida, qué manuales hay y qué se preguntó antes. */
+   elegida, qué manuales hay y qué se preguntó antes (rutaDeLaPregunta). */
 const claveDeRuta=q=>[q,appState.manualActivo||'',docs.map(d=>d.name).join('|'),history.length].join('\u0001');
 function enrutarSeccion(q){
-  const clave=claveDeRuta(q);
-  const ruta=(doc,motivo,alternativas=[])=>({q,doc,motivo,alternativas,clave});
-  if(!docChunks.length||!docs.length)return ruta(null,'sin-manuales');
-  if(docs.length===1)return ruta(docs[0].name,'unica');
-  const activo=appState.manualActivo;
-  if(activo&&docs.some(d=>d.name===activo))return ruta(activo,'elegida');
-  if(rutaForzada&&rutaForzada.q===q&&docs.some(d=>d.name===rutaForzada.doc)){
-    const doc=rutaForzada.doc;rutaForzada=null;
-    return ruta(doc,'elegida-por-ti');
-  }
-  /* Lo de operación de tienda —la luz, la caja, el horario de uno— no es de
-     ninguna sección: sin esto, «mi jefe me cambió el horario» empataba entre
-     dos manuales y la app preguntaba «¿en cuál estás?». */
-  if(esPreguntaDeEstado(q)||isCreatorQuestion(q)||esOperacionDeTienda(q))return ruta(null,'ninguna');
-  const scope=assessQuestionScope(q);
-  if(scope.isGreeting||scope.clearlyOff)return ruta(null,'ninguna');
-  const r=rutaPorEvidencia(q,{ampliada:()=>consultaDeBusqueda(q),anterior:seccionDelTurnoAnterior(),elipsis:esElipsis(q)});
-  return ruta(r.doc,r.motivo,r.alternativas);
+  const r=rutaDeLaPregunta(q,history,rutaForzada);
+  /* La sección que eligió el asesor en un empate vale para esa pregunta. */
+  if(r.motivo==='elegida-por-ti')rutaForzada=null;
+  return{...r,clave:claveDeRuta(q)}
 }
 /* La ruta de ESTA pregunta, si ya se calculó; si no —una prueba, una
    medición que llama directo—, se calcula aquí. */
@@ -592,67 +435,21 @@ function botonesDeRutaAlterna(loaderEl,q){
   if(alt)loaderEl.appendChild(alt);
 }
 
-/* Qué palabra de la pregunta no tiene la sección, y de quién es
-   (`terminosAusentes`), vive en src/motor/puerta.js. Aquí queda cómo se le
-   dice al modelo. */
-/* No prohíbe responder —los fragmentos que llegaron son del manual del asesor y
-   pueden venir al caso—; le quita al modelo la única excusa que tenía para
-   estirar uno parecido: ahora sabe qué palabra falta y de quién es. */
-function avisoPalabraAusente(activa,items,otra,hayFragmentos){
-  const lista=a=>a.map(i=>`"${i.palabra}"`).join(' y ');
-  const deNadie=items.filter(i=>i.enNinguno);
-  const deOtra=items.filter(i=>!i.enNinguno);
-  const partes=[];
-  if(deOtra.length)partes.push(`El asesor preguntó por ${lista(deOtra)}, y el manual de "${activa}" no
-${deOtra.length===1?'lo dice':'los dice'} en ningún sitio.${otra?`
-Eso sí aparece en "${otra}", que el asesor también tiene cargada.`:''}`);
-  if(deNadie.length)partes.push(`${lista(deNadie)} no ${deNadie.length===1?'aparece':'aparecen'} en NINGUNO de los manuales
-cargados. No es que esté en otra sección: es un término que ninguno de estos
-manuales usa. Si lo conoces por fuera, aquí no cuenta.`);
-  return`=== ${items.length===1?'UNA PALABRA DE LA PREGUNTA NO ESTÁ':'HAY PALABRAS DE LA PREGUNTA QUE NO ESTÁN'} EN ESTE MANUAL ===
-${partes.join('\n')}
-${hayFragmentos?`Los fragmentos de abajo salieron de las OTRAS palabras de la pregunta, así que
-pueden hablar de otra cosa. Léelos: si no responden exactamente lo que se
-preguntó, di`:`Dilo así:`} "El manual de ${activa} no especifica [X]"${otra?`, di que eso sí está
-en "${otra}" y que puede cambiar de sección con el botón de aquí abajo`:''} y cierra
-con CERTEZA: GAP. No traslades a ${activa} una regla que sea de otra sección, y no
-completes con nada que no esté en los fragmentos — ni marcas, ni nombres, ni
-reglas que te suenen de la cadena.`
-}
+/* Qué palabra de la pregunta no tiene la sección (`terminosAusentes`,
+   src/motor/puerta.js) y cómo se le dice al modelo (`avisoPalabraAusente`,
+   src/motor/respuesta.js). */
 
 /* ── PREGUNTAS SOBRE EL PROPIO MANUAL ─────────────
    «¿De qué trata este manual?», «¿qué manuales tengo cargados?», «¿en qué
-   sección estoy?». Doce preguntas así, medidas con los once cargados: ninguna
-   se contestaba bien. Caían por el camino normal del buscador y salían con
-   evidencia floja o con cero fragmentos —«¿qué te puedo preguntar?» llegaba
-   incluso a mandar al asesor a otra sección—, así que la respuesta era "el
-   manual no especifica de qué trata este manual".
-
-   No es que falte información: es que la respuesta no está en ninguna lámina,
-   está en la app. Se le entregan los datos y redacta él; no se le enlata una
-   respuesta, porque el asesor mezcla («¿qué manuales tengo y cuál me sirve para
-   vinos?») y una plantilla fija contestaría media pregunta.
+   sección estoy?»: se reconocen en src/motor/conversacion.js
+   (esPreguntaDeEstado). No es que falte información: es que la respuesta no
+   está en ninguna lámina, está en la app. Se le entregan los datos y redacta
+   él; no se le enlata una respuesta, porque el asesor mezcla («¿qué manuales
+   tengo y cuál me sirve para vinos?») y una plantilla fija contestaría media
+   pregunta.
 
    Va dentro del contexto y no en el prompt de sistema, así que PROMPT_VERSION
    no se mueve y los prompts que el asesor tenga guardados siguen valiendo. */
-/* Los patrones se prueban contra el texto normalizado —sin acentos y sin
-   signos—, no contra lo que se escribió. Escritos sobre el texto crudo, «\b»
-   detrás de «qué» no casa nunca: para el motor de expresiones la «é» no es una
-   letra, así que entre «é» y el espacio no hay frontera de palabra. «¿Qué te
-   puedo preguntar?» se caía justo por ahí. */
-const PREGUNTA_DE_ESTADO=[
-  /\b(manuales|secciones)\b.{0,40}\b(tengo|tienes|cargad\w*|disponibles|subid\w*)\b/,
-  /\b(tengo|tienes)\b.{0,20}\b(manuales|secciones)\b/,
-  /\ben que (seccion|manual)\b.{0,30}\b(estoy|estamos|trabajo|trabajamos)\b/,
-  /\bde que (trata|va|habla)\b.{0,30}\b(manual|seccion|documento)\b/,
-  /\bque\b.{0,20}\b(te puedo|puedo|se puede)\s+(preguntar|consultar)\b/,
-  /\b(que sabes hacer|que puedes hacer|para que sirves|como funcionas|que eres capaz)\b/,
-  /\bcuantas paginas\b/,
-];
-function esPreguntaDeEstado(q){
-  const n=normalizeText(q||'');
-  return PREGUNTA_DE_ESTADO.some(r=>r.test(n))
-}
 /* La misma información, escrita para la pantalla. Es la única respuesta que el
    modo sin API key puede dar entera, porque no hay nada que interpretar: son
    los datos de la app. */
@@ -697,172 +494,20 @@ cites páginas —esto no sale de ninguna— y no añadas nada que no esté aqu�
 arriba. Cierra con CERTEZA: ALTA.`
 }
 
+/* El contexto lo arma el motor (contextoParaModelo, src/motor/respuesta.js).
+   Aquí se le pasa lo que solo sabe la app y se guarda lo que pinta la
+   pantalla: el botón a otra sección y la tira de fuentes. */
 function buildContext(query){
-  ultimosFragmentos=[];
   ultimaOtraSeccion=null;
   ultimaSeccionSugerida=null;
-  /* Antes que nada: si la pregunta es sobre la app, ni se busca. Con los avisos
-     normales delante, el modelo recibiría la orden de responder "el manual no
-     especifica" encima de un bloque que sí contesta. */
-  if(esPreguntaDeEstado(query)){
-    ultimaSeccionUsada=appState.manualActivo;
-    ultimaSeccionPorPregunta=false;
-    return{texto:contextoDeEstado(),sinCoincidencias:false,flojo:false,ampliada:false,
-      nivel:2,otraSeccion:null,variasSecciones:false,ausentes:[],estado:true,
-      seccionUsada:appState.manualActivo,seccionPorPregunta:false,
-      decision:contratoDeDecision({pregunta:query,consulta:query,seccion:appState.manualActivo,nivel:2,evidencia:[],deLaApp:true})}
-  }
-  /* Operación de tienda —la luz, la caja registradora, el horario de uno—: el
-     modo manual ya no enseñaba láminas, pero con API key la búsqueda seguía y el
-     modelo recibía EQUILIBRIO por «la luz del focal». Medido: «se fue la luz,
-     ¿qué hago?» contestaba con el peso visual de cada sección. Ningún manual de
-     exhibición la contesta, así que se trata como lo que no coincide con nada. */
-  if(docChunks.length&&esOperacionDeTienda(query)){
-    consultaDeBusqueda(query);
-    ultimaSeccionUsada=appState.manualActivo;
-    ultimaSeccionPorPregunta=false;
-    return{texto:avisoSinCoincidencias(query),sinCoincidencias:true,flojo:false,ampliada:false,
-      nivel:0,otraSeccion:null,variasSecciones:false,ausentes:[],
-      seccionUsada:appState.manualActivo,seccionPorPregunta:false,
-      decision:contratoDeDecision({pregunta:query,consulta:query,seccion:appState.manualActivo,nivel:0,evidencia:[],operacion:true})}
-  }
-  let consulta=consultaDeBusqueda(query);
-  let ampliada=ultimaBusquedaAmpliada;
-  const hasPdfs=docChunks.length>0;
-  const parts=[];
-  const isGemini=appState.provider==='gemini';
-  const pdfBudget=isGemini?PDF_BUDGET_GEMINI:PDF_BUDGET;
-  const seccion=hasPdfs?decidirSeccion(query):{doc:null,otraSeccion:null,porPregunta:false};
-  let otraSeccion=seccion.otraSeccion;
-  let nivel=0;
-  if(hasPdfs){
-    /* Con un manual cargado, el interno NO entra. Traía cifras propias —90 cm de
-       pasillo, 40%, 50%— que el modelo citaba como si fueran del manual del
-       asesor, y la verificación las daba por buenas porque sí estaban en el
-       contexto. Para quien lee en el piso eso es exactamente un dato inventado:
-       no está en su manual y no lo puede ir a ver. Lo que el PDF no cubra se
-       consulta aparte y rotulado, desde el botón de referencia general. */
-    let pdf=getPdfContext(consulta,pdfBudget,seccion.doc);
-    /* La pregunta de una sola palabra se amplía de oficio con la anterior, y no
-       siempre es un seguimiento: puede ser un tema nuevo dicho en corto. Se vio
-       en pantalla —«¿cómo colorizo?» después de una pregunta de sábanas acababa
-       buscando sábanas, y mandaba al asesor a BLANCOS teniendo COLORIZACIÓN en
-       la página 14 de su propia sección—. Si la palabra sola se sostiene, manda
-       ella; si no se sostiene, la ampliación sigue siendo lo mejor que hay.
-       Solo aplica a la regla de una palabra: cuando la pregunta empieza por
-       «y», «entonces», «pero», está literalmente incompleta y no hay nada que
-       preferir. */
-    if(ampliada&&!SEGUIMIENTO.test(query)){
-      const previos=ultimosFragmentos.slice();
-      ultimosFragmentos=[];
-      const sola=getPdfContext(query,pdfBudget,seccion.doc);
-      if(sola.nivel===2){pdf=sola;consulta=query;ampliada=false}
-      else ultimosFragmentos=previos;
-    }
-    /* Rescate: la pregunta tal cual no encontró nada. Puede ser un seguimiento
-       que no empieza por conector —«¿en juveniles?»— así que se reintenta con la
-       anterior pegada, y solo se acepta si sale SÓLIDO. Con evidencia floja lo
-       único que se logra es arrastrar el tema del turno anterior a una pregunta
-       nueva: exactamente lo que hacía el umbral viejo.
-
-       Y nunca se rescata una pregunta de fuera de tema. Salió midiendo: tras
-       «¿cuánto participa outdoor?», la pregunta «¿qué receta me recomiendas
-       para la cena?» se pegaba a la anterior, alcanzaba evidencia sólida con
-       las palabras de aquella y pasaba por pregunta contestable. El rescate
-       existe para completar una pregunta incompleta, no para encontrarle tema a
-       una que no lo tiene. */
-    if(pdf.nivel===0&&!ampliada&&!assessQuestionScope(query).clearlyOff){
-      const previa=preguntaAnterior();
-      if(previa){
-        /* Se vacía la lista antes de reintentar: sin coincidencias, packChunks
-           ya metió ahí la muestra del manual —fragmentos que no responden a
-           nada—, y si el reintento salía bien se quedaban pegados a los buenos.
-           De ahí podía salir una lámina que la respuesta no sostiene. */
-        ultimosFragmentos=[];
-        const alt=getPdfContext(previa+' '+consulta,pdfBudget,seccion.doc);
-        if(alt.nivel===2){pdf=alt;consulta=previa+' '+consulta;ampliada=true}
-      }
-    }
-    nivel=pdf.nivel;
-    /* Solo si la sección activa se quedó a cero se mira si otra la tiene. */
-    if(!otraSeccion&&nivel===0&&seccion.doc&&docs.length>1)
-      otraSeccion=otraSeccionConEvidencia(consulta,seccion.doc);
-    if(pdf.texto)parts.push(`=== MANUAL OPERATIVO — PDF CARGADO POR EL ASESOR (ÚNICA FUENTE VÁLIDA) ===\n${pdf.texto}`);
-  }else{
-    let man=getManualContext(consulta,pdfBudget+MANUAL_BUDGET);
-    if(man.nivel===0&&!ampliada&&!assessQuestionScope(query).clearlyOff){
-      const previa=preguntaAnterior();
-      if(previa){
-        ultimosFragmentos=[];
-        const alt=getManualContext(previa+' '+consulta,pdfBudget+MANUAL_BUDGET);
-        if(alt.nivel===2){man=alt;consulta=previa+' '+consulta;ampliada=true}
-      }
-    }
-    nivel=man.nivel;
-    if(man.texto)parts.push(`=== MANUAL INTERNO MERCADEP ===\n${man.texto}`);
-  }
-  const extra=appState.extraEnabled?(appState.extra||'').trim().slice(0,EXTRA_BUDGET):'';
-  if(extra)parts.push(`=== CONTEXTO DEL ASESOR ===\n${extra}`);
-  let texto=parts.join('\n\n---\n\n');
-  const sinCoincidencias=nivel===0&&!!texto;
-  const flojo=nivel===1;
-  if(otraSeccion){
-    /* Manda sobre todo lo demás: aunque la sección activa tenga material de
-       sobra, ese material no responde a lo que se preguntó. Y se vacía la lista
-       de fragmentos, que es la garantía dura de que no saldrá debajo la lámina
-       de la sección equivocada, conteste lo que conteste el modelo. */
-    const activa=nombreDeSeccion(seccion.doc);
-    texto=(otraSeccion.motivo==='nombrada'
-      ?avisoOtraSeccionNombrada(activa,otraSeccion.nombre)
-      :avisoOtraSeccionEvidencia(activa,otraSeccion.nombre))+'\n\n'+texto;
-    ultimosFragmentos=[];
-  }else if(sinCoincidencias){
-    texto=avisoSinCoincidencias(query)+'\n\n'+texto;
-    /* Lo que se envió es una muestra, no evidencia de nada. Vaciar la lista es
-       la garantía dura de que no saldrá una lámina debajo de una respuesta que
-       el manual no sostiene, conteste lo que conteste el modelo. */
-    ultimosFragmentos=[];
-  }else if(flojo)texto=AVISO_COINCIDENCIA_FLOJA+'\n\n'+texto;
-  /* Se responde con el manual del asesor, pero diciendo qué palabra suya no
-     está ahí. Va después de los avisos anteriores —y por tanto se lee antes—
-     porque cambia cómo hay que leer los fragmentos. */
-  let ausentes=[];
-  /* También cuando no se encontró nada, que es cuando más falta hace: «el
-     manual no especifica» a secas deja al asesor sin saber si preguntó mal o si
-     preguntó en la sección equivocada. Medido: «casual» estando en MUJER
-     CLÁSICA no llega a disparar el aviso de otra sección —la palabra es
-     ambigua, está fuerte en dos manuales, y ahí `otraSeccionConEvidencia` se
-     calla a propósito— y se quedaba en un no rotundo sin explicación. */
-  if(hasPdfs&&seccion.doc&&!otraSeccion){
-    /* La palabra que no es de nadie solo se avisa cuando el resto de la pregunta
-       SÍ encontró algo: con nivel 0 ya hay un aviso diciendo que no se encontró
-       nada, y dos avisos dicen lo mismo dos veces. */
-    ausentes=terminosAusentes(query,seccion.doc).filter(a=>!a.enNinguno||nivel>=1);
-    if(ausentes.length){
-      const activa=nombreDeSeccion(seccion.doc);
-      /* Se nombra otra sección solo si TODAS las que tienen dueño apuntan al
-         mismo manual. Con dos dueños distintos, mandar al asesor a uno es
-         elegir por él. */
-      const conDueno=ausentes.filter(a=>a.duenos.length);
-      const primero=conDueno.length?conDueno[0].duenos[0].docName:null;
-      const unSoloDueno=primero&&conDueno.every(a=>a.duenos[0].docName===primero)?primero:null;
-      if(unSoloDueno)ultimaSeccionSugerida={docName:unSoloDueno,nombre:nombreDeSeccion(unSoloDueno)};
-      texto=avisoPalabraAusente(activa,ausentes,unSoloDueno?nombreDeSeccion(unSoloDueno):null,ultimosFragmentos.length>0)+'\n\n'+texto;
-    }
-  }
-  /* Va delante de todo lo demás: es el marco con el que hay que leer el resto. */
-  const secciones=new Set(ultimosFragmentos.map(c=>c.docName));
-  const variasSecciones=!seccion.doc&&secciones.size>1;
-  if(variasSecciones)texto=avisoVariasSecciones(secciones.size)+'\n\n'+texto;
-  ultimaOtraSeccion=otraSeccion;
-  ultimaSeccionUsada=seccion.doc;
-  ultimaSeccionPorPregunta=seccion.porPregunta;
-  /* Lo que decidió la puerta, con la misma forma que en el modo manual
-     (src/motor/puerta.js). */
-  const decision=contratoDeDecision({pregunta:query,consulta,seccion:seccion.doc,porPregunta:seccion.porPregunta,
-    nivel,evidencia:ultimosFragmentos,otraSeccion,ausentes,variasSecciones,ampliada});
-  return{texto,sinCoincidencias,flojo,ampliada,nivel,otraSeccion,variasSecciones,ausentes,
-    seccionUsada:seccion.doc,seccionPorPregunta:seccion.porPregunta,decision}
+  const b=contextoParaModelo(query,{hist:history,rutaDe,
+    presupuesto:appState.provider==='gemini'?PDF_BUDGET_GEMINI:PDF_BUDGET,
+    extra:appState.extraEnabled?appState.extra||'':'',textoDeEstado:contextoDeEstado});
+  ultimaOtraSeccion=b.otraSeccion;
+  ultimaSeccionSugerida=b.seccionSugerida;
+  ultimaSeccionUsada=b.seccionUsada;
+  ultimaSeccionPorPregunta=b.seccionPorPregunta;
+  return b
 }
 
 /* ── BUSCAR EN TODOS MIS MANUALES ─────────────────
@@ -982,46 +627,8 @@ function pintarNotaDelModo(){
   if(sel&&nota)nota.textContent=NOTA_DEL_MODO[modoValido(sel.value)];
 }
 
-const GREETING_PATTERNS=/^(?:\s*(?:hola|hey|hi|hello|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?|qu[eé]\s+tal|saludos?|buen\s+d[ií]a))[\s!.?]*$/i;
-
-const VM_SCOPE_KEYWORDS=[
-  'mercadep','hombres','entallado','gancho','sensor','marcademob','marcademoa','marcademoc','pos','maniqui','focal',
-  'tringla','planograma','corner','exhib','mercad','visual','display','prenda','pantalon','camisa',
-  'traje','zapato','calcetin','pijama','corbata','etiquet','barata','liquidacion','coloriz','enganch',
-  'perimet','mueble','pasillo','saco','formal','MarcaDemoD','marca','ropa','accesorio','silueta','gondola',
-  'vitrina','cross','slow','rotacion','bastilla','plastiflecha','descanso','triangul','boutique','juvenil'
-];
-const OFF_TOPIC_PATTERNS=[
-  /\b(clima|pronostico|pronóstico|tiempo\s+atmosferico|tiempo\s+atmosférico)\b/,
-  /\b(receta|cocinar|comida)\b/,
-  /* «Tarea» salía de aquí: en el piso es una palabra de trabajo —"¿cuál es mi
-     tarea al abrir?"— y la pregunta se contestaba con la redirección de fuera
-     de tema. Si el manual no la cubre, ahora sale como GAP, que es la respuesta
-     honesta; antes salía un "solo puedo ayudarte con exhibición". */
-  /\b(examen|universidad|escuela|matematicas|matemáticas)\b/,
-  /\b(amazon|walmart|palacio|sears|costco|coppel)\b/,
-  /\b(quien\s+eres|quién\s+eres|que\s+eres|qué\s+eres)\b(?!.*(hombres|mercadep|visual|mercad|exhib))/
-];
-
-function isCreatorQuestion(q){
-  return/\b(quien|quién)\s+(te\s+)?(cre[oó]|hizo|program[oó]|desarroll[oó])|\b(creador|autor|de\s+quien\s+eres|de\s+quién\s+eres)\b/i.test(q||'');
-}
-function isGreetingQuestion(q){
-  return GREETING_PATTERNS.test((q||'').trim());
-}
-function assessQuestionScope(q){
-  const norm=normalizeText(q||'');
-  const isGreeting=isGreetingQuestion(q);
-  /* Con un manual cargado manda su vocabulario, no la lista de Hombres: es lo
-     que hace que «¿qué se debe limpiar?» cuente como pregunta del dominio en un
-     manual de Muebles. La lista fija se queda para cuando no hay PDF. */
-  const enElManual=vocabularioManual.size&&tokenize(q||'').some(t=>vocabularioManual.has(t));
-  const hasVm=enElManual||VM_SCOPE_KEYWORDS.some(k=>norm.includes(k));
-  const clearlyOff=!isGreeting&&!hasVm&&OFF_TOPIC_PATTERNS.some(p=>p.test(norm));
-  const otherStore=hasVm&&/\b(amazon|walmart|palacio|sears|costco|coppel|zara|hm|h\s*&\s*m)\b/i.test(q||'');
-  const isVmQuestion=hasVm&&!clearlyOff&&!isGreeting&&!isCreatorQuestion(q);
-  return{hasVm,clearlyOff,otherStore,isGreeting,isVmQuestion};
-}
+/* ¿Es un saludo, es del tema, pregunta quién hizo la app? (isGreetingQuestion,
+   assessQuestionScope, isCreatorQuestion: src/motor/conversacion.js). */
 /* ── CERTEZA DECLARADA ────────────────────────────
    La ETAPA 5 del prompt clasifica la certeza desde siempre, pero moría dentro
    del razonamiento: nada la comprobaba y el asesor no la veía. Ahora la
@@ -2889,7 +2496,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.7.4';
+const VERSION_APP='ap-v1.7.5';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2985,7 +2592,6 @@ async function restaurarManualesGuardados(){
     appState.manualActivo=docs[0].name;
     try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
   }
-  refrescarVocabularioManual();
   renderDocs();
   /* Las firmas visuales que falten se calculan después, sin hacer esperar. */
   for(const g of entraron)firmarPendientes(g.figuras||[],g.hash,g).catch(()=>{});
@@ -3518,7 +3124,6 @@ async function handleFiles(fileList){
   if(docs.length===1&&!appState.manualActivo){
     appState.manualActivo=docs[0].name;
     try{localStorage.setItem('ap_manual_activo',appState.manualActivo)}catch{}
-    refrescarVocabularioManual();
   }else if(docs.length>1&&!appState.manualActivo){
     showToast('📕 Tienes varios manuales cargados: cada pregunta busca en la sección que le toca, y si dos empatan te pregunto. Si trabajas siempre en una, elígela arriba.','info',7000);
   }else if(activoPrevio&&appState.manualActivo===activoPrevio&&docs.length>habia){
@@ -3588,12 +3193,10 @@ function validarSeccionActiva(){
   if(!appState.manualActivo||docs.some(d=>d.name===appState.manualActivo))return;
   appState.manualActivo=docs.length===1?docs[0].name:null;
   try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
-  refrescarVocabularioManual();
 }
 function cambiarSeccion(valor){
   appState.manualActivo=valor||null;
   try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
-  refrescarVocabularioManual();
   renderSelectorSeccion();
   renderQuickBtns();
   showToast(appState.manualActivo
@@ -4018,72 +3621,11 @@ async function consultarTodosLosManuales(pregunta,btn){
    los interpretó. Prefiero enseñar el límite a fingir
    una respuesta.
 ════════════════════════════════════════════════ */
-const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
-/* getManualContext nunca devuelve vacío: si nada coincide, igual entrega los
-   fragmentos mejor puntuados, y los bonos de [MANDATORY] y de conflicto pesan
-   aunque no haya un solo acierto de palabra. Para el modo manual eso mentiría
-   —contestar "entallado" a quien preguntó por otra cosa—, así que aquí se exige
-   al menos un acierto real antes de mostrar nada.
-
-   Busca sobre el corpus completo: manual interno **y** el PDF que el asesor
-   acaba de cargar. Antes solo miraba el manual interno, así que sin API key el
-   manual recién subido se ignoraba por completo — el usuario veía su PDF en la
-   lista y recibía respuestas que no salían de él.
-
-   Exigir un acierto de la palabra literal era demasiado estricto: un manual
-   puede contestar "¿cuánto dejo de pasillo?" con una lámina titulada
-   ALINEACIÓN que dice "dejando 80 cm" y nunca escribe "pasillo". Ese salto es
-   justo lo que hace el diccionario de sinónimos, así que también se acepta el
-   fragmento que llegó por ahí — pero pidiendo dos coincidencias distintas,
-   para que una casualidad suelta no cuente como respuesta.
-
-   Queda fuera la coincidencia incidental: «¿cómo cambio la llanta del coche?»
-   devuelve una lámina solo porque dice «cambio». Probé dos filtros para
-   cortarla y medí los dos sobre siete manuales reales, porque ninguno se
-   sostenía solo con intuición:
-
-   · Por idf del término acertado. No funciona: «cambio» aparece en un único
-     fragmento, así que puntúa 4.17 de idf, por encima de «sensor» (3.66).
-     Raro no es lo mismo que relevante.
-   · Por puntuación mínima. Tampoco: las distribuciones se solapan. «¿A qué
-     hora abre la tienda?» llega a 7.5 porque «tienda» es palabra central del
-     manual, mientras que «¿a qué altura va el sensor?» se queda en 2.3 en el
-     manual de Blancos. Cualquier corte que tape el ruido tumba preguntas
-     buenas: a 5 dejaba pasar 3 ruidos y mataba 5 legítimas.
-
-   Así que no hay filtro. La garantía de este modo no es rechazar lo que no
-   sabe, es no fingir que lo sabe: entrega el fragmento tal cual, con su página
-   y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
-   contesta lo que preguntó. */
+/* Qué fragmentos enseña (relevantesSinModelo) y qué contesta
+   (respuestaSinModelo) viven en src/motor/respuesta.js. Aquí se pintan. */
 function seccionesPorRelevancia(q){
-  /* En modo manual el filtro de sección vale igual: si el asesor dijo con qué
-     manual trabaja —o la pregunta lo dijo por él—, no tiene por qué recibir la
-     lámina de otro. Y si la pregunta nombra otra sección que la activa, no se
-     enseña la lámina de la activa: con catorce manuales de la misma plantilla,
-     es una cifra creíble y de otra sección. `decidirSeccion` es la misma
-     decisión que con API key (sin sección activa, `rutaDe`). */
   const sec=docChunks.length?decidirSeccion(q):{doc:null,otraSeccion:null};
-  if(sec.otraSeccion)return[];
-  const doc=sec.doc;
-  /* Con manuales cargados, solo manuales: sin `source` el manual interno de
-     demostración se colaba entre las tarjetas cuando no había sección elegida. */
-  const source=docChunks.length?'pdf':null;
-  /* Se filtra y DESPUÉS se corta. Cortando antes, los fragmentos que solo
-     trae el diccionario llenaban los doce lugares, el filtro los quitaba a
-     todos y la lámina con la palabra escrita se había quedado en el 13.º:
-     «que ba en la tore» salía en blanco teniendo TORRE en su página 11. */
-  const buscar=c=>retrieve(c,{limit:60,doc,source}).filter(filtroSolidez(c)).slice(0,12);
-  if(esOperacionDeTienda(q))return[];
-  const consulta=consultaDeBusqueda(q);
-  /* Y la misma regla que en buildContext: una pregunta de una sola palabra se
-     amplía de oficio con la anterior, pero si la palabra sola se sostiene manda
-     ella. Sin esto, «¿cómo colorizo?» tras una pregunta de sábanas contestaba
-     "nada coincide en esta sección" teniendo COLORIZACIÓN en su página 14. */
-  if(consulta!==q&&!SEGUIMIENTO.test(q)){
-    const sola=buscar(q);
-    if(sola.length)return sola;
-  }
-  return buscar(consulta)
+  return relevantesSinModelo(q,sec,history)
 }
 /* Una tarjeta por fragmento del manual. Todo por DOM y textContent: el texto
    viene de un PDF ajeno y no pasa por innerHTML. */
@@ -4265,7 +3807,10 @@ function responderSinModelo(q){
   ocultarBannerRestaurar();
   switchTab('chat');
   appendMsg('user',q,false);
-  if(isGreetingQuestion(q)){
+  /* Qué contestar lo decide el motor (src/motor/respuesta.js); aquí se pinta. */
+  const r=respuestaSinModelo(q,history,rutaDe);
+  ultimaDecision=r.decision;
+  if(r.tipo==='saludo'){
     const saludo='Hola. Estoy en **modo manual**: sin API key no interpreto nada, pero busco en el manual y te entrego lo que dice, tal cual.\n\nPregúntame de exhibición, entallado, sensores, POS o clasificación de mundos.';
     appendMsg('assistant',saludo,false);
     history.push({role:'user',content:q});
@@ -4274,10 +3819,8 @@ function responderSinModelo(q){
     return;
   }
   /* Preguntar por los manuales cargados no necesita modelo ni búsqueda: la
-     respuesta son los datos de la app. Sin esto, «¿qué manuales tengo?» se iba
-     al buscador y devolvía fragmentos de una lámina cualquiera. */
-  if(esPreguntaDeEstado(q)){
-    ultimaDecision=contratoDeDecision({pregunta:q,consulta:q,seccion:appState.manualActivo,nivel:2,evidencia:[],deLaApp:true});
+     respuesta son los datos de la app. */
+  if(r.tipo==='estado'){
     const cuerpo=estadoParaPantalla();
     appendMsg('assistant',cuerpo,false);
     history.push({role:'user',content:q});
@@ -4285,83 +3828,11 @@ function responderSinModelo(q){
     saveChatHistory();scrollToBottom();
     return;
   }
-  const ruta=rutaDe(q);
-  if(ruta.motivo==='empate'){
-    ultimaDecision=contratoDeDecision({pregunta:q,consulta:q,seccion:null,nivel:0,evidencia:[],empate:ruta.alternativas});
-    preguntarSeccion(q,ruta.alternativas);return
-  }
-  /* La misma decisión que toma seccionesPorRelevancia, para saber en qué sección
-     se buscó y si la pregunta nombraba otra que la activa. */
-  const sec=docChunks.length?decidirSeccion(q):{doc:null,otraSeccion:null,porPregunta:false};
-  const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
-  let fragmentos='',chars=0;
-  const tarjetas=[];
-  for(const r of relevantes){
-    if(chars>=FALLBACK_BUDGET)break;
-    const etiqueta=chunkLabel(r.c)+'\n';
-    const espacio=FALLBACK_BUDGET-chars-etiqueta.length;
-    if(espacio<80)break;
-    const trozo=r.c.text.length>espacio?r.c.text.slice(0,espacio)+'\n[...]':r.c.text;
-    fragmentos+=etiqueta+trozo+'\n\n';chars+=etiqueta.length+trozo.length;
-    /* Dos fragmentos de la misma lámina y la misma sección son una sola cosa
-       para quien lee: van en la misma tarjeta, no en dos con el mismo rótulo. */
-    const misma=tarjetas.find(t=>t.c.docName===r.c.docName&&t.c.page===r.c.page&&t.c.heading===r.c.heading);
-    if(misma)misma.texto+='\n'+trozo;
-    else tarjetas.push({c:r.c,texto:trozo});
-  }
+  const ruta=r.ruta;
+  if(r.tipo==='empate'){preguntarSeccion(q,ruta.alternativas);return}
+  const{sec,tarjetas,fragmentos,nombrada,enOtra,activo,avisoAusente,porParecidas,avisoParecidas}=r;
   ultimasTarjetas=tarjetas;
-  fragmentos=fragmentos.trim();
-  /* Sin modelo también hay que decirle dónde está lo que busca. Se veía en
-     pantalla: con CASUAL activo, «¿cómo acomodo las sábanas?» contestaba "nada
-     coincide" mientras BLANCOS —cargado, a un clic— tenía la lámina. La misma
-     comprobación que ya se hace con API key, aquí sin gastar nada. */
-  let enOtra=null;
-  const nombrada=sec.otraSeccion;
-  if(!nombrada&&!fragmentos&&docChunks.length&&ruta.doc&&docs.length>1&&!esOperacionDeTienda(q)){
-    const otra=otraSeccionConEvidencia(consultaDeBusqueda(q),ruta.doc);
-    if(otra)enOtra=otra.nombre;
-    else{
-      const falta=terminosAusentes(q,ruta.doc);
-      if(falta.length&&falta[0].duenos.length)enOtra=nombreDeSeccion(falta[0].duenos[0].docName);
-    }
-  }
-  /* Antes esto se enseñaba como un bloque de código: letra monoespaciada, los
-     rótulos entre corchetes y, en cada respuesta, dos párrafos sobre sinónimos,
-     retrieval y «razonado en 6 etapas». En el piso eso se lee como un error.
-     Ahora es una tarjeta por lámina —de dónde sale arriba, el texto normal, las
-     palabras que coincidieron marcadas— y el aviso de que nadie lo interpretó
-     cabe en una línea. Lo que se guarda en el historial sigue siendo el texto. */
-  /* Hay tarjetas, pero la palabra que manda en la pregunta no está en el
-     manual: «¿cuántos días de descanso tengo?» salía con MANIQUÍES por el «21
-     días», y «¿cuánto cuesta la playera?» con la mesa de entrada. Con API key el
-     modelo ya recibía este aviso; sin ella, las tarjetas se enseñaban como si
-     contestaran. Se enseñan igual —puede que sirvan— pero con la advertencia
-     arriba, sin lámina que las respalde, y al tablero va como duda que el
-     manual no explica. */
-  const activo=sec.doc||(docs.length===1?docs[0].name:null);
-  const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
-  const avisoCuenta=fragmentos&&!ausentes.length?avisoDeCuenta(q,tarjetas,activo):'';
-  const avisoAusente=avisoCuenta?avisoCuenta:ausentes.length?avisoDeAusentes(ausentes):'';
-  /* La tarjeta llegó solo por el diccionario: ni una palabra escrita por el
-     asesor, ni una errata corregida. Medido con 30 manuales, así llegaban 20 de
-     las 21 preguntas «que no están» que aun así enseñaban tarjeta —«¿dónde van
-     los props?» salía con LIQUIDACIÓN por «estilos de vida», «¿en qué mundo van
-     los cinturones?» con COLECCIÓN MES ACTUAL por «accesorio»— y solo 2 de las
-     186 buenas. En esas dos también es verdad que el manual no usa la palabra
-     («liquidación», «góndola»), así que el aviso no miente en ningún caso. Es
-     más suave que el de arriba: la lámina se queda, porque sí es del manual. */
-  const primera=relevantes[0];
-  const porParecidas=fragmentos&&!avisoAusente&&primera&&primera.hits===0&&primera.hitsErrata===0
-    ?palabrasPorParecidas(q,consultaDeBusqueda(q),activo,primera):[];
-  /* Es una nota, no una alarma: dice lo que pasó —la palabra no está, se
-     buscó por otra— y deja al asesor juzgar con la tarjeta delante. */
-  const avisoParecidas=porParecidas.length
-    ?'ℹ Tu manual no dice '+porParecidas.map(p=>`«${p.dijo}»`).join(' ni ')+'; lo encontré como '+porParecidas.map(p=>`«${p.como}»`).join(' y ')+'.':'';
   const avisoVisible=avisoAusente||avisoParecidas;
-  ultimaDecision=contratoDeDecision({pregunta:q,consulta:consultaDeBusqueda(q),seccion:activo,porPregunta:sec.porPregunta,
-    nivel:fragmentos?2:0,evidencia:tarjetas.map(t=>t.c),
-    otraSeccion:nombrada||(enOtra?{nombre:enOtra,motivo:'evidencia'}:null),
-    ausentes,avisoCifra:!!avisoCuenta,parecidas:porParecidas.length>0,operacion:esOperacionDeTienda(q)});
   /* Si una tarjeta es lo que la IA leyó en una imagen al preparar el manual,
      «nadie lo interpretó» deja de ser del todo cierto: se dice cuál es. */
   const aviso='⚪ Así lo dice el manual, tal cual: sin modelo conectado, nadie lo interpretó.'
@@ -4450,7 +3921,7 @@ function responderSinModelo(q){
     })));
   }
   history.push({role:'user',content:q});
-  history.push({role:'assistant',content:cuerpo,modo:'manual',seccion:(tarjetas[0]&&tarjetas[0].c.docName)||ruta.doc||null});
+  history.push({role:'assistant',content:cuerpo,modo:'manual',seccion:r.seccionDelTurno});
   saveChatHistory();
   scrollToBottom();
 }
@@ -6631,7 +6102,7 @@ async function medirPregunta(x,motor,doc,opc={}){
   const libre=!!opc.libre;
   if(motor!=='manual')appState.motor=motor;
   /* «Como el asesor»: sin sección elegida, que la elija la pregunta. */
-  appState.manualActivo=libre?null:doc;refrescarVocabularioManual();
+  appState.manualActivo=libre?null:doc;
   limpiarChatSilencioso();
   let toque=false;
   /* En un empate la app pregunta «¿en cuál estás?»; el asesor tocaría la suya.
@@ -6788,7 +6259,7 @@ async function correrMedicion(){
   }finally{
     midiendo=false;
     m.estado=medicionDetener?'detenida':'terminada';
-    appState.manualActivo=activoPrevio;refrescarVocabularioManual();renderSelectorSeccion();
+    appState.manualActivo=activoPrevio;renderSelectorSeccion();
     limpiarChatSilencioso();history=historialPrevio;saveChatHistory();
     try{await cerrojo?.release()}catch{}
     pintarMedicion();
@@ -8072,7 +7543,7 @@ function correrPruebasAisladas(){
     docs=g.docs;docChunks=g.docChunks;docFigures=g.docFigures;history=g.history;
     appState.manualActivo=g.activo;ultimosFragmentos=g.ult;ultimaOtraSeccion=g.otra;
     ultimaSeccionSugerida=g.sug;entidadesCorpus=g.ent;
-    rebuildCorpus();refrescarVocabularioManual();
+    rebuildCorpus();
   }
 }
 /* ── Pruebas del agente lector y de la ficha ──────
@@ -8211,7 +7682,7 @@ async function pruebasAgenteAisladas(){
   finally{
     docs=g.docs;docChunks=g.docChunks;docFigures=g.docFigures;docPaginas=g.docPaginas;docFichas=g.docFichas;
     history=g.history;appState.manualActivo=g.activo;ultimosFragmentos=g.ult;
-    rebuildCorpus();refrescarVocabularioManual();
+    rebuildCorpus();
   }
 }
 async function renderPanelPruebas(){
