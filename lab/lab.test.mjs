@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bootstrap, bootstrapPareado, mcnemar, wilson, semilla } from './estadistica.mjs';
 import { porPregunta, relevantes, abstencion } from './metricas.mjs';
-import { relevancia, tieneAlternativa, calificarManual } from './calificador.mjs';
+import { relevancia, tieneAlternativa, calificarManual, calificar, cifrasSinRespaldo } from './calificador.mjs';
 
 test('el remuestreo es determinista con la misma semilla', () => {
   const xs = [1, 0, 1, 1, 0, 1, 1, 1, 0, 1];
@@ -77,6 +77,37 @@ test('el calificador acepta el dato dicho con otras palabras pero no sin su núm
   assert.ok(!tieneAlternativa('Debes dejar 80 cm libres de pasillo', '90 cm de pasillo'));
   const r = calificarManual(pregunta, { tarjetas: [{ d: 'Manual Kalinde.pdf', p: 4, h: 'PASILLO', t: 'Deja 90 cm de pasillo.' }] });
   assert.equal(r.ok, false);   // la cifra correcta en el manual equivocado
+});
+
+/* Los dos contraejemplos de la auditoría externa del 5-oct (E3 y E4), tal cual. */
+test('el calificador del modo IA no acepta el dato negado (E3)', () => {
+  const r = calificar({ tipo: 'dato', k: ['colocar sensor a 15 cm'], p: [2] }, { cuerpo: 'No colocar sensor a 15 cm (pág. 2).', etiqueta: '' });
+  assert.equal(r.ok, false);
+  const si = (resp, alt) => tieneAlternativa(resp, alt, { polaridad: true });
+  assert.ok(!si('El sensor no va a 15 cm.', 'sensor a 15 cm'));
+  assert.ok(!si('Nunca coloques el sensor a 15 cm.', 'coloca el sensor a 15 cm'));
+  // Lo que sí da el dato, aunque haya un «no» cerca:
+  assert.ok(si('No, va a 15 cm del piso (pág. 2).', '15 cm'));
+  assert.ok(si('No va a 30 cm, va a 15 cm.', '15 cm'));
+  assert.ok(si('No va a 30 cm sino a 15 cm.', '15 cm'));
+  assert.ok(si('La altura no debe exceder 1.20 m.', '1.20 m'));
+  assert.ok(si('No mezclar tallas en el mismo nicho.', 'no mezclar tallas'));
+  assert.ok(si('El calzado no se mezcla y va en número 7.', 'número 7'));
+  // Sin polaridad (tarjetas del modo manual) se queda como estaba.
+  assert.ok(tieneAlternativa('No colocar sensor a 15 cm', 'colocar sensor a 15 cm'));
+});
+
+test('el calificador no acepta una abstención que da una medida sin fuente (E4)', () => {
+  const r = calificar({ tipo: 'no-esta', k: [], p: [] }, { cuerpo: 'El manual no especifica el dato. Coloca el sensor a 99 cm.', etiqueta: '' });
+  assert.equal(r.ok, false);
+  assert.equal(r.fallo, 'abstiene e inventa');
+  // La cifra de la pregunta, o la que estaba en lo que recibió el modelo, no es invento.
+  const deLaPregunta = calificar({ tipo: 'no-esta', q: '¿Cuántas prendas van a 30 cm?', k: [], p: [] }, { cuerpo: 'El manual no especifica cuántas prendas van a 30 cm.', etiqueta: '' });
+  assert.equal(deLaPregunta.ok, true);
+  const delContexto = calificar({ tipo: 'no-esta', q: '¿A qué altura va el letrero?', k: [], p: [] },
+    { cuerpo: 'El manual no especifica la altura del letrero. Lo más cercano: el sensor va a 15 cm (pág. 2).', etiqueta: '', ctx: [{ p: 2, h: 'SENSOR', t: 'Colocar el sensor a 15 cm.' }] });
+  assert.equal(delContexto.ok, true);
+  assert.deepEqual(cifrasSinRespaldo('Va a 99 cm y 40% del muro.', '', []), ['99 cm', '40%']);
 });
 
 import { umbralConformal, coberturaPorGrupos, negativasMinimas } from './conformal.mjs';
