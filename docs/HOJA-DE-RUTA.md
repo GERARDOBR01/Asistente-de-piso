@@ -37,22 +37,60 @@ Las decisiones están en `docs/adr/`:
 - **0004, prompt injection.**
 - **0005, módulos sin bundler:** cómo se parte `index.html` y en qué orden.
 
-## Ahora (plan de oct-2026: cimientos primero, el modelo local aparcado)
+## Ahora: tres niveles (oct-2026, el modelo local aparcado)
 
-1. **Terminar de partir `app.js`** (ADR 0005, pasos 2 a 8), con el golden master idéntico en
-   cada paso. Después, `lab/motor-node.mjs`: el motor importado en Node mide en segundos sin
-   navegador.
-2. **Puerta de evidencia sin modelo**, con reglas medidas:
+Lo que **se debe** mejorar va antes que lo que **se podría** mejorar. Nada del nivel 3 entra al
+motor mientras el nivel 1 no cumpla su criterio de salida.
+
+### Nivel 1 · Debe: los pilares
+
+1. **Un instrumento confiable.**
+   - Hecho: eval-gate en el CI y el calificador del modo IA, que ya no acepta el dato negado
+     ni la abstención que inventa una medida.
+   - Falta: Gerardo revisa la batería de confirmación 2.
+2. **El motor separado y medible.**
+   - Terminar de partir `app.js` hasta la puerta (ADR 0005, pasos 2 a 5), con el golden master
+     idéntico en cada paso.
+   - `lab/motor-node.mjs`: el motor importado en Node mide en segundos sin navegador.
+   - Prueba de aislamiento: con la sección elegida, cargar manuales ajenos no cambia la
+     respuesta. Hoy el IDF de BM25 es de todo el corpus.
+3. **Puerta de evidencia sin modelo**, con reglas medidas:
    - solidez adaptativa: una palabra rara o en el título basta
    - avisos de palabra ausente más finos
-   - seguimiento conversacional en modo manual
-   - fragmento hermano
+   - una sola decisión con estado: respaldada, parcial, aclarar o sin evidencia
+   - seguimiento que sustituye el objeto («¿y las sandalias?»), en vez de pegar las dos preguntas
+   - fragmento hermano: el patrón de ventana o fusión padre-hijo, acotado a la misma página y región
    - rótulos en mayúsculas que hoy se pierden al leer el PDF
 
    Desarrollo con las tres baterías de antes. Confirmación con una batería nueva de 57
    preguntas sobre páginas que nadie había usado, revisada por Gerardo y corrida una sola vez.
-3. **Trazas con el estándar OpenTelemetry GenAI** y un «¿por qué esta respuesta?» en la app.
-4. **Servidor MCP del motor.**
+
+**Criterio de salida**, fijado antes de esa corrida:
+- 0 preguntas rotas en desarrollo y en el gate;
+- los «no está» no empeoran;
+- mejora pareada en la confirmación con el IC 95 % por encima de cero;
+- el número tal cual en el ADR 0006.
+
+Si no se cumple, se itera en desarrollo, no en confirmación.
+
+### Nivel 2 · Debería: la vitrina
+
+- **Trazas con el estándar OpenTelemetry GenAI** y un «¿por qué esta respuesta?» en la app.
+- **Servidor MCP del motor.**
+- Terminar los pasos 6 a 8 de módulos.
+- Medir «Aprende del piso» (ver abajo).
+
+### Nivel 3 · Podría: exploración
+
+Cada idea entra como experimento del laboratorio, con su hipótesis y su criterio escritos antes,
+y con manuales ficticios. No toca el motor hasta que gane.
+1. Otro lector de PDF (Docling) contra el actual, en tablas, rótulos y columnas.
+2. El paquete del manual con vigencia y comparación entre campañas: qué reglas entran, cuáles
+   salen y cuáles cambian.
+3. Reglas estructuradas revisadas por una persona (objeto, medida, condición y fuente).
+4. Con key: reordenar con Gemini, citas en JSON y red-team con promptfoo.
+5. Buscar láminas por imagen (ColPali) y el modelo local aparcado.
+6. Tareas en piso y revisión con foto.
 
 ## Aparcado: la puerta con modelo local
 
@@ -85,11 +123,7 @@ números que suma y no rompe nada:
 
 ## Pulido pendiente
 
-- Modo manual: con muchos manuales exige dos palabras y se queda callado en preguntas cortas;
-  las conversaciones de seguimiento salen 1/5.
-- Quitar de `main` nombres reales que quedaron en comentarios y pruebas antiguas.
-- «Paquete del manual»: la ficha revisada una vez y compartida, en vez de una por teléfono.
-- Vigencia del manual: detectar temporada y avisar si hay dos versiones de la misma sección.
+- «Paquete del manual» y vigencia: ahora en el nivel 3 de «Ahora».
 - Lectura de planogramas y de datos que solo están en imagen.
 
 ## Más adelante
