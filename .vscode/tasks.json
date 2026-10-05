@@ -1,0 +1,16 @@
+{
+  // Ctrl+Shift+P → «Tasks: Run Task». Los datos reales viven FUERA del repo:
+  // la ruta se pregunta (por defecto ../eval-manuales-reales/lab).
+  "version": "2.0.0",
+  "inputs": [
+    { "id": "datos", "type": "promptString", "description": "Carpeta con corpus.json y los volcados", "default": "../eval-manuales-reales/lab" }
+  ],
+  "tasks": [
+    { "label": "Servir app (9601)", "type": "shell", "command": "python -m http.server 9601 --bind 127.0.0.1", "isBackground": true, "problemMatcher": [] },
+    { "label": "Pruebas del laboratorio", "type": "shell", "command": "node --test \"lab/*.test.mjs\"", "group": { "kind": "test", "isDefault": true }, "problemMatcher": [] },
+    { "label": "Arnés de la app (?test=1)", "type": "shell", "command": "node eval/arnes.mjs", "options": { "env": { "CANAL": "chrome" } }, "group": "test", "problemMatcher": [] },
+    { "label": "Agente simulado", "type": "shell", "command": "node eval/agente-simulado.mjs", "options": { "env": { "CANAL": "chrome" } }, "group": "test", "problemMatcher": [] },
+    { "label": "Laboratorio: métricas", "type": "shell", "command": "node lab/correr.mjs --datos ${input:datos}", "problemMatcher": [] },
+    { "label": "Laboratorio: volcar desde la pestaña viva", "type": "shell", "command": "node lab/volcar.mjs --vivo http://127.0.0.1:9701 --corpus ${input:datos}", "problemMatcher": [] }
+  ]
+}
