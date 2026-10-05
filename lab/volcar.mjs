@@ -9,7 +9,7 @@
 // pruebe después (embeddings, fusión, abstención) se compara contra eso.
 //
 // Uso:
-//   node lab/volcar.mjs --vivo http://127.0.0.1:9701 --preguntas <json> --salida <dir> [--etiqueta base]
+//   node lab/volcar.mjs --vivo http://127.0.0.1:9701 --preguntas <json>[,<json>…] --salida <dir> [--etiqueta base]
 //   node lab/volcar.mjs --vivo http://127.0.0.1:9701 --corpus <dir>     (solo los fragmentos)
 //   node lab/volcar.mjs --local eval/corpus-publico/manuales.json --corpus <dir> --preguntas <json> --salida <dir>
 //
@@ -123,9 +123,10 @@ if (CORPUS) {
   console.log(`corpus: ${c.docs.length} manuales, ${c.chunks.length} fragmentos (app ${c.version})`);
 }
 
-if (PREGUNTAS) {
+/* Varias baterías separadas por comas: los manuales se cargan una sola vez. */
+for (const PREGUNTAS_ of (PREGUNTAS || '').split(',').filter(Boolean)) {
   if (!SALIDA) { console.error('Falta --salida'); process.exit(1); }
-  const crudas = JSON.parse(fs.readFileSync(PREGUNTAS, 'utf8'));
+  const crudas = JSON.parse(fs.readFileSync(PREGUNTAS_, 'utf8'));
   const items = crudas.map((x, i) => ({ i, ...x, tipo: x.tipo || (x.en ? 'no-esta' : 'dato') }));
   const version = (await enPagina('return VERSION_APP'));
   const t0 = Date.now();
@@ -137,7 +138,7 @@ if (PREGUNTAS) {
     process.stdout.write(`\r${filas.length}/${items.length}`);
   }
   fs.mkdirSync(SALIDA, { recursive: true });
-  const destino = path.join(SALIDA, `${ETIQUETA}__${path.basename(PREGUNTAS, '.json')}.jsonl`);
+  const destino = path.join(SALIDA, `${ETIQUETA}__${path.basename(PREGUNTAS_, '.json')}.jsonl`);
   fs.writeFileSync(destino, filas.map(f => JSON.stringify({ ...f, version, fecha: new Date().toISOString() })).join('\n') + '\n');
   console.log(`\n${destino} (${((Date.now() - t0) / 1000).toFixed(0)} s, ${filas.filter(f => f.falta).length} sin manual)`);
 }
