@@ -2496,7 +2496,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.7.5';
+const VERSION_APP='ap-v1.7.6';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -3830,9 +3830,9 @@ function responderSinModelo(q){
   }
   const ruta=r.ruta;
   if(r.tipo==='empate'){preguntarSeccion(q,ruta.alternativas);return}
-  const{sec,tarjetas,fragmentos,nombrada,enOtra,activo,avisoAusente,porParecidas,avisoParecidas}=r;
+  const{sec,tarjetas,fragmentos,nombrada,enOtra,activo,avisoAusente,porParecidas,avisoParecidas,avisoFlojo}=r;
   ultimasTarjetas=tarjetas;
-  const avisoVisible=avisoAusente||avisoParecidas;
+  const avisoVisible=avisoAusente||avisoParecidas||avisoFlojo;
   /* Si una tarjeta es lo que la IA leyó en una imagen al preparar el manual,
      «nadie lo interpretó» deja de ser del todo cierto: se dice cuál es. */
   const aviso='⚪ Así lo dice el manual, tal cual: sin modelo conectado, nadie lo interpretó.'
@@ -3865,7 +3865,7 @@ function responderSinModelo(q){
     if(avisoVisible){
       const aa=document.createElement('div');aa.className=avisoAusente?'frag-ausente':'frag-ausente frag-parecidas';aa.textContent=avisoVisible;
       cuerpoEl.appendChild(aa);
-      avisoParecidasEl=avisoAusente?null:aa;
+      avisoParecidasEl=avisoParecidas?aa:null;
     }
     const av=document.createElement('div');av.className='frag-aviso';av.textContent=aviso;
     cuerpoEl.appendChild(av);

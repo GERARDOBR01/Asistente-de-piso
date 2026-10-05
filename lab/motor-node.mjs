@@ -99,7 +99,7 @@ export function preguntar(x, tope = 200) {
     tarjetas: (r.tarjetas || []).map(t => ({ ...fila(t.c), t: t.texto || '' })),
     sinDato: r.tipo === 'nada',
     ausente: conTarjetas ? r.avisoAusente : '',
-    parecidas: conTarjetas && !r.avisoAusente ? r.avisoParecidas : '',
+    parecidas: conTarjetas && !r.avisoAusente ? r.avisoParecidas || r.avisoFlojo || '' : '',
     decision: b.decision || null, decisionManual: r.decision,
   };
   estado.manualActivo = null;

@@ -116,6 +116,17 @@ export function formasDePar(par){
   for(const x of de(a))for(const y of de(b))out.push(' '+x+' '+y+' ');
   return out
 }
+/* El presente de un verbo en infinitivo, con el diptongo que toque: «colgar»
+   está en el manual como «nunca se cuelgan», «mover» como «mueve». Son formas
+   de la misma palabra, no sinónimos. */
+/** @param {string} w @returns {string[]} */
+export function conjugaciones(w){
+  const m=w.match(/^(.{2,})(ar|er|ir)$/);
+  if(!m)return[];
+  const raices=new Set([m[1],m[1].replace(/o([^aeiou]+)$/,'ue$1'),m[1].replace(/e([^aeiou]+)$/,'ie$1')]);
+  const finales=m[2]==='ar'?['a','an','as','o','e','en']:['e','en','es','o','a','an'];
+  return[...raices].flatMap(r=>finales.map(f=>r+f))
+}
 /** @param {string} query @param {string | null} activo @returns {Ausente[]} */
 export function terminosAusentes(query,activo){
   if(!activo||!estado.docChunks.length)return[];
@@ -159,11 +170,12 @@ export function terminosAusentes(query,activo){
   for(const k of palabrasDeConsulta(query)){
     if(k.length<5||/^\d/.test(k)||enFrase.has(k)||ORDINAL_A_CIFRA[k]||esPalabraDeAccion(k))continue;
     const formas=new Set();
+    const propias=new Set();
     /* «porsentaje» no está en ningún índice, así que el corrector no la lleva a
        «porcentaje»; por el sonido sí, y con ella llega «participación». */
     const cifra=palabraDeCifra(k);
     for(const v of variantes(k).concat(infinitivos(k),cifra&&cifra!==k?[cifra]:[])){
-      formas.add(v);
+      formas.add(v);propias.add(v);
       for(const frase of expandKeywords([v]))for(const x of tokenize(frase))formas.add(x);
     }
     /* Si lo que escribió es una errata de una palabra que el manual sí tiene, no
@@ -172,7 +184,13 @@ export function terminosAusentes(query,activo){
     if(cerca)formas.add(cerca);
     /* Una palabra que el piso ya enseñó no falta: se dice de otro modo. */
     for(const p of palabrasDelPiso(k,activo))formas.add(p.manual);
-    const raices=new Set([...formas].map(raizCorta).filter(r=>r.length>2));
+    /* La raíz sirve para las formas de la propia palabra —«acomodo» contra
+       «acomoda»—, no para sus sinónimos. Con los sinónimos por raíz, «ganchos»
+       nunca faltaba en ACCESORIOS: el diccionario la lleva a «barra», y «barr»
+       es raíz de algo del manual. Lo mismo «vitrina», «cinturones» o «lentes»
+       en secciones que no los tienen. Los sinónimos siguen contando tal cual. */
+    for(const v of[...propias])for(const c of conjugaciones(v)){propias.add(c);formas.add(c)}
+    const raices=new Set([...propias].map(raizCorta).filter(r=>r.length>2));
     let dentro=false;
     for(const f of formas)if(propio.has(f)){dentro=true;break}
     if(!dentro)for(const r of raices)if(propioRaiz.has(r)){dentro=true;break}
@@ -395,7 +413,7 @@ export const VERSION_POLITICA='puerta-1';
 /* Las palabras de la pregunta que cuentan para «cubiertas»: las de tema, sin
    los verbos con que se pregunta en el piso ni las interrogativas. */
 /** @param {string} pregunta */
-function palabrasDeTema(pregunta){
+export function palabrasDeTema(pregunta){
   return palabrasDeConsulta(pregunta).filter(k=>k.length>=3&&!esVerbo(k)&&!INTERROGATIVAS.has(k))
 }
 

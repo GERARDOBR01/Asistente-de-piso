@@ -36,6 +36,10 @@ código y pruebas.
 7. **`aislamiento.mjs`**: cuánto cambia la respuesta de una sección por tener cargadas las
    demás (el IDF de BM25 es de todo el corpus). Compara los catorce con IDF global contra el
    IDF de su manual y contra su manual solo.
+8. **`comparar.mjs`**: dos volcados, antes y después, por batería y con el calificador de
+   siempre: cuántas arregla y cuántas rompe (McNemar), la diferencia pareada con su IC y cómo
+   se mueven los estados del contrato `puerta-1`. Sale con 1 si alguna pregunta pasa de bien
+   a mal. Es con lo que se juzga cada cambio de la Fase 3.
 
 ## Uso
 
@@ -50,6 +54,7 @@ node lab/correr.mjs --datos ../eval-manuales-reales/lab --informe ../eval-manual
 # sin navegador: el motor en Node sobre el corpus ya extraído, y su paridad con la app
 node lab/motor-node.mjs --corpus ../eval-manuales-reales/lab --preguntas <json>[,<json>…] --salida ../eval-manuales-reales/lab --etiqueta node
 node lab/identico.mjs ../eval-manuales-reales/lab --antes base --despues node
+node lab/comparar.mjs ../eval-manuales-reales/lab --antes base --despues node [--detalle]
 node lab/aislamiento.mjs --corpus ../eval-manuales-reales/lab --preguntas <json>[,<json>…]
 node --test "lab/*.test.mjs"
 ```

@@ -43,6 +43,8 @@ interface Resultado {
   exigidos?: number;
   /** Lo subió un atajo que aprendió el piso. */
   atajo?: boolean;
+  /** Entró por coincidencia floja en el modo manual (coincidenciaFloja). */
+  flojo?: boolean;
 }
 
 /** Un término de la búsqueda: la forma (`t`), su peso (`w`) y la palabra del
@@ -164,6 +166,8 @@ interface RespuestaSinModelo {
   porParecidas?: Array<{ dijo: string, k: string, como: string }>;
   /** «Tu manual no dice X; lo encontré como Y» ('' si no hay). */
   avisoParecidas?: string;
+  /** Nota de coincidencia floja ('' si no hay). */
+  avisoFlojo?: string;
   seccionDelTurno?: string | null;
 }
 

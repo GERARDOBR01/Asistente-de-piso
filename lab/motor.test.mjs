@@ -23,7 +23,7 @@ import { nombreDeSeccion } from '../src/motor/secciones.js';
 import { rutaPorEvidencia, otraSeccionNombrada } from '../src/motor/ruta.js';
 import { terminosAusentes, contratoDeDecision, VERSION_POLITICA } from '../src/motor/puerta.js';
 import { consultaAmpliada, assessQuestionScope, rutaDeLaPregunta } from '../src/motor/conversacion.js';
-import { respuestaSinModelo, contextoParaModelo } from '../src/motor/respuesta.js';
+import { respuestaSinModelo, contextoParaModelo, coincidenciaFloja } from '../src/motor/respuesta.js';
 import { preguntar } from './motor-node.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -343,6 +343,68 @@ test('la palabra que no está en la sección activa pero sí en otra dice de cu�
   assert.deepEqual([d.estado, d.faltan], ['parcial', ['vestidos']]);
   assert.ok(d.razones.includes('palabra-ausente'));
 }, reconstruirIndice));
+
+/* La raíz es para las formas de la palabra, no para sus sinónimos: el
+   diccionario lleva «ganchos» a «barra», y «barr» es también raíz de «barril».
+   Con los sinónimos por raíz, «ganchos» nunca faltaba en la cava. */
+test('la palabra ausente no se exime porque un sinónimo comparta raíz con el manual', () => conEstado({
+  /* Sin la lámina de COPAS, que dice «barra» tal cual: el sinónimo exacto sí exime. */
+  docChunks: [...DOS.filter(c => c.id !== 'c3'), frag('c4', 'cava.pdf', 4, 'BARRIL', 'El barril de roble va junto a la entrada.'),
+    frag('c9', 'cava.pdf', 9, 'DEGUSTACIÓN', 'Las tazas se cuelgan sobre el barril.'),
+    frag('d4', 'boutique.pdf', 4, 'GANCHOS', 'Los ganchos van hacia la izquierda.'),
+    frag('d7', 'boutique.pdf', 7, 'SACOS', 'Para colgar los sacos usa ganchos anchos.'),
+    frag('d5', 'boutique.pdf', 5, 'ENGANCHADO', 'Usa ganchos de madera en los sacos.'),
+    frag('d6', 'boutique.pdf', 6, 'BLUSAS', 'Las blusas van en ganchos delgados.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, () => {
+  const [a] = terminosAusentes('¿de qué color van los ganchos?', 'cava.pdf');
+  assert.equal(a?.palabra, 'ganchos');
+  assert.equal(a.duenos[0].docName, 'boutique.pdf');
+  /* La propia palabra sí se une por raíz: «botella» está en la cava como «botellas». */
+  assert.deepEqual(terminosAusentes('¿dónde va la botella?', 'cava.pdf'), []);
+  /* Y por su conjugación, con diptongo: la cava dice «las tazas se cuelgan»,
+     y «colgar» tal cual solo está en la boutique. */
+  assert.deepEqual(terminosAusentes('¿se puede colgar el barril?', 'cava.pdf').map(a => a.palabra), []);
+}, reconstruirIndice));
+
+/* Coincidencia floja: con más de CORPUS_GRANDE fragmentos se exigen dos
+   palabras, y una pregunta cuya lámina trae solo una se quedaba callada. */
+const RELLENO = Array.from({ length: 44 }, (_, i) => frag(`r${i}`, i % 2 ? 'cava.pdf' : 'boutique.pdf', 10 + i, `REGLA ${i}`,
+  `Regla ${i} de exhibición: el mueble lleva el producto ordenado${i % 2 ? '' : ' por color'} y limpio.`));
+const conFloja = fn => conEstado({
+  docChunks: [...DOS, ...RELLENO,
+    frag('c5', 'cava.pdf', 5, 'ACCESORIOS', 'Las piedras van en la base del florero de la entrada.'),
+    frag('c7', 'cava.pdf', 7, 'FLOREROS', 'Piedras blancas en los floreros chicos.'),
+    frag('c8', 'cava.pdf', 8, 'ENTRADA', 'Piedras de río en la entrada.'),
+    frag('c6', 'cava.pdf', 6, 'ETIQUETAS', 'Cada botella de la cava se separa por región, y el color de la etiqueta indica la región del vino que se exhibe en el mueble.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, fn, reconstruirIndice);
+
+test('coincidencia floja: la lámina con una sola palabra se enseña, como parcial y con nota', () => conFloja(() => {
+  estado.manualActivo = 'cava.pdf';
+  const q = '¿dónde van las piedras del pasillo?';
+  assert.equal(nivelDeEvidencia(retrieve(q, { doc: 'cava.pdf', source: 'pdf' }), q), 1);
+  const hist = [];
+  const r = respuestaSinModelo(q, hist, x => rutaDeLaPregunta(x, hist));
+  assert.equal(r.tipo, 'tarjetas');
+  assert.ok(r.tarjetas.some(t => t.c.id === 'c5'), JSON.stringify(r.tarjetas.map(t => t.c.id)));
+  assert.equal(r.decision.estado, 'parcial');
+  assert.ok(r.decision.razones.includes('coincidencia-floja'), JSON.stringify(r.decision.razones));
+  assert.ok(r.avisoFlojo || r.avisoAusente);
+  estado.manualActivo = null;
+}));
+
+test('coincidencia floja: no si otra palabra de la pregunta está en el manual pero no en las tarjetas', () => conFloja(() => {
+  /* «color» está en la cava (ETIQUETAS), pero no en ninguna de las tres
+     láminas de piedras que se enseñarían: sería contestar otra cosa. */
+  const flojos = r => coincidenciaFloja(retrieve(r, { doc: 'cava.pdf', source: 'pdf', limit: 60 }), r, 'cava.pdf');
+  assert.ok(flojos('¿dónde van las piedras del pasillo?').length);
+  assert.deepEqual(flojos('¿de qué color van las piedras?'), []);
+  /* Y sin sección no hay manual contra el que comprobarlo. */
+  assert.deepEqual(coincidenciaFloja(retrieve('piedras del pasillo', { source: 'pdf' }), 'piedras del pasillo', null), []);
+  /* Ni si la pregunta trae una palabra que no está en ningún manual. */
+  assert.deepEqual(flojos('¿dónde van las piedras del techo?'), []);
+}));
 
 /* ── La conversación y la respuesta en Node (lab/motor-node.mjs) ───────────
    Lo que en app.js leía el historial global ahora lo recibe: así una
