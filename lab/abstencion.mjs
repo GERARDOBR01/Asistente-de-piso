@@ -106,3 +106,18 @@ for (const alfa of ALFAS) {
 console.log('| α | τ | «no está» coladas, por manual (validación cruzada) | Calibración: dato | Calibración: «no está» | Prueba: dato | Prueba: «no está» |');
 console.log('| --- | --- | --- | --- | --- | --- | --- |');
 for (const l of filas) console.log(l);
+
+/* La calibración que usa la app: solo el umbral y de dónde salió (sin texto de
+   ningún manual), para guardarla en el repo. */
+const GUARDAR = arg('guardar', null);
+if (GUARDAR) {
+  const alfa = Number(arg('alfa', 0.02));
+  const tau = umbralConformal(negCal.map(a => a.s), alfa);
+  const loo = coberturaPorGrupos(negCal, alfa, { grupo: a => a.grupo, puntaje: a => a.s });
+  fs.writeFileSync(GUARDAR, JSON.stringify({
+    modelo: (await import('./embeddings.mjs')).MODELOS[MODELO].id, variante: VARIANTE, w: W, puntaje: PUNTAJE,
+    alfa, tau, negativas: negCal.length, manuales: new Set(negCal.map(a => a.grupo)).size,
+    coladasPorManual: `${loo.pasan}/${loo.total}`, fecha: new Date().toISOString().slice(0, 10),
+  }, null, 2) + '\n');
+  console.log('\nCalibración guardada en ' + GUARDAR);
+}
