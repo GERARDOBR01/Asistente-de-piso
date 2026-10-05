@@ -1333,6 +1333,14 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
       </button>
     </div>
 
+      <div id="significado-cfg">
+        <div class="fld-label">Búsqueda por significado <span class="fld-req">OPCIONAL · SIN SEÑAL</span></div>
+        <div class="cfg-nota">Encuentra la lámina aunque no uses las palabras del manual («revolver» → «no mezcles»). Corre en tu teléfono: se descarga una vez y después funciona sin señal. Ni el manual ni tus preguntas salen del teléfono.</div>
+        <div class="cfg-nota" id="significado-estado">Apagada.</div>
+        <div style="margin-top:7px"><button class="reset-btn" type="button" id="significado-btn" onclick="alternarSignificado()">⬇ Descargar y encender</button></div>
+        <details class="avanzado"><summary>Cómo decide que no está</summary><div class="avanzado-body cfg-nota" id="significado-garantia"></div></details>
+      </div>
+
       <div>
         <div class="fld-label">Proveedor de IA <span class="fld-req">OPCIONAL</span></div>
         <div class="cfg-nota">Sin clave la app funciona igual: te enseña el manual tal cual, con su página y su lámina. Con clave, además te contesta en una frase.</div>
@@ -6513,7 +6521,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.6.0';
+const VERSION_APP='ap-v1.7.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -7152,6 +7160,8 @@ async function handleFiles(fileList){
   /* Con key conectada, la IA lee las láminas nuevas de una vez. Va en segundo
      plano: el manual ya se puede consultar mientras tanto. */
   if(hayKeyParaIA())prepararFichasPendientes().catch(e=>console.warn('ficha',e));
+  /* Y con la búsqueda por significado encendida, se vectoriza lo nuevo. */
+  if(significado.estado==='lista')vectorizarPendientes().catch(e=>console.warn('significado',e));
 }
 
 function renderDocs(){
@@ -7225,6 +7235,8 @@ function removeDoc(i){
   /* Quitarlo de la lista y dejarlo guardado hacía que el contador siguiera
      diciendo que estaba en el dispositivo. Quitar es quitar. */
   if(hash)borrarManual(hash).catch(()=>{}).then(renderAccionesDocs);
+  significado.porDoc.delete(name);
+  txSig('readwrite',st=>st.delete(claveSig({hash,name}))).catch(()=>{});
   docChunks=docChunks.filter(c=>c.docName!==name);
   docFigures=docFigures.filter(f=>f.docName!==name);
   docPaginas.delete(name);docFichas.delete(name);
@@ -7630,6 +7642,200 @@ async function consultarTodosLosManuales(pregunta,btn){
    SEND MESSAGE — Streaming v7.0
 ════════════════════════════════════════════════ */
 /* ════════════════════════════════════════════════
+   BÚSQUEDA POR SIGNIFICADO — embeddings en el teléfono
+
+   El diccionario de sinónimos es búsqueda semántica hecha a mano, y con
+   preguntas que el motor no había visto se quedaba corto: con una batería
+   nueva el modo manual acertaba 39 de 56, y 13 de las 17 que fallaba tenían la
+   lámina buena arriba y la escondía la puerta de evidencia («revolver» no está
+   en el manual; «no mezcles» sí).
+
+   Aquí entra solo un RESCATE: cuando la app calla o avisa que una palabra no
+   está, y la pregunta se parece lo bastante a un fragmento de la sección, se
+   enseñan las 3 láminas de la búsqueda híbrida (BM25 + significado) con una
+   nota que dice cómo llegaron. Nunca cambia una respuesta que la app ya daba.
+
+   El «lo bastante» no es a ojo: τ sale de predicción conformal sobre 383
+   preguntas «no está» de 14 manuales reales (lab/calibracion.json, ADR 0003):
+   a lo más α = 1 de cada 100 preguntas sin respuesta en la sección pasa como
+   respuesta. Medido por manual, se colaron 3 de 383. Las reglas de código
+   (otra sección, palabra de otro manual, cantidad) ya bloquean 355 de ellas.
+
+   Es opcional: el modelo (multilingual-e5-small, ~113 MB) se descarga una vez
+   desde Ajustes y corre en un worker. Sin él, todo es exactamente como antes.
+   Ni el manual ni las preguntas salen del teléfono.
+════════════════════════════════════════════════ */
+const SIGNIFICADO={
+  modelo:'Xenova/multilingual-e5-small',dtype:'q8',mb:113,
+  /* De lab/calibracion.json, calibrado con la app en vivo (lab/calibrar.mjs).
+     Si cambia el modelo o una regla del rescate, se recalibra. */
+  w:0.6,tau:0.8590868737055113,alfa:0.01,negativas:383,coladas:'3/383',
+  pregunta:t=>'query: '+t,
+  fragmento:c=>'passage: '+[c.heading,c.text].filter(Boolean).join('. ')
+};
+const significado={estado:'apagada',worker:null,pendientes:new Map(),sig:0,porDoc:new Map(),preguntas:new Map(),error:'',avance:''};
+const SIG_DB='asistente_piso_significado',SIG_STORE='vectores';
+
+function abrirSigDB(){
+  return new Promise((ok,mal)=>{
+    if(!window.indexedDB)return mal(new Error('sin IndexedDB'));
+    const r=indexedDB.open(SIG_DB,1);
+    r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(SIG_STORE))r.result.createObjectStore(SIG_STORE,{keyPath:'clave'})};
+    r.onsuccess=()=>ok(r.result);r.onerror=()=>mal(r.error);
+  })
+}
+function txSig(modo,fn){
+  return abrirSigDB().then(db=>new Promise((ok,mal)=>{
+    const tx=db.transaction(SIG_STORE,modo);const req=fn(tx.objectStore(SIG_STORE));
+    tx.oncomplete=()=>{db.close();ok(req&&req.result)};
+    tx.onerror=tx.onabort=()=>{db.close();mal(tx.error||new Error('transacción abortada'))};
+  }))
+}
+const claveSig=doc=>SIGNIFICADO.modelo+'|'+(doc.hash||doc.name);
+
+function llamarSignificado(msg){
+  return new Promise((ok,mal)=>{
+    const id=++significado.sig;
+    significado.pendientes.set(id,{ok,mal});
+    significado.worker.postMessage({...msg,id});
+  })
+}
+function crearWorkerSignificado(){
+  const w=new Worker('semantica-worker.js',{type:'module'});
+  w.onmessage=e=>{
+    const m=e.data||{};
+    if(m.tipo==='progreso'){significado.avance=`descargando ${Math.round(100*m.cargado/m.total)} %`;pintarSignificado();return}
+    if(m.tipo==='avance'){significado.avance=`leyendo el manual ${m.hechos}/${m.total}`;pintarSignificado();return}
+    if(m.tipo==='aviso'){console.info('significado:',m.texto);return}
+    const p=significado.pendientes.get(m.id);if(!p)return;
+    significado.pendientes.delete(m.id);
+    m.ok?p.ok(m):p.mal(new Error(m.error));
+  };
+  w.onerror=e=>{significado.estado='error';significado.error=e.message||'el worker falló';pintarSignificado()};
+  return w;
+}
+
+/* Los fragmentos que se vectorizan: los del PDF, no la ficha (eso lo escribió
+   una IA, y un rescate no puede enseñar texto que no es del manual). */
+const fragmentosParaSignificado=name=>docChunks.filter(c=>c.docName===name&&c.source==='pdf'&&!c.isFicha);
+
+async function vectorizarManual(doc){
+  const chunks=fragmentosParaSignificado(doc.name);
+  if(!chunks.length)return;
+  const ids=chunks.map(c=>c.id);
+  try{
+    const g=await txSig('readonly',st=>st.get(claveSig(doc)));
+    if(g&&g.ids&&g.ids.length===ids.length&&g.ids.every((x,i)=>x===ids[i])){
+      significado.porDoc.set(doc.name,{ids,dims:g.dims,datos:new Float32Array(g.datos)});return;
+    }
+  }catch{}
+  const r=await llamarSignificado({tipo:'vectores',textos:chunks.map(SIGNIFICADO.fragmento)});
+  significado.porDoc.set(doc.name,{ids,dims:r.dims,datos:r.datos});
+  try{await txSig('readwrite',st=>st.put({clave:claveSig(doc),ids,dims:r.dims,datos:r.datos.buffer.slice(0),guardado:Date.now()}))}catch(e){console.warn('guardar vectores',e)}
+}
+async function vectorizarPendientes(){
+  for(const d of [...docs]){
+    if(significado.estado!=='lista')return;
+    if(significado.porDoc.has(d.name))continue;
+    try{await vectorizarManual(d)}catch(e){console.warn('vectorizar',d.name,e)}
+    significado.avance='';pintarSignificado();
+  }
+}
+
+async function encenderSignificado({silencioso=false}={}){
+  if(significado.estado==='lista'||significado.estado==='cargando')return;
+  significado.estado='cargando';significado.error='';significado.avance='';pintarSignificado();
+  try{
+    if(!significado.worker)significado.worker=crearWorkerSignificado();
+    await llamarSignificado({tipo:'cargar',modelo:SIGNIFICADO.modelo,dtype:SIGNIFICADO.dtype});
+    significado.estado='lista';
+    try{localStorage.setItem('ap_significado','1')}catch{}
+    pintarSignificado();
+    await vectorizarPendientes();
+    if(!silencioso)showToast('🔎 Búsqueda por significado lista: funciona sin señal en este teléfono.','success',4000);
+  }catch(e){
+    significado.estado='error';significado.error=String(e&&e.message||e);
+    if(!silencioso)showToast('No se pudo descargar el modelo: '+significado.error,'error',6000);
+  }
+  significado.avance='';pintarSignificado();
+}
+function apagarSignificado(){
+  significado.estado='apagada';significado.porDoc.clear();significado.preguntas.clear();
+  if(significado.worker){significado.worker.terminate();significado.worker=null}
+  try{localStorage.removeItem('ap_significado')}catch{}
+  pintarSignificado();
+}
+function alternarSignificado(){significado.estado==='lista'?apagarSignificado():encenderSignificado()}
+
+/* La pregunta tal como la busca el modo manual: la misma que vuelca el
+   laboratorio, para que lo calibrado sea lo que corre. */
+function consultaParaSignificado(q){
+  const c=consultaDeBusqueda(q);
+  return c!==q&&!SEGUIMIENTO.test(q)?q:c;
+}
+/* `retrieve` y el modo manual son síncronos; el vector de la pregunta se pide
+   antes, en los puntos de entrada que ya esperan (enviar, medir). Si no llegó,
+   no hay rescate: nunca se espera al modelo para contestar. */
+async function prepararSignificado(q){
+  if(significado.estado!=='lista'||!q)return;
+  const c=consultaParaSignificado(q);
+  if(significado.preguntas.has(c))return;
+  try{
+    const r=await llamarSignificado({tipo:'vectores',textos:[SIGNIFICADO.pregunta(c)]});
+    if(significado.preguntas.size>200)significado.preguntas.clear();
+    significado.preguntas.set(c,r.datos.slice(0,r.dims));
+  }catch(e){console.warn('vector de la pregunta',e)}
+}
+
+/* El candidato a rescate: las 3 láminas de la búsqueda híbrida dentro de la
+   sección y el coseno del mejor fragmento. El umbral τ se aplica fuera, en
+   responderSinModelo, para que la medición pueda ver el coseno también de los
+   que no pasan (así se calibra τ con lo que corre de verdad). Si un manual del
+   alcance no está vectorizado todavía, no hay candidato. */
+let ultimoRescate=null;
+function candidatoDeRescate(q,doc,{vector}={}){
+  if(significado.estado!=='lista'&&!vector)return null;
+  const consulta=consultaParaSignificado(q);
+  const v=vector||significado.preguntas.get(consulta);
+  if(!v)return null;
+  const alcance=doc?[doc]:docs.map(d=>d.name);
+  const den=[];
+  for(const name of alcance){
+    const e=significado.porDoc.get(name);
+    if(!e)return null;
+    for(let i=0;i<e.ids.length;i++){
+      let s=0;const o=i*e.dims;
+      for(let j=0;j<e.dims;j++)s+=v[j]*e.datos[o+j];
+      den.push({id:e.ids[i],cos:s});
+    }
+  }
+  if(!den.length)return null;
+  den.sort((a,b)=>b.cos-a.cos);
+  const lex=new Map(retrieve(consulta,{limit:200,doc,source:'pdf'}).map(r=>[r.c.id,r.score]));
+  const mejor=Math.max(1e-9,...lex.values());
+  const hi=den[0].cos,lo=den[den.length-1].cos,rango=Math.max(1e-9,hi-lo);
+  const porId=new Map(docChunks.map(c=>[c.id,c]));
+  const resultados=den.map(x=>({c:porId.get(x.id),score:(lex.get(x.id)||0)/mejor+SIGNIFICADO.w*(x.cos-lo)/rango,hits:0,hitsSyn:0,hitsErrata:0,cos:x.cos}))
+    .filter(r=>r.c).sort((a,b)=>b.score-a.score).slice(0,3);
+  /* ¿Alguna palabra de la pregunta (o su sinónimo o errata) está en la lámina
+     que se enseñaría primero? Lo decide BM25, no el embedding. */
+  return{resultados,cos:den[0].cos,conPalabra:resultados.length>0&&(lex.get(resultados[0].c.id)||0)>0};
+}
+
+function pintarSignificado(){
+  const est=document.getElementById('significado-estado'),btn=document.getElementById('significado-btn'),gar=document.getElementById('significado-garantia');
+  if(!est||!btn)return;
+  const n=significado.porDoc.size;
+  est.textContent=significado.estado==='lista'?`✓ Encendida · ${n} de ${docs.length} manual${docs.length===1?'':'es'} listo${n===1?'':'s'}${significado.avance?' · '+significado.avance:''}`
+    :significado.estado==='cargando'?`… ${significado.avance||'preparando el modelo'}`
+    :significado.estado==='error'?`⚠ ${significado.error}`
+    :'Apagada.';
+  btn.textContent=significado.estado==='lista'?'Apagar':significado.estado==='cargando'?'Descargando…':`⬇ Descargar y encender (~${SIGNIFICADO.mb} MB)`;
+  btn.disabled=significado.estado==='cargando';
+  if(gar)gar.textContent=`Solo actúa cuando la app no encontró tu pregunta con sus palabras. Para no enseñarte una lámina cuando la respuesta no está en tu sección, el umbral se calibró con ${SIGNIFICADO.negativas} preguntas que no tenían respuesta, en 14 manuales reales: a lo más ${Math.round(SIGNIFICADO.alfa*100)} de cada 100 de esas pasan como respuesta (medido por manual: ${SIGNIFICADO.coladas}). Lo que encuentre así llega con la nota «lo encontré por significado».`;
+}
+
+/* ════════════════════════════════════════════════
    MODO SIN MODELO — retrieval local, cero red
    Sin API key el asistente no se calla: corre el mismo
    retrieval léxico que alimenta al modelo y entrega los
@@ -8025,23 +8231,27 @@ function responderSinModelo(q){
      se buscó y si la pregunta nombraba otra que la activa. */
   const sec=docChunks.length?decidirSeccion(q):{doc:null,otraSeccion:null,porPregunta:false};
   const relevantes=seccionesPorRelevancia(q).slice(0,FALLBACK_MAX_SECCIONES);
-  let fragmentos='',chars=0;
-  const tarjetas=[];
-  for(const r of relevantes){
-    if(chars>=FALLBACK_BUDGET)break;
-    const etiqueta=chunkLabel(r.c)+'\n';
-    const espacio=FALLBACK_BUDGET-chars-etiqueta.length;
-    if(espacio<80)break;
-    const trozo=r.c.text.length>espacio?r.c.text.slice(0,espacio)+'\n[...]':r.c.text;
-    fragmentos+=etiqueta+trozo+'\n\n';chars+=etiqueta.length+trozo.length;
-    /* Dos fragmentos de la misma lámina y la misma sección son una sola cosa
-       para quien lee: van en la misma tarjeta, no en dos con el mismo rótulo. */
-    const misma=tarjetas.find(t=>t.c.docName===r.c.docName&&t.c.page===r.c.page&&t.c.heading===r.c.heading);
-    if(misma)misma.texto+='\n'+trozo;
-    else tarjetas.push({c:r.c,texto:trozo});
-  }
-  ultimasTarjetas=tarjetas;
-  fragmentos=fragmentos.trim();
+  /* Arma las tarjetas de una lista de resultados. Es función porque el rescate
+     por significado vuelve a armarlas con su propia lista. */
+  const armar=lista=>{
+    let fragmentos='',chars=0;
+    const tarjetas=[];
+    for(const r of lista){
+      if(chars>=FALLBACK_BUDGET)break;
+      const etiqueta=chunkLabel(r.c)+'\n';
+      const espacio=FALLBACK_BUDGET-chars-etiqueta.length;
+      if(espacio<80)break;
+      const trozo=r.c.text.length>espacio?r.c.text.slice(0,espacio)+'\n[...]':r.c.text;
+      fragmentos+=etiqueta+trozo+'\n\n';chars+=etiqueta.length+trozo.length;
+      /* Dos fragmentos de la misma lámina y la misma sección son una sola cosa
+         para quien lee: van en la misma tarjeta, no en dos con el mismo rótulo. */
+      const misma=tarjetas.find(t=>t.c.docName===r.c.docName&&t.c.page===r.c.page&&t.c.heading===r.c.heading);
+      if(misma)misma.texto+='\n'+trozo;
+      else tarjetas.push({c:r.c,texto:trozo});
+    }
+    return{fragmentos:fragmentos.trim(),tarjetas};
+  };
+  let{fragmentos,tarjetas}=armar(relevantes);
   /* Sin modelo también hay que decirle dónde está lo que busca. Se veía en
      pantalla: con CASUAL activo, «¿cómo acomodo las sábanas?» contestaba "nada
      coincide" mientras BLANCOS —cargado, a un clic— tenía la lámina. La misma
@@ -8072,7 +8282,7 @@ function responderSinModelo(q){
   const activo=sec.doc||(docs.length===1?docs[0].name:null);
   const ausentes=fragmentos&&activo?terminosAusentes(q,activo):[];
   const avisoCuenta=fragmentos&&!ausentes.length?avisoDeCuenta(q,tarjetas,activo):'';
-  const avisoAusente=avisoCuenta?avisoCuenta:ausentes.length?(()=>{
+  let avisoAusente=avisoCuenta?avisoCuenta:ausentes.length?(()=>{
     const lista=a=>a.map(i=>'«'+i.palabra+'»').join(' ni ');
     const deNadie=ausentes.filter(i=>i.enNinguno),deOtra=ausentes.filter(i=>!i.enNinguno);
     const partes=[];
@@ -8080,6 +8290,41 @@ function responderSinModelo(q){
     if(deOtra.length)partes.push(`${lista(deOtra)} no ${deOtra.length===1?'está':'están'} en esta sección; sí en ${nombreDeSeccion(deOtra[0].duenos[0].docName)}.`);
     return '⚠ '+partes.join(' ')+' Te enseño lo más cercano que encontré: revisa que sí sea lo que buscas.'
   })():'';
+  /* Rescate por significado: solo donde la app calló o avisó que una PALABRA
+     no está, dentro de UNA sección. Ver «BÚSQUEDA POR SIGNIFICADO». Nunca:
+     - si la pregunta nombra otra sección o es de operación de tienda;
+     - sobre un aviso de cantidad («no dice cuántos», «no dan ningún
+       porcentaje»): ahí el código ya comprobó que la cifra no está, y eso no
+       lo arregla el significado. Medido en vivo, el rescate tapaba ese aviso en
+       «¿cuántos sacos van por barra?» y en «¿qué porcentaje tiene formal?»;
+     - sin sección decidida: el mejor coseno entre 995 fragmentos es más alto
+       que entre los ~70 de una sección, y τ se calibró por sección. Así se
+       colaba «¿cuándo es la junta con la regional?». */
+  /* - si una palabra de la pregunta que no está en la sección SÍ está en otro
+       manual cargado: «formal» en Ropa interior, «cervezas» en Ropa interior.
+       Eso no es vocabulario del piso, es otra sección, y el rescate enseñaba
+       los porcentajes de OTROS mundos (Contempo 24 %, Premium 46 %): el dato
+       creíble y falso que este proyecto persigue. «revolver», «adelante» o
+       «poquito» no están en ningún manual: esas sí se rescatan;
+     - si las láminas rescatadas no pasan la misma comprobación de cantidad que
+       cualquier respuesta («¿cuántos…?», «¿qué porcentaje…?»). */
+  let rescate=null;
+  ultimoRescate=null;
+  if((!fragmentos||(avisoAusente&&!avisoCuenta))&&sec.doc&&!nombrada&&docChunks.length&&!esOperacionDeTienda(q)){
+    const deOtra=terminosAusentes(q,sec.doc).some(i=>!i.enNinguno);
+    /* - y si ni una palabra de la pregunta está en la lámina que se enseñaría
+       primero. El significado ordena; que la lámina hable de lo preguntado lo
+       comprueba el código. «¿cómo pido mis vacaciones?» no comparte nada con
+       ninguna lámina; «¿puedo revolver vinos…?» sí comparte «vinos». */
+    const c0=deOtra?null:candidatoDeRescate(q,sec.doc);
+    const cand=c0&&c0.conPalabra?c0:null;
+    const r=cand&&armar(cand.resultados);
+    if(r&&r.fragmentos&&!avisoDeCuenta(q,r.tarjetas,activo)){
+      ultimoRescate={cos:cand.cos,rescatado:cand.cos>SIGNIFICADO.tau};
+      if(ultimoRescate.rescatado){rescate=cand;({fragmentos,tarjetas}=r);avisoAusente='';enOtra=null}
+    }
+  }
+  ultimasTarjetas=tarjetas;
   /* La tarjeta llegó solo por el diccionario: ni una palabra escrita por el
      asesor, ni una errata corregida. Medido con 30 manuales, así llegaban 20 de
      las 21 preguntas «que no están» que aun así enseñaban tarjeta —«¿dónde van
@@ -8089,7 +8334,7 @@ function responderSinModelo(q){
      («liquidación», «góndola»), así que el aviso no miente en ningún caso. Es
      más suave que el de arriba: la lámina se queda, porque sí es del manual. */
   const primera=relevantes[0];
-  const porParecidas=fragmentos&&!avisoAusente&&primera&&primera.hits===0&&primera.hitsErrata===0
+  const porParecidas=fragmentos&&!rescate&&!avisoAusente&&primera&&primera.hits===0&&primera.hitsErrata===0
     ?(()=>{
       const voc=activo?vocabDeDoc(activo):null;
       const pesos=weightedTerms(consultaDeBusqueda(q),activo);
@@ -8104,7 +8349,9 @@ function responderSinModelo(q){
     })():[];
   /* Es una nota, no una alarma: dice lo que pasó —la palabra no está, se
      buscó por otra— y deja al asesor juzgar con la tarjeta delante. */
-  const avisoParecidas=porParecidas.length
+  const avisoParecidas=rescate
+    ?'🔎 Lo encontré por significado: tu pregunta no usa las palabras del manual. Revisa que sea lo que buscas.'
+    :porParecidas.length
     ?'ℹ Tu manual no dice '+porParecidas.map(p=>`«${p.dijo}»`).join(' ni ')+'; lo encontré como '+porParecidas.map(p=>`«${p.como}»`).join(' y ')+'.':'';
   const avisoVisible=avisoAusente||avisoParecidas;
   /* Si una tarjeta es lo que la IA leyó en una imagen al preparar el manual,
@@ -8729,6 +8976,7 @@ async function sendMessage(){
     const qSinKey=inputSinKey.value.trim();
     if(!qSinKey)return;
     inputSinKey.value='';ajustarAltura(inputSinKey);
+    await prepararSignificado(qSinKey);
     responderSinModelo(qSinKey);
     return;
   }
@@ -10392,7 +10640,7 @@ async function medirPregunta(x,motor,doc,opc={}){
   };
   const preguntar=async(q,contar)=>{
     preparar(q,contar);
-    if(motor==='manual'){responderSinModelo(q);return}
+    if(motor==='manual'){await prepararSignificado(q);responderSinModelo(q);return}
     document.getElementById('user-input').value=q;sessionTokens=0;
     await sendMessage();
   };
@@ -10728,6 +10976,11 @@ if('serviceWorker' in navigator&&location.protocol!=='file:'){
 }
 if(!navigator.onLine)updateKeyStatus(claveActual());
 const restauracion=restaurarManualesGuardados().catch(e=>console.warn('restaurar',e));
+/* Si el asesor encendió la búsqueda por significado, se vuelve a encender sola
+   (desde la caché del teléfono: sin señal también) cuando ya están sus manuales.
+   El arnés (?test=1) no la enciende: mide el comportamiento sin modelo. */
+pintarSignificado();
+restauracion.then(()=>{try{if(localStorage.getItem('ap_significado')==='1'&&!new URLSearchParams(location.search).has('test'))encenderSignificado({silencioso:true})}catch{}});
 
 /* ════════════════════════════════════════════════
    ARNÉS DE MEDICIÓN — abrir con ?test=1

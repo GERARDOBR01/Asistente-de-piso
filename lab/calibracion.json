@@ -2,11 +2,13 @@
   "modelo": "Xenova/multilingual-e5-small",
   "variante": "crudo",
   "w": 0.6,
-  "puntaje": "cos",
-  "alfa": 0.02,
-  "tau": 0.8730903032293853,
-  "negativas": 287,
+  "puntaje": "cos del mejor fragmento de la sección",
+  "origen": "app en vivo (lab/calibrar.mjs)",
+  "alfa": 0.01,
+  "tau": 0.8590868737055113,
+  "negativas": 383,
+  "conCandidato": 25,
   "manuales": 15,
-  "coladasPorManual": "5/287",
+  "coladasPorManual": "3/383",
   "fecha": "2026-10-05"
 }

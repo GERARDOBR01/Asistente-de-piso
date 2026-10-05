@@ -1,6 +1,8 @@
 # ADR 0003 · Abstención conformal: rescatar por significado con garantía
 
-- **Estado:** aceptada en el laboratorio (4-oct-2026). Falta integrarla en la app.
+- **Estado:** **en revisión** (5-oct-2026). Está integrada en la app detrás de la búsqueda por
+  significado opcional, y la garantía se cumple, pero **la mejora no se confirmó** con una
+  batería nueva. Ver «Confirmación», al final.
 - **Depende de:** ADR 0002 (búsqueda híbrida con multilingual-e5-small).
 
 ## Contexto
@@ -68,3 +70,40 @@ positivas que rescatar (la app ya acierta 180 de 188), así que no hay con qué 
 node lab/abstencion.mjs --datos <datos> --puntaje cos
 node --test "lab/*.test.mjs"     # incluye la garantía en datos simulados
 ```
+
+## Confirmación (5-oct-2026): la garantía se sostiene, la mejora no
+
+Al llevar el rescate a la app y medirlo en vivo, en el navegador, aparecieron casos que la
+simulación no veía. Se agregaron reglas de código:
+- **No tapar un aviso de cantidad** («no dice cuántos», «ningún porcentaje»).
+- **No rescatar sin una sección decidida.** El mejor coseno entre 995 fragmentos es más alto
+  que entre ~70.
+- **No rescatar si una palabra ausente es de otro manual.** «¿Qué porcentaje tiene formal?» en
+  Ropa interior enseñaba los porcentajes de otros mundos.
+- **Exigir al menos una palabra de la pregunta en la lámina.**
+
+Con esas reglas, τ se calibró con **la app en vivo** (`lab/calibrar.mjs`) sobre 383 «no está».
+Las reglas bloquean 355 de ellas antes de que el significado opine, y con α = 0.01 queda
+τ = 0.859. En validación cruzada por manual se cuelan 3 de 383 (0.8 %).
+
+**Pero esas reglas se ajustaron mirando el set de prueba**, que dejó de ser independiente. Por
+eso se escribió una **batería de confirmación nueva** (24 de dato y 8 «no está» o trampa, hash
+congelado) y se corrió una sola vez:
+
+| | Sin significado | Con rescate |
+|---|---|---|
+| Dato correcto | 14/24 | 14/24 |
+| «No está» bien dicho | 6/8 | 5/8 |
+
+- **El coseno de e5-small no separa** lo rescatable de lo que no está: los positivos que no se
+  rescataron quedan en 0.843, y la «no está» que se coló en 0.866.
+- **La regla «palabra de otro manual» bloquea rescates buenos** por palabras comunes («entra»,
+  «arriba», «divide»).
+- **El hallazgo más importante es el de la línea base.** Con preguntas realmente nuevas el modo
+  manual acierta 58 %, no el 95 % de la batería con la que se afinó.
+
+**Decisión pendiente** (con Gerardo):
+- dejar solo el ranking híbrido (ADR 0002), que en los cuatro conjuntos nunca rompe una
+  pregunta;
+- o buscar una señal de evidencia más discriminante (un reranker cruzado o un modelo de
+  embeddings más grande) antes de volver a encender el rescate.

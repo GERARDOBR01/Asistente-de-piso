@@ -11,8 +11,15 @@
    - Librerías de cdnjs y fuentes: sus URL llevan versión, así que lo
      guardado no caduca: primero la caché.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.6.0';
-const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf'];
+const VERSION='ap-v1.7.0';
+/* La búsqueda por significado (opcional): transformers.js y el motor WASM de
+   jsDelivr se guardan aparte y NO se borran al cambiar de versión; sus URL
+   llevan versión, así que lo guardado no caduca. El modelo lo guarda la propia
+   librería en «transformers-cache», que tampoco se toca. Son ~120 MB que el
+   asesor bajó a propósito: borrarlos en cada actualización lo obligaría a
+   descargarlos otra vez con datos del celular. */
+const PERSISTENTES=['ap-significado-v1','transformers-cache'];
+const PAGINA=['./','index.html','semantica-worker.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf'];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
@@ -35,7 +42,11 @@ async function guardarFuentes(cache){
 self.addEventListener('install',e=>{
   e.waitUntil((async()=>{
     const cache=await caches.open(VERSION);
-    await cache.addAll(PAGINA);
+    /* `reload`: que la versión nueva no se instale con archivos viejos de la
+       caché HTTP del navegador (GitHub Pages los da por buenos 10 minutos). Se
+       vio con el worker de la búsqueda por significado: la página nueva
+       arrancaba el worker anterior. */
+    await cache.addAll(PAGINA.map(u=>new Request(u,{cache:'reload'})));
     await Promise.all(CDN.map(u=>fetch(u,{mode:'cors',credentials:'omit'}).then(r=>{if(!r.ok)throw new Error(u);return cache.put(u,r)})));
     /* Sin fuentes la app funciona igual (cae a las del sistema): que no
        tumben la instalación. */
@@ -46,7 +57,7 @@ self.addEventListener('install',e=>{
 
 self.addEventListener('activate',e=>{
   e.waitUntil((async()=>{
-    for(const k of await caches.keys())if(k!==VERSION)await caches.delete(k);
+    for(const k of await caches.keys())if(k!==VERSION&&!PERSISTENTES.includes(k))await caches.delete(k);
     await self.clients.claim();
   })());
 });
@@ -64,6 +75,17 @@ self.addEventListener('fetch',e=>{
   const url=new URL(req.url);
   const propia=url.origin===self.location.origin;
   const deCdn=url.origin==='https://cdnjs.cloudflare.com'||url.origin==='https://fonts.googleapis.com'||url.origin==='https://fonts.gstatic.com';
+  if(url.origin==='https://cdn.jsdelivr.net'){
+    e.respondWith((async()=>{
+      const cache=await caches.open('ap-significado-v1');
+      const guardada=await cache.match(req);
+      if(guardada)return guardada;
+      const r=await fetch(req);
+      if(r.ok)cache.put(req,r.clone());
+      return r;
+    })());
+    return;
+  }
   if(!propia&&!deCdn)return;
 
   if(propia&&(req.mode==='navigate'||url.pathname.endsWith('/index.html'))){

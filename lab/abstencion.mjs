@@ -65,7 +65,11 @@ function analizar(f) {
   /* Lo que enseñaría el rescate. */
   const tarjetas = hib.slice(0, 3).map(x => porId.get(x.id));
   const rescate = calificarManual(f, { tarjetas, sinDato: false, ausente: '' });
-  return { f, s, abstiene, puedeRescatar: abstiene && !fuera && hib.length > 0, appOk: app.ok, rescateOk: rescate.ok, grupo: f.secDoc || f.activa || '(todas)' };
+  /* El rescate no tapa un aviso de cantidad (el código ya vio que la cifra no
+     está) ni actúa sin una sección decidida (τ se calibra por sección). */
+  const avisoDeCantidad = /no dice cu[aá]nt|No encontré en el manual cu[aá]nt|ningún porcentaje/.test(f.ausente || '');
+  const puedeRescatar = (!!f.sinDato || (!!f.ausente && !avisoDeCantidad)) && !fuera && !!f.secDoc && hib.length > 0;
+  return { f, s, abstiene, puedeRescatar, appOk: app.ok, rescateOk: rescate.ok, grupo: f.secDoc || f.activa || '(todas)' };
 }
 const A = todas.map(analizar);
 const deCal = A.filter(a => CALIBRAR.includes(a.f.conjunto));

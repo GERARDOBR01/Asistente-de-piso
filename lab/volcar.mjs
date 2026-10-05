@@ -68,8 +68,12 @@ const PREGUNTAR_JS = (lote, tope) => `
        (\`rutaForzada\`) se quedaba puesta y cambiaba la respuesta de la
        siguiente con la misma pregunta. */
     history = []; clearChat(); rutaForzada = null; rutaActual = null;
-    for (const t of x.turnos || []) responderSinModelo(t);
+    /* Como la app al enviar: si la búsqueda por significado está encendida, el
+       vector de la pregunta se calcula antes de contestar. */
+    const prep = async t => { if (typeof prepararSignificado === 'function') await prepararSignificado(t); };
+    for (const t of x.turnos || []) { await prep(t); responderSinModelo(t); }
     const q = x.q;
+    await prep(q);
     const operacion = esOperacionDeTienda(q);
     const sec = decidirSeccion(q);
     const consulta = consultaDeBusqueda(q);
@@ -92,7 +96,9 @@ const PREGUNTAR_JS = (lote, tope) => `
       tarjetas: (ultimasTarjetas || []).map(t => ({ ...fila(t.c), t: t.texto || '' })),
       sinDato: !!el?.classList.contains('sin-dato'),
       ausente: fa && !fa.classList.contains('frag-parecidas') ? fa.innerText : '',
-      parecidas: fa && fa.classList.contains('frag-parecidas') ? fa.innerText : '' });
+      parecidas: fa && fa.classList.contains('frag-parecidas') ? fa.innerText : '',
+      significado: typeof significado !== 'undefined' ? significado.estado : null,
+      rescate: typeof ultimoRescate !== 'undefined' ? ultimoRescate : null });
   }
   cambiarSeccion(''); history = []; clearChat();
   return out;`;
