@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 a 4 hechos; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 5 hechos; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -55,7 +55,7 @@ lo que está en el repo es lo que corre.
 | 2 | Estado del corpus en un solo objeto (`src/estado.js`); el arnés usa setters en vez de reasignar globales | hecho |
 | 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | hecho |
 | 4 | Búsqueda y router de sección | hecho |
-| 5 | Puerta de evidencia | |
+| 5 | Puerta de evidencia y su contrato de decisión | hecho |
 | 6 | Verificación | |
 | 7 | IA (proveedores, prompt, agente), UI, almacenamiento | |
 | 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
@@ -118,7 +118,7 @@ lo que está en el repo es lo que corre.
   |---|---|
   | `secciones.js` | de qué sección es cada manual (`nombreDeSeccion`) y qué sección nombra la pregunta |
   | `busqueda.js` | `weightedTerms`, `retrieve`, `packChunks`, `mezclarPorPartes`, `getPdfContext` |
-  | `puerta.js` | `exigenciaDeSolidez`, `filtroSolidez`, `nivelDeEvidencia`: la semilla del paso 5 |
+  | `puerta.js` | `exigenciaDeSolidez`, `filtroSolidez`, `nivelDeEvidencia` (en el paso 5 pasó a llamarse `solidez.js`) |
   | `ruta.js` | evidencia por sección, `otraSeccionNombrada`, `rutaPorEvidencia` |
 
   `variantes` e `infinitivos` (morfología) pasan a `texto.js`. `app.js` baja de 9,620 a 8,540 líneas. No hay ciclos entre módulos: texto → secciones → puerta → búsqueda → ruta.
@@ -138,6 +138,35 @@ lo que está en el repo es lo que corre.
   - un atajo aprendido reordena, pero no cambia el nivel de evidencia.
 
   Se comprobó que cazan: con el filtro por manual quitado, o con la sección nombrada ignorada, falla su prueba.
+
+## Medido (paso 5)
+
+- **La puerta en dos capas, sin ciclos.** La búsqueda necesita la solidez para contar lo que exige, y la puerta necesita la búsqueda (`esVerbo`, `weightedTerms`). Así que el `puerta.js` del paso 4 pasa a llamarse `solidez.js`, abajo, y el nuevo `puerta.js` va arriba de la búsqueda:
+
+  | Módulo | Contenido |
+  |---|---|
+  | `solidez.js` | `exigenciaDeSolidez`, `filtroSolidez`, `nivelDeEvidencia` |
+  | `aprendido.js` | `usarAprendido` y cómo preguntar lo que enseñó el piso; lo usan la búsqueda y la puerta |
+  | `puerta.js` | `terminosAusentes` (la palabra o el par que la sección no tiene, y de quién es), `avisoDeCuenta` (el «¿cuántos?» sin cifra), `esOperacionDeTienda`, los avisos del modo manual y el contrato de decisión |
+
+  Orden: texto → secciones → solidez → aprendido → búsqueda → puerta → ruta. `app.js` baja de 8,540 a 8,250 líneas.
+- **Dos bloques en línea del modo manual pasan a funciones puras:** el texto del aviso de palabras ausentes (`avisoDeAusentes`) y «lo encontré como…» (`palabrasPorParecidas`).
+- **El contrato de decisión** (`contratoDeDecision`, `versionPolitica: 'puerta-1'`): `{consultaResuelta, alcance, estado, evidencia[], cubiertas[], faltan[], razones[], versionPolitica}`, con `estado` en `respaldada | parcial | aclarar | sin_evidencia`.
+  - Es la misma forma con API key (`buildContext` lo devuelve en `decision`) y sin ella (`ultimaDecision`). Hasta ahora la decisión vivía en banderas sueltas y cada consumidor la reconstruía a su manera.
+  - **No cambia ninguna respuesta:** describe la que ya se daba. `lab/volcar.mjs` lo guarda en cada pregunta (`decision`, `decisionManual`), fuera de los campos del golden master.
+  - **Cuadra con lo de antes:** en las 651 preguntas que se hacen (16 de las cruzadas son de un manual que no está cargado), sin tarjetas ⇔ `sin_evidencia` o `aclarar`, todo aviso de palabra ausente o de «lo encontré como» ⇔ `parcial`, la evidencia es exactamente lo que entró al contexto. Cero discrepancias.
+  - **Lo que dice hoy, en modo manual** (es la línea base de la Fase 3, en sus propios términos):
+
+    | | respaldada | parcial | aclarar | sin_evidencia |
+    |---|---|---|---|---|
+    | dato (268) | 242 | 15 | 1 | 10 |
+    | «no está» (366) | 3 | 72 | 71 | 220 |
+    | trampa (17) | 1 | 1 | 0 | 15 |
+
+    Las 3 «no está» respaldadas son las que la puerta deja pasar sin ningún aviso; las 26 de dato que no salen respaldadas son las que la Fase 3 tiene que recuperar sin mover las otras.
+- **Golden master:** las 667 preguntas idénticas con los 14 manuales reales, tanto con la extracción sola como con el contrato conectado.
+- Arnés 305/305, agente simulado, eval-gate idéntico (arregla 0, rompe 0) y modo avión con los 17 archivos. ap-v1.7.4.
+- **43 pruebas en Node.** Las 5 nuevas arman la decisión sin navegador: respaldada con lo que cubre, parcial por una palabra que no es de ningún manual y por una que es de otra sección (con su dueño), aclarar y sin evidencia, y una propiedad con fast-check (respaldada nunca lleva palabras que falten ni evidencia vacía; lo demás siempre dice por qué). Comprobadas con mutaciones; una de ellas no la cazaba ninguna prueba y por eso se agregó la de la palabra de otra sección.
 
 ## Consecuencias
 

@@ -15,14 +15,16 @@ import * as erratas from './motor/erratas.js';
 import * as layout from './motor/layout.js';
 import * as fragmentos from './motor/fragmentos.js';
 import * as secciones from './motor/secciones.js';
-import * as puerta from './motor/puerta.js';
+import * as solidez from './motor/solidez.js';
+import * as aprendido from './motor/aprendido.js';
 import * as busqueda from './motor/busqueda.js';
+import * as puerta from './motor/puerta.js';
 import * as ruta from './motor/ruta.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
 
 Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
-  secciones, puerta, busqueda, ruta);
+  secciones, solidez, aprendido, busqueda, puerta, ruta);
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre

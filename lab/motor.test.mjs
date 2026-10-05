@@ -16,10 +16,12 @@ import { indexChunk, bm25Score, reconstruirIndice } from '../src/motor/indice.js
 import { masParecida, vocabDeDoc } from '../src/motor/erratas.js';
 import { buildChunks, CHUNK_MAX } from '../src/motor/fragmentos.js';
 import { bloquesDeLineas, multiplicar } from '../src/motor/layout.js';
-import { retrieve, packChunks, chunkLabel, usarAprendido } from '../src/motor/busqueda.js';
-import { nivelDeEvidencia } from '../src/motor/puerta.js';
+import { retrieve, packChunks, chunkLabel } from '../src/motor/busqueda.js';
+import { usarAprendido } from '../src/motor/aprendido.js';
+import { nivelDeEvidencia } from '../src/motor/solidez.js';
 import { nombreDeSeccion } from '../src/motor/secciones.js';
 import { rutaPorEvidencia, otraSeccionNombrada } from '../src/motor/ruta.js';
+import { terminosAusentes, contratoDeDecision, VERSION_POLITICA } from '../src/motor/puerta.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -275,3 +277,66 @@ test('lo aprendido en el piso entra por usarAprendido; sin él, la búsqueda es 
     usarAprendido({ atajos: () => [] });
   }
 }));
+
+/* ── La puerta y su contrato (ADR 0005, paso 5) ───────────────────────────
+   El contrato describe la decisión con la misma forma en el modo IA y en el
+   manual. Aquí se arma igual que en buildContext: búsqueda, empaquetado,
+   palabras ausentes. */
+const decidir = (q, doc) => {
+  estado.ultimosFragmentos = [];
+  const res = retrieve(q, { doc, source: 'pdf', limit: 20 });
+  const nivel = nivelDeEvidencia(res, q);
+  if (nivel) packChunks(res, 2000);
+  const ausentes = terminosAusentes(q, doc).filter(a => !a.enNinguno || nivel >= 1);
+  return contratoDeDecision({ pregunta: q, consulta: q, seccion: doc, nivel, evidencia: estado.ultimosFragmentos, ausentes });
+};
+
+test('contrato: evidencia sólida y nada que falte es «respaldada», con lo que cubre', () => conDos(() => {
+  const d = decidir('¿cómo van las botellas?', 'cava.pdf');
+  assert.equal(d.estado, 'respaldada');
+  assert.ok(d.cubiertas.includes('botellas'));
+  assert.deepEqual(d.faltan, []);
+  assert.ok(d.evidencia.some(e => e.id === 'c2' && e.doc === 'cava.pdf' && e.pagina === 2));
+  assert.equal(d.versionPolitica, VERSION_POLITICA);
+}));
+
+test('contrato: una palabra de tema que no está en ningún manual vuelve «parcial» la respuesta', () => conDos(() => {
+  const d = decidir('¿dónde van las botellas de tequila?', 'cava.pdf');
+  assert.equal(d.estado, 'parcial');
+  assert.deepEqual(d.faltan, ['tequila']);
+  assert.ok(d.razones.includes('palabra-de-ningun-manual'));
+}));
+
+test('contrato: sin evidencia, otra sección nombrada y empate', () => conDos(() => {
+  assert.equal(decidir('¿cómo cambio la llanta del coche?', 'cava.pdf').estado, 'sin_evidencia');
+  const otra = contratoDeDecision({ pregunta: 'q', consulta: 'q', seccion: 'cava.pdf', nivel: 0, evidencia: [], otraSeccion: { nombre: '520 BOUTIQUE', motivo: 'nombrada' } });
+  assert.deepEqual([otra.estado, otra.razones], ['aclarar', ['otra-seccion-nombrada']]);
+  const empate = contratoDeDecision({ pregunta: 'q', consulta: 'q', seccion: null, nivel: 0, evidencia: [], empate: ['cava.pdf', 'boutique.pdf'] });
+  assert.equal(empate.estado, 'aclarar');
+  assert.deepEqual(empate.alcance.alternativas, ['cava.pdf', 'boutique.pdf']);
+}));
+
+test('contrato: «respaldada» nunca lleva palabras que falten ni evidencia vacía, y siempre dice por qué si no lo es', () => conDos(() => {
+  fc.assert(fc.property(fc.subarray([...VOCABULARIO, 'tequila', 'sabanas', 'cuantas'], { minLength: 1 }), fc.constantFrom('cava.pdf', 'boutique.pdf'), (palabras, doc) => {
+    const d = decidir(palabras.join(' '), doc);
+    assert.ok(['respaldada', 'parcial', 'aclarar', 'sin_evidencia'].includes(d.estado));
+    if (d.estado === 'respaldada') { assert.deepEqual(d.faltan, []); assert.ok(d.evidencia.length > 0); }
+    else assert.ok(d.razones.length > 0, JSON.stringify(d));
+    for (const e of d.evidencia) assert.equal(e.doc, doc);
+    for (const k of d.cubiertas) assert.ok(!d.faltan.includes(k));
+  }));
+}));
+
+test('la palabra que no está en la sección activa pero sí en otra dice de cuál', () => conEstado({
+  docChunks: [...DOS, frag('d4', 'boutique.pdf', 4, 'VESTIDOS', 'Los vestidos largos van al fondo.'),
+    frag('d5', 'boutique.pdf', 5, 'NOCHE', 'Los vestidos de noche van con zapatos.'),
+    frag('d6', 'boutique.pdf', 6, 'FIESTA', 'Los vestidos de fiesta se cuelgan por color.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, () => {
+  const [a] = terminosAusentes('¿dónde cuelgo los vestidos junto a las copas?', 'cava.pdf');
+  assert.equal(a?.palabra, 'vestidos');
+  assert.equal(a.duenos[0].docName, 'boutique.pdf');
+  const d = decidir('¿dónde cuelgo los vestidos junto a las copas?', 'cava.pdf');
+  assert.deepEqual([d.estado, d.faltan], ['parcial', ['vestidos']]);
+  assert.ok(d.razones.includes('palabra-ausente'));
+}, reconstruirIndice));
