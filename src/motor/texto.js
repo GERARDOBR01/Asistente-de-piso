@@ -173,7 +173,6 @@ export function scoreText(text,kws){
   return score
 }
 
-
 /* El corte por longitud dejaba fuera «cm», que en un manual de exhibición es
    de las palabras que más información llevan: la lámina que contesta "¿cuánto
    dejo de pasillo?" dice literalmente "dejando 80 cm" y no menciona la palabra
@@ -195,3 +194,105 @@ export function tokenize(t){return normalizeText(t).split(/\s+/)
 /** @param {string} q @returns {string[]} */
 export function palabrasDeConsulta(q){return[...new Set(tokenize(q))]}
 
+/* Formas candidatas de una palabra, para que el plural del asesor encuentre el
+   singular del manual. Se generan solo del lado de la pregunta: el índice no se
+   toca, así que los manuales ya guardados siguen valiendo. No pretende ser un
+   lematizador —«muebles» produce también «muebl», que no es palabra—; las
+   variantes que no existen simplemente no coinciden con nada y no estorban. */
+/** @param {string} w @returns {string[]} */
+export function variantes(w){
+  const v=[w];
+  /** @param {string} x */
+  const plural=x=>{
+    if(x.length>4&&x.endsWith('s')){
+      v.push(x.slice(0,-1));
+      if(x.endsWith('es'))v.push(x.slice(0,-2));
+      if(x.endsWith('ces'))v.push(x.slice(0,-3)+'z');
+    }
+  };
+  plural(w);
+  /* Y al revés: el asesor escribe «maniquis» y el manual titula «MANIQUÍES».
+     Singularizar era la mitad del camino —la forma que el manual usa puede ser
+     la plural—, así que también se prueba añadiendo la terminación. Las que no
+     existen no coinciden con nada y no estorban. */
+  for(const x of[...v])if(x.length>3&&!x.endsWith('s')){v.push(x+'s');v.push(x+'es')}
+  /* El asesor pregunta "¿dónde acomodo lo rebajado?" y el manual escribe "la
+     mercancía rebajada": misma palabra, otro género, y el buscador devolvía
+     CERO fragmentos. Se prueba el género contrario en cada forma, incluida la
+     singularizada, para que «rebajados» también llegue a «rebajada». */
+  for(const x of[...v])if(x.length>4&&/[oa]$/.test(x))v.push(x.slice(0,-1)+(x.endsWith('o')?'a':'o'));
+  /* El asesor escribe el verbo y el manual titula el sustantivo. Medido sobre
+     87 preguntas con respuesta conocida en los once manuales, cuatro de los
+     cinco fallos de recall eran esto y solo esto: «doblo» no llegaba a DOBLADO,
+     «cuelgo» no llegaba a COLGADO, «colorizo» no llegaba a COLORIZACIÓN, y
+     «rebajado» no llegaba a «rebaja» —que el diccionario ya sabía llevar hasta
+     LIQUIDACIÓN—. No era vocabulario: la lámina estaba ahí y se llamaba casi
+     igual.
+
+     Dos derivaciones, en los dos sentidos: del verbo conjugado a la raíz
+     («doblo» → dobl) y del participio a la raíz («rebajado» → rebaj). Sobre
+     cada raíz se prueban las terminaciones con las que estos manuales titulan.
+
+     Y la diptongación, que es la que rompe el caso más común del piso: en
+     español la raíz cambia al conjugar —colgar/cuelgo, cerrar/cierro— así que
+     de «cuelg» se prueba también «colg». Sin eso, la mitad de los verbos
+     irregulares no alcanzan nunca su propio título. */
+  if(w.length>4){
+    const raices=[];
+    const part=w.match(/^(.{3,})(?:ados|adas|ado|ada)$/);
+    if(part)raices.push({raiz:part[1],part:true});
+    /* «¿cómo se doblan los pantalones?»: la tercera del plural también es
+       verbo, y sin ella «doblan» solo llegaba a DOBLADO de rebote, como errata. */
+    const conj=w.match(/^(.{3,})(?:an|en|[aeo])$/);
+    if(conj)raices.push({raiz:conj[1],part:false});
+    /* El mismo verbo en singular: «¿cómo se clasifican los cubiertos?» y el
+       manual de Mesa Fina dice «La cubertería se clasifica por estilos». Es la
+       misma persona gramatical que usa el manual para dar la regla, y no va
+       hacia el infinitivo, que es por donde se colaba «cambio» → «cambiar». */
+    if(/[^aeiou](?:an|en)$/.test(w))v.push(w.slice(0,-1));
+    /* Y al revés, de la primera persona del asesor a la del manual: «¿cómo
+       etiqueto…?» y la lámina dice «se etiquetan en la costura». Misma regla de
+       arriba: la persona con que el manual da la regla, nunca el infinitivo. */
+    if(conj&&/o$/.test(w))for(const t of['an','en'])v.push(conj[1]+t);
+    /* Solo se deriva hacia el sustantivo, nunca hacia el verbo. La primera
+       versión probaba también el infinitivo y reabrió un agujero que ya estaba
+       cerrado: «cambio» alcanzaba «cambiar», y «¿cómo cambio la llanta del
+       coche?» volvía a pasar por pregunta contestable —el arnés interno lo
+       cazó en el acto—. Es asimétrico a propósito, porque el problema lo es: el
+       asesor escribe el verbo y el manual titula el sustantivo, nunca al revés.
+       Del participio sí se vuelve al sustantivo corto («rebajado» → «rebaja»),
+       que es de donde el diccionario sabe seguir hasta LIQUIDACIÓN. */
+    /* «-eza» por «¿cuándo se limpia?»: la lámina se titula LIMPIEZA y dice
+       «limpiar», y la pregunta solo encontraba el check list. */
+    const SUF_VERBO=['ado','ada','ados','adas','acion','aciones','eza'];
+    const SUF_PARTICIPIO=['a','o','ar'];
+    for(const{raiz,part}of raices){
+      const dip=raiz.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
+      for(const r of dip===raiz?[raiz]:[raiz,dip])
+        for(const suf of part?SUF_PARTICIPIO:SUF_VERBO)v.push(r+suf);
+    }
+  }
+  return[...new Set(v)]
+}
+
+/* El diccionario de sinónimos está escrito en infinitivo —«acomodar»,
+   «colgar», «planchar»— y el asesor escribe conjugado. La derivación fuerte no
+   genera el infinitivo a propósito: por ahí se colaba «cambio» → «cambiar», y
+   con él las preguntas que no son del manual. Así que se genera aquí, y solo
+   para llamar a la puerta del diccionario: lo que entre por ella pesa lo que
+   pesa un sinónimo, no lo que pesa la palabra que el asesor escribió.
+
+   Sin esto, «¿cómo acomodo las tallas?» no llegaba a «colocar» —que es como lo
+   dice el manual de CASUAL, que nunca escribe «acomodar»— y la pregunta salía
+   marcada como si hablara de algo ajeno a su propia sección. */
+/** @param {string} w @returns {string[]} */
+export function infinitivos(w){
+  if(w.length<5)return[];
+  const m=w.match(/^(.{3,})(?:ados|adas|ado|ada|o|a|e)$/);
+  if(!m)return[];
+  const r=m[1];
+  const dip=r.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
+  const out=[];
+  for(const x of dip===r?[r]:[r,dip])out.push(x+'ar',x+'er',x+'ir');
+  return out
+}
