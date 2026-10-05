@@ -28,6 +28,14 @@ código y pruebas.
 5. **`gate.mjs`**: la compuerta del CI. Vuelca la app con el corpus público
    (`eval/corpus-publico/`, manuales ficticios) y falla si una pregunta que estaba bien pasa
    a mal respecto a `eval/corpus-publico/linea-base.json`. Ver el README, «El eval-gate».
+   También comprueba que `motor-node.mjs` conteste igual que el navegador.
+6. **`motor-node.mjs`**: el mismo motor (`src/motor/`) importado en Node, sin navegador.
+   Carga el `corpus.json` que deja `volcar.mjs --corpus` y escribe el mismo volcado que
+   `volcar.mjs`, en segundos. Es con lo que se barren las ideas de la puerta; que dé lo mismo
+   que la app se comprueba con `identico.mjs`, y el gate lo hace en cada PR.
+7. **`aislamiento.mjs`**: cuánto cambia la respuesta de una sección por tener cargadas las
+   demás (el IDF de BM25 es de todo el corpus). Compara los catorce con IDF global contra el
+   IDF de su manual y contra su manual solo.
 
 ## Uso
 
@@ -39,7 +47,11 @@ node lab/volcar.mjs --local eval/corpus-publico/manuales.json --corpus /tmp/pub 
 node lab/gate.mjs [--actualizar]
 node lab/volcar.mjs --preguntas ../eval-manuales-reales/bateria-piso-2026-10.json --salida ../eval-manuales-reales/lab
 node lab/correr.mjs --datos ../eval-manuales-reales/lab --informe ../eval-manuales-reales/lab/informe.md
+# sin navegador: el motor en Node sobre el corpus ya extraído, y su paridad con la app
+node lab/motor-node.mjs --corpus ../eval-manuales-reales/lab --preguntas <json>[,<json>…] --salida ../eval-manuales-reales/lab --etiqueta node
+node lab/identico.mjs ../eval-manuales-reales/lab --antes base --despues node
+node lab/aislamiento.mjs --corpus ../eval-manuales-reales/lab --preguntas <json>[,<json>…]
 node --test "lab/*.test.mjs"
 ```
 
-`volcar.mjs` se niega a escribir dentro del repo, salvo con el corpus público.
+`volcar.mjs` y `motor-node.mjs` se niegan a escribir dentro del repo, salvo con el corpus público.

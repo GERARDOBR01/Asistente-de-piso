@@ -10,6 +10,8 @@
     "simulado": "node eval/agente-simulado.mjs",
     "lab": "node lab/correr.mjs",
     "gate": "node lab/gate.mjs",
+    "motor-node": "node lab/motor-node.mjs",
+    "aislamiento": "node lab/aislamiento.mjs",
     "corpus-publico": "node eval/corpus-publico/generar.mjs",
     "tipos": "tsc -p ."
   },

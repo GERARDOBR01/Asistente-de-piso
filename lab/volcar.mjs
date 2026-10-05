@@ -63,10 +63,16 @@ async function enPagina(cuerpo) {
 }
 
 /* ── Lo que corre dentro de la página ─────────────────────────────────────── */
+/* `motor` es el corpus tal como lo tiene el motor —el manual interno incluido,
+   que también cuenta para BM25—, sin lo que el índice recalcula: es lo que
+   carga lab/motor-node.mjs para responder sin navegador. */
 const CORPUS_JS = `
+  const crudo = c => { const { tf, len, hasDigits, rotulo, ...resto } = c; return resto; };
   return { version: VERSION_APP,
     docs: docs.map(d => ({ name: d.name, sec: nombreDeSeccion(d.name), pages: d.pageCount })),
-    chunks: docChunks.map(c => ({ id: c.id, d: c.docName, p: c.page, h: c.heading || '', t: c.text || '' })) };`;
+    chunks: docChunks.map(c => ({ id: c.id, d: c.docName, p: c.page, h: c.heading || '', t: c.text || '' })),
+    motor: { manualSections: manualSections.map(crudo), docChunks: docChunks.map(crudo),
+      docs: docs.map(d => ({ name: d.name, pageCount: d.pageCount })) } };`;
 
 /* Por pregunta, en el mismo orden que el modo manual: sección activa, turnos
    previos (para que el seguimiento tenga de dónde ampliarse), y luego la
