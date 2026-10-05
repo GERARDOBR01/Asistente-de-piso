@@ -66,6 +66,67 @@ interface Identificador {
   termino?: string;
 }
 
+/** Una palabra (o un par) de la pregunta que la sección activa no tiene, y
+    qué otras secciones sí (terminosAusentes). */
+interface Ausente {
+  palabra: string;
+  duenos: Array<{ docName: string, n: number }>;
+  /** El par de palabras, no una suelta. */
+  frase?: boolean;
+  /** No está en ningún manual cargado. */
+  enNinguno?: boolean;
+}
+
+/** Lo que ya se sabe de una pregunta cuando la puerta decide (contratoDeDecision). */
+interface HechosDeDecision {
+  /** La pregunta escrita. */
+  pregunta: string;
+  /** La consulta con que se buscó (ampliada o rescatada, si fue el caso). */
+  consulta: string;
+  seccion?: string | null;
+  /** La sección la eligió la pregunta, no el selector. */
+  porPregunta?: boolean | string;
+  /** 2 sólido · 1 flojo · 0 nada (nivelDeEvidencia). */
+  nivel: number;
+  /** Lo que entró al contexto del modelo, o las tarjetas del modo manual. */
+  evidencia: Fragmento[];
+  otraSeccion?: { nombre?: string, docName?: string, motivo: string } | null;
+  /** Las secciones que empatan: la respuesta es preguntar en cuál está. */
+  empate?: string[];
+  ausentes?: Ausente[];
+  /** Se preguntó «¿cuántos?» o un porcentaje y ninguna tarjeta trae la cifra. */
+  avisoCifra?: boolean;
+  /** La tarjeta llegó solo por el diccionario («lo encontré como…»). */
+  parecidas?: boolean;
+  variasSecciones?: boolean;
+  ampliada?: boolean;
+  /** Pregunta por la app o por los manuales cargados, no por una regla. */
+  deLaApp?: boolean;
+  /** Operación de tienda (la luz, la caja, el horario): de ningún manual. */
+  operacion?: boolean;
+}
+
+type EstadoDeDecision = 'respaldada' | 'parcial' | 'aclarar' | 'sin_evidencia';
+
+/** El contrato de decisión de la puerta: la misma forma en el modo IA y en el manual. */
+interface Decision {
+  consultaResuelta: string;
+  alcance: { seccion: string | null, porPregunta: boolean, alternativas?: string[] };
+  estado: EstadoDeDecision;
+  /** Los fragmentos que la respaldan, sin repetir. */
+  evidencia: Array<{ id: string, doc: string, pagina: number | null }>;
+  /** Palabras de tema de la pregunta escritas en la evidencia. */
+  cubiertas: string[];
+  /** Palabras de la pregunta que la sección no tiene (terminosAusentes). */
+  faltan: string[];
+  /** Por qué, en códigos estables: 'coincidencia-floja', 'palabra-ausente'… */
+  razones: string[];
+  versionPolitica: string;
+}
+
+/** Una tarjeta del modo manual: el fragmento y el texto que se enseña. */
+interface Tarjeta { c: Fragmento; texto: string }
+
 /** El contexto que va al modelo y qué tan sólida es la evidencia (2/1/0). */
 interface Contexto { texto: string; nivel: number }
 

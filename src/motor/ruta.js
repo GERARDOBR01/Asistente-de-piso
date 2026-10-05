@@ -8,7 +8,7 @@ import { estado } from '../estado.js';
 import { normalizeText, expandKeywords } from './texto.js';
 import { vocabDeDoc } from './erratas.js';
 import { nombreDeSeccion, seccionesNombradasEnPregunta, seccionNombradaComoTal, dichaComoSeccion } from './secciones.js';
-import { nivelDeEvidencia } from './puerta.js';
+import { nivelDeEvidencia } from './solidez.js';
 import { retrieve, PDF_CANDIDATOS } from './busqueda.js';
 
 /* Una sola búsqueda sobre todo lo cargado, agrupada por manual: con treinta

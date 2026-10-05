@@ -1,6 +1,6 @@
 // La búsqueda: términos con peso, retrieve y el empaquetado del contexto.
 //
-// Lo aprendido en el piso entra por usarAprendido.
+// Lo aprendido en el piso entra por aprendido.js.
 //
 // Salió de app.js en el paso 4 del ADR 0005, sin cambiar nada de lo que hace
 // (golden master idéntico). Sin DOM: se importa igual desde Node.
@@ -10,23 +10,8 @@ import { raizCorta, distanciaEdicion, fonetica, masParecida } from './erratas.js
 import { bm25Score } from './indice.js';
 import { textoComoDato, envolverComoDato } from '../seguridad/inyeccion.js';
 import { nombreDeSeccion, secDe } from './secciones.js';
-import { exigenciaDeSolidez, nivelDeEvidencia } from './puerta.js';
-
-/* ── LO QUE APRENDIÓ EL PISO ──────────────────────
-   «Aprende del piso» guarda en el teléfono las palabras y los atajos que
-   confirmaron los asesores (src/app.js). El motor no sabe de almacenamiento:
-   la app le dice cómo consultarlos con `usarAprendido`. Sin eso —en Node, en
-   el laboratorio— no hay nada aprendido y la búsqueda es la del manual. */
-/** @typedef {{ manual: string }} PalabraAprendida */
-/** @typedef {{ sec: string, pagina: number }} Atajo */
-const loAprendido = {
-  /** @type {(k: string, doc: string | null | undefined) => PalabraAprendida[]} */
-  palabras: () => [],
-  /** @type {(q: string, doc: string | null | undefined) => Atajo[]} */
-  atajos: () => [],
-};
-/** @param {Partial<typeof loAprendido>} a */
-export function usarAprendido(a) { Object.assign(loAprendido, a); }
+import { exigenciaDeSolidez, nivelDeEvidencia } from './solidez.js';
+import { palabrasDelPiso, atajosDelPiso } from './aprendido.js';
 
 /* Los sinónimos siguen siendo el puente entre cómo pregunta la gente
    ("acomodar") y cómo escribe el manual ("distribución"), pero pesan
@@ -119,7 +104,7 @@ export function weightedTerms(query,doc){
     }
     /* Lo que aprendió el piso entra como una palabra más del diccionario —mismo
        peso, mismo grupo—: ayuda a llegar, pero no vale como palabra escrita. */
-    for(const p of loAprendido.palabras(k,doc))for(const t of tokenize(p.manual))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
+    for(const p of palabrasDelPiso(k,doc))for(const t of tokenize(p.manual))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
   }
   return[...terms].map(([t,{w,g}])=>({t,w,g}))
 }
@@ -387,7 +372,7 @@ export function retrieve(query,opts){
   /* La página que el piso señaló para esta forma de preguntar sube un escalón.
      Solo reordena lo que ya llegó por sus palabras: un atajo no mete una
      página que la búsqueda no encontró, ni pasa por encima de la solidez. */
-  const atajos=out.length?loAprendido.atajos(query,doc):[];
+  const atajos=out.length?atajosDelPiso(query,doc):[];
   if(atajos.length){
     const mejor=Math.max(...out.map(r=>r.score));
     const paginas=new Set(atajos.map(a=>a.sec+'|'+a.pagina));

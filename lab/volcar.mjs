@@ -98,8 +98,8 @@ const PREGUNTAR_JS = (lote, tope) => `
     const nivel = res.length ? nivelDeEvidencia(res, usar) : 0;
     const rel = seccionesPorRelevancia(q).map(r => r.c.id);
     const prov = appState.provider; appState.provider = 'gemini';
-    let ctx = null, ctxInfo = null;
-    try { const b = buildContext(q); ctx = ultimosFragmentos.map(c => c.id); ctxInfo = { nivel: b.nivel, ausentes: (b.ausentes || []).length, sinCoincidencias: !!b.sinCoincidencias }; }
+    let ctx = null, ctxInfo = null, decision = null;
+    try { const b = buildContext(q); ctx = ultimosFragmentos.map(c => c.id); ctxInfo = { nivel: b.nivel, ausentes: (b.ausentes || []).length, sinCoincidencias: !!b.sinCoincidencias }; decision = b.decision || null; }
     finally { appState.provider = prov; }
     if (typeof ultimasTarjetas !== 'undefined') ultimasTarjetas = [];
     responderSinModelo(q);
@@ -110,7 +110,9 @@ const PREGUNTAR_JS = (lote, tope) => `
       tarjetas: (ultimasTarjetas || []).map(t => ({ ...fila(t.c), t: t.texto || '' })),
       sinDato: !!el?.classList.contains('sin-dato'),
       ausente: fa && !fa.classList.contains('frag-parecidas') ? fa.innerText : '',
-      parecidas: fa && fa.classList.contains('frag-parecidas') ? fa.innerText : '' });
+      parecidas: fa && fa.classList.contains('frag-parecidas') ? fa.innerText : '',
+      /* El contrato de decisión (src/motor/puerta.js), con API key y sin ella. */
+      decision, decisionManual: typeof ultimaDecision !== 'undefined' ? ultimaDecision : null });
   }
   cambiarSeccion(''); history = []; clearChat();
   return out;`;
