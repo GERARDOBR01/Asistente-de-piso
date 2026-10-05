@@ -78,3 +78,39 @@ test('el calificador acepta el dato dicho con otras palabras pero no sin su núm
   const r = calificarManual(pregunta, { tarjetas: [{ d: 'Manual Kalinde.pdf', p: 4, h: 'PASILLO', t: 'Deja 90 cm de pasillo.' }] });
   assert.equal(r.ok, false);   // la cifra correcta en el manual equivocado
 });
+
+import { umbralConformal, coberturaPorGrupos, negativasMinimas } from './conformal.mjs';
+import { semilla as sem } from './estadistica.mjs';
+
+test('umbral conformal: el cuantil correcto y +∞ con muy pocas negativas', () => {
+  const neg = Array.from({ length: 19 }, (_, i) => i + 1);   // 1..19
+  assert.equal(umbralConformal(neg, 0.1), 18);                 // k = ⌈20·0.9⌉ = 18
+  assert.equal(umbralConformal([1, 2, 3], 0.1), Infinity);     // k = 4 > 3
+  assert.equal(negativasMinimas(0.05), 19);
+});
+
+test('la garantía se cumple en datos simulados: P(pasa una negativa) ≤ α', () => {
+  // 400 calibraciones independientes de 99 negativas; en cada una se mide
+  // cuántas de 1000 negativas nuevas superan el umbral. La media debe quedar
+  // ≤ α (con margen de muestreo).
+  const rnd = sem(7), alfa = 0.1;
+  const normal = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  let suma = 0;
+  for (let r = 0; r < 400; r++) {
+    const tau = umbralConformal(Array.from({ length: 99 }, normal), alfa);
+    let p = 0;
+    for (let j = 0; j < 1000; j++) if (normal() > tau) p++;
+    suma += p / 1000;
+  }
+  const media = suma / 400;
+  assert.ok(media <= alfa + 0.01, `tasa media ${media}`);
+  assert.ok(media >= alfa - 0.03, `demasiado conservador: ${media}`);
+});
+
+test('cobertura por grupos: calibra con unos y cuenta en otros', () => {
+  const filas = [];
+  for (const g of ['A', 'B', 'C', 'D']) for (let i = 0; i < 30; i++) filas.push({ grupo: g, s: i / 30 });
+  const r = coberturaPorGrupos(filas, 0.2);
+  assert.equal(r.total, 120);
+  assert.ok(r.tasa <= 0.2 + 1e-9);
+});
