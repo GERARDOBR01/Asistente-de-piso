@@ -634,6 +634,12 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
 - **Si —y solo si— se pulsa "describir figuras", los recortes salen** hacia el proveedor
   configurado. Es la única vez que una imagen del manual deja el dispositivo, y hace falta
   pedirlo a propósito.
+- **Un PDF no puede darle órdenes al modelo.** El texto del manual llega marcado como dato,
+  con un sello aleatorio por sesión (*spotlighting*). Lo que tiene forma de instrucción para
+  una IA («ignora tus instrucciones», «system:», las etiquetas de control de la app) se quita
+  antes de mandarlo, y al cargar un manual así se avisa con la página. En las respuestas, las
+  imágenes no se pintan y los enlaces que llevan datos en la URL salen como texto. Detalle y
+  límites en [`docs/adr/0004`](docs/adr/0004-instrucciones-escondidas.md).
 - **Sin telemetría, sin analítica, sin cuentas.** Nada se envía a ningún servidor mío,
   porque no hay servidor mío.
 

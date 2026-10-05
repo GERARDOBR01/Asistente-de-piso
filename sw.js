@@ -11,7 +11,7 @@
    - Librerías de cdnjs y fuentes: sus URL llevan versión, así que lo
      guardado no caduca: primero la caché.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.6.0';
+const VERSION='ap-v1.6.1';
 const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf'];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
