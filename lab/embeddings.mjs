@@ -23,6 +23,11 @@ export const MODELOS = {
     id: 'onnx-community/embeddinggemma-300m-ONNX', dtype: 'q8', pooling: null,
     pregunta: t => 'task: search result | query: ' + t, fragmento: t => 'title: none | text: ' + t,
   },
+  /* La misma EmbeddingGemma en 4 bits: 197 MB contra 309 MB de la q8. */
+  'gemma-q4': {
+    id: 'onnx-community/embeddinggemma-300m-ONNX', dtype: 'q4', pooling: null,
+    pregunta: t => 'task: search result | query: ' + t, fragmento: t => 'title: none | text: ' + t,
+  },
   minilm: {
     id: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', dtype: 'q8', pooling: 'mean',
     pregunta: t => t, fragmento: t => t,

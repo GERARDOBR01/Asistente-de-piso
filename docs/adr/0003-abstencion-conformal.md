@@ -107,3 +107,23 @@ congelado) y se corrió una sola vez:
   pregunta;
 - o buscar una señal de evidencia más discriminante (un reranker cruzado o un modelo de
   embeddings más grande) antes de volver a encender el rescate.
+
+## Aparcado (4-oct-2026, noche): dónde se quedó
+
+Por orden de Gerardo, el modelo local queda parado. Lo que se encontró antes de pararlo
+(`lab/puerta.mjs`, todas las baterías ya vistas, que por eso son de desarrollo):
+- **El problema está en la puerta.** En las abstenciones en las que la lámina correcta era la
+  primera de la búsqueda por palabras hay 12 positivas y 162 negativas.
+- **Juez:** el coseno entre la pregunta y esa lámina léxica.
+- **Separación (AUC):** e5-small 0.892, e5-base 0.944, **EmbeddingGemma-300M 0.991** (q8, 309 MB)
+  y 0.987 (q4, 197 MB).
+- **Recuperadas dejando pasar 2 de las 162 negativas:** e5-small 4/12, Gemma q8 9/12, Gemma q4
+  7/12.
+
+**Siguiente paso, cuando se retome:**
+1. Gemma q4 como juez de la puerta, con la lámina léxica.
+2. τ conformal con la app en vivo.
+3. Una batería de confirmación nueva, corrida una sola vez.
+4. Medir en el teléfono cuánto tarda vectorizar.
+
+Mientras tanto, la búsqueda por significado de la app sigue siendo opcional y viene apagada.
