@@ -10,17 +10,23 @@
 import * as html from './seguridad/html.js';
 import * as inyeccion from './seguridad/inyeccion.js';
 import * as texto from './motor/texto.js';
+import * as indice from './motor/indice.js';
+import * as erratas from './motor/erratas.js';
+import * as layout from './motor/layout.js';
+import * as fragmentos from './motor/fragmentos.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
 
-Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus);
+Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos);
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre
    `estado`, así que `docChunks=[]` en app.js cambia `estado.docChunks`.
    No configurables a propósito: si en app.js quedara un `let docs`, el
    navegador da error al cargar en vez de tener dos «docs» distintos. */
-for (const k of CLAVES) {
+/* La sección activa no: en app.js ya hay una función seccionActiva(), y la
+   app la nombra appState.manualActivo (accesor en app.js). */
+for (const k of CLAVES.filter(k => k !== 'manualActivo')) {
   Object.defineProperty(globalThis, k, {
     get: () => estado[k],
     set: k === 'bm25' ? undefined : v => { estado[k] = v; },

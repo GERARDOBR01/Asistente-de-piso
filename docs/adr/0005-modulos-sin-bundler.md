@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 y 2 hechos; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 3 hechos; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -53,7 +53,7 @@ lo que está en el repo es lo que corre.
 |---|---|---|
 | 1 | Seguridad (`html`, `inyeccion`) y texto (stopwords, sinónimos, tokenización) | hecho |
 | 2 | Estado del corpus en un solo objeto (`src/estado.js`); el arnés usa setters en vez de reasignar globales | hecho |
-| 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | |
+| 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | hecho |
 | 4 | Búsqueda y router de sección | |
 | 5 | Puerta de evidencia | |
 | 6 | Verificación | |
@@ -83,6 +83,32 @@ lo que está en el repo es lo que corre.
 - 27 pruebas en Node: la frontera ya incluye `estado.js`, y hay 4 pruebas nuevas para `conEstado`, la versión asíncrona, las claves ajenas y el orden de las cachés.
 - `tsc` estricto con `estado.js` incluido.
 - Probado sin señal; ap-v1.7.1.
+
+## Medido (paso 3)
+
+- **Cuatro módulos en `src/motor/`**, sin DOM y con `tsc` estricto:
+
+  | Módulo | Contenido |
+  |---|---|
+  | `indice.js` | `indexChunk`, `bm25Score`, `reconstruirIndice` |
+  | `erratas.js` | trigramas, fonética, la lectura en inglés, `masParecida` y el vocabulario de cada manual |
+  | `layout.js` | de los trozos de pdf.js a líneas, bloques y títulos |
+  | `fragmentos.js` | `buildChunks` |
+
+  `app.js` baja de 10,230 a 9,630 líneas. `rebuildCorpus` queda en dos líneas: el índice y el vocabulario de la sección activa, que depende de la pantalla.
+- **Las cachés de las erratas son privadas del módulo** y se registran con `alReiniciar`. Nadie de fuera las leía; se revisó antes de mover nada.
+- **La sección activa pasa a `estado.manualActivo`**: es el alcance de la consulta y el motor la lee de ahí. `appState.manualActivo` queda como accesor, así que sus 79 usos no cambian.
+  - No se publica como global suelta, porque `app.js` ya tiene una función `seccionActiva()`.
+  - `conCorpusYSeccion` queda en una línea: `montar` devuelve la sección junto con el corpus y antes de rehacer el índice.
+- **`layout.js` usaba `pdfjsLib.Util.transform`**, una global del navegador que el análisis de dependencias no veía y que `tsc` encontró. Ahora usa `multiplicar`, con la misma fórmula y el mismo orden de operaciones. Comparada en el navegador contra pdf.js 3.11.174 con 10,000 matrices al azar: **0 diferencias bit a bit**. El layout ya corre en Node sin pdf.js.
+- **Golden master:** las 667 preguntas idénticas con los 14 manuales reales. Esto incluye la lectura de los PDF: cada volcado vuelve a leerlos con el layout nuevo.
+- Arnés 305/305, agente simulado, eval-gate idéntico y modo avión. ap-v1.7.2.
+- **32 pruebas en Node.** Las nuevas arman el índice sin navegador:
+  - BM25 ordena;
+  - las erratas se corrigen hacia la sección activa y su caché se olvida al cambiar el corpus;
+  - ningún fragmento pasa de `CHUNK_MAX` ni cruza de página (fast-check);
+  - dos columnas no se funden;
+  - `multiplicar` es la composición afín.
 
 ## Consecuencias
 

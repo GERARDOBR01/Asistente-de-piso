@@ -29,7 +29,7 @@ estamos y qué sigue, en orden.
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
 | Pruebas | Arnés 305, agente simulado, 21 pruebas en Node (laboratorio, frontera del motor y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
 | eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 68/78 datos y 14/15 «no está» |
-| Código | Módulos ES sin bundler (ADR 0005), pasos 1 y 2 de 8: seguridad, texto y el estado del corpus fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso |
+| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 3 de 8: seguridad, texto, el estado del corpus y el índice (BM25, erratas, layout del PDF, fragmentos) fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso |
 
 Las decisiones están en `docs/adr/`:
 - **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
