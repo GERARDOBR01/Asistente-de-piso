@@ -8,7 +8,9 @@
     "test": "node --test \"lab/*.test.mjs\"",
     "arnes": "node eval/arnes.mjs",
     "simulado": "node eval/agente-simulado.mjs",
-    "lab": "node lab/correr.mjs"
+    "lab": "node lab/correr.mjs",
+    "gate": "node lab/gate.mjs",
+    "corpus-publico": "node eval/corpus-publico/generar.mjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "4.3.0"

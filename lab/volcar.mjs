@@ -11,17 +11,26 @@
 // Uso:
 //   node lab/volcar.mjs --vivo http://127.0.0.1:9701 --preguntas <json> --salida <dir> [--etiqueta base]
 //   node lab/volcar.mjs --vivo http://127.0.0.1:9701 --corpus <dir>     (solo los fragmentos)
+//   node lab/volcar.mjs --local eval/corpus-publico/manuales.json --corpus <dir> --preguntas <json> --salida <dir>
+//
+// Con --local no hace falta pestaña abierta ni puente: abre la app en un
+// Chromium sin ventana (eval/navegador.mjs) y carga los manuales de la lista
+// [{archivo, nombre}] (rutas relativas a la lista). Es lo que usa el CI con el
+// corpus público.
 //
 // Formatos de pregunta que acepta:
 //   batería  {q, tipo, m, p, k, minK?, d?, turnos?, cat?}   (m = principio del nombre del manual; "" = todos)
 //   cruzadas {q, en}   (en = nombre de sección; son «no está» por construcción)
 //
-// La salida lleva texto de los manuales: va SIEMPRE fuera del repo.
+// La salida lleva texto de los manuales: va SIEMPRE fuera del repo, salvo la
+// del corpus público (--local con una lista de eval/corpus-publico/).
 import fs from 'node:fs';
 import path from 'node:path';
+import { abrirApp } from '../eval/navegador.mjs';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
 const VIVO = arg('vivo', 'http://127.0.0.1:9701');
+const LOCAL = arg('local', null);
 const PREGUNTAS = arg('preguntas', null);
 const SALIDA = arg('salida', null);
 const CORPUS = arg('corpus', null);
@@ -30,14 +39,23 @@ const LOTE = Number(arg('lote', 25));
 const TOPE = Number(arg('tope', 200));
 
 const raiz = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+const dentro = (d, base) => path.resolve(d).toLowerCase().startsWith(path.resolve(base).toLowerCase() + path.sep);
+const publico = LOCAL && dentro(LOCAL, path.join(raiz, 'eval', 'corpus-publico'));
 for (const d of [SALIDA, CORPUS].filter(Boolean)) {
-  if (path.resolve(d).toLowerCase().startsWith(raiz.toLowerCase())) {
+  if (!publico && dentro(d, raiz)) {
     console.error('La salida lleva texto de los manuales y no puede ir dentro del repo: ' + d);
     process.exit(1);
   }
 }
 
+let app = null;
+if (LOCAL) {
+  const lista = JSON.parse(fs.readFileSync(LOCAL, 'utf8'));
+  app = await abrirApp(lista.map(m => ({ nombre: m.nombre, buffer: fs.readFileSync(path.resolve(path.dirname(LOCAL), m.archivo)) })));
+}
+
 async function enPagina(cuerpo) {
+  if (app) return app.p.evaluate(`(async () => { ${cuerpo} })()`);
   const r = await fetch(VIVO, { method: 'POST', body: cuerpo });
   const t = await r.text();
   if (t.startsWith('ERROR')) throw new Error(t.slice(0, 600));
@@ -123,3 +141,5 @@ if (PREGUNTAS) {
   fs.writeFileSync(destino, filas.map(f => JSON.stringify({ ...f, version, fecha: new Date().toISOString() })).join('\n') + '\n');
   console.log(`\n${destino} (${((Date.now() - t0) / 1000).toFixed(0)} s, ${filas.filter(f => f.falta).length} sin manual)`);
 }
+
+if (app) await app.cerrar();

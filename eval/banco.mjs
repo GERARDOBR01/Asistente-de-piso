@@ -31,11 +31,8 @@
 // Playwright: el de `npm i --no-save playwright-core`, o PLAYWRIGHT_CORE=<ruta>;
 // CHROMIUM=<binario> o CANAL=chrome si no está el Chromium de Playwright.
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { RAIZ, abrirApp } from './navegador.mjs';
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
 const bandera = n => process.argv.includes('--' + n);
 const MANUALES = arg('manuales');
@@ -65,49 +62,10 @@ const examen = JSON.parse(fs.readFileSync(EXAMEN, 'utf8'));
 const vocab = APRENDIDO ? JSON.parse(fs.readFileSync(APRENDIDO, 'utf8')) : null;
 const previo = CONTINUAR ? JSON.parse(fs.readFileSync(CONTINUAR, 'utf8')) : null;
 
-const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json', '.pdf': 'application/pdf', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const srv = http.createServer((req, res) => {
-  const ruta = path.join(RAIZ, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  if (!ruta.startsWith(RAIZ) || !fs.existsSync(ruta) || fs.statSync(ruta).isDirectory()) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'Content-Type': TIPOS[path.extname(ruta)] || 'application/octet-stream' });
-  fs.createReadStream(ruta).pipe(res);
-});
-await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
-const intentar = async n => { try { return await import(n); } catch { return null; } };
-const pw = process.env.PLAYWRIGHT_CORE ? await import(pathToFileURL(process.env.PLAYWRIGHT_CORE).href)
-  : (await intentar('playwright-core')) || (await intentar('playwright'));
-if (!pw) { console.error('Falta Playwright: npm i --no-save playwright-core'); srv.close(); process.exit(2); }
-
-const b = await pw.chromium.launch({ executablePath: process.env.CHROMIUM || undefined, channel: process.env.CANAL || undefined });
-let codigo = 0;
+let codigo = 0, app = null;
 try {
-  const p = await b.newPage();
-  p.on('dialog', d => d.accept());
-  p.on('pageerror', e => console.error('error de la página:', e.message));
-  await p.goto(`http://127.0.0.1:${srv.address().port}/index.html`, { waitUntil: 'domcontentloaded' });
-  await p.waitForFunction(() => window.pdfjsLib, null, { timeout: 60000 });
-
-  for (const f of pdfs) {
-    const t0 = Date.now();
-    const antes = await p.evaluate(() => docs.length);
-    /* Como contenido y no como ruta: por ruta, un nombre con acento
-       («EXHIBICIÓN») no llegaba al input y la carga se quedaba esperando. */
-    await p.setInputFiles('#file-input', { name: path.basename(f).normalize('NFC'), mimeType: 'application/pdf', buffer: fs.readFileSync(f) });
-    /* Por el número de manuales y no por el nombre: el sistema de archivos puede
-       entregar «EXHIBICIÓN» con la tilde descompuesta y el nombre no coincide.
-       Si la app lo rechaza (mismo contenido que otro), se sigue con el próximo. */
-    let quieto = 0;
-    for (;;) {
-      await new Promise(ok => setTimeout(ok, 1000));
-      const [n, proc] = await p.evaluate(() => [docs.length, document.getElementById('proc-wrap').style.display]);
-      if (n > antes && proc === 'none') break;
-      quieto = proc === 'none' ? quieto + 1 : 0;
-      if (quieto >= 10) { console.log(`· ${path.basename(f)}: la app no lo agregó (¿repetido?)`); break; }
-      if (Date.now() - t0 > 300000) throw new Error('El PDF tardó más de 5 minutos: ' + path.basename(f));
-    }
-    console.log(`· ${path.basename(f)} (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
-  }
+  app = await abrirApp(pdfs.map(f => ({ nombre: path.basename(f), buffer: fs.readFileSync(f) })));
+  const { p } = app;
   if (KEY) await p.evaluate(({ prov, key, modelo }) => {
     sessionStorage.setItem('ap_api_key_' + prov, key);
     appState.provider = prov; appState.apiKey = key; appState.chatModel = modelo;
@@ -147,7 +105,7 @@ try {
 } catch (e) {
   console.error(e); codigo = 1;
 } finally {
-  await b.close(); srv.close();
+  if (app) await app.cerrar();
 }
 process.exit(codigo);
 

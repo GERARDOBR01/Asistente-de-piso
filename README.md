@@ -495,9 +495,9 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 296 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
-en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
-Playwright).
+alguna de las 305 filas falla. La app no se compila: el `package.json` es solo para las
+herramientas de desarrollo, y en el CI Playwright se instala solo. En local: `npm run arnes`
+(con `CANAL=chrome` si no tienes el Chromium de Playwright).
 
 Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
 respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier
@@ -516,6 +516,35 @@ once avisan con **cero fragmentos y cero láminas**, que es lo que hace imposibl
 creíble y falsa. La contraprueba de por qué importa: «¿cómo circula el cliente en la
 sección?» la contestan diez secciones **con siete cifras distintas**, todas verdaderas en su
 manual.
+
+#### El eval-gate: un corpus público para que el CI mida la búsqueda
+
+El arnés comprueba comportamientos; no dice si un cambio al motor **acierta más o menos**.
+Eso se medía solo con los manuales reales, que no pueden entrar al repo, así que ningún
+número del motor era público ni corría en el CI. Para eso está `eval/corpus-publico/`:
+
+- **Cuatro manuales ficticios** (el demo y tres más: boutique, cava y hogar), generados de
+  HTML a PDF con `generar.mjs`. Están hechos para traer **las trampas que encontró el
+  benchmark** con manuales de verdad: títulos de dos renglones, tablas, check lists que
+  repiten reglas, rótulos sin frase, el mismo título en dos secciones con cifras distintas.
+- **Una batería de 93 preguntas**: 68 de dato, 10 conversaciones de seguimiento y 15 «no
+  está» o trampa, con el mismo formato y el mismo calificador que las privadas.
+- **`lab/gate.mjs`** carga los cuatro PDF en la app real (`lab/volcar.mjs --local`, sin
+  puente ni teléfono, 5 s), califica cada pregunta y la compara con
+  `eval/corpus-publico/linea-base.json`. **El PR no pasa si una sola pregunta que estaba
+  bien pasa a mal**, o si Hit@3 o MRR@10 bajan más de dos puntos. El informe —qué se rompió,
+  qué se arregló, McNemar— queda en el resumen del job. Si el cambio arregla preguntas,
+  `npm run gate -- --actualizar` sube la línea base y el diff del PR lo enseña.
+
+Comprobado con una mutación: pedirle al filtro de solidez una palabra más rompe 7 preguntas
+y el gate las lista y falla (p = 0.016). La línea base de hoy es **68/78 datos y 14/15 «no
+está»**, y las 10 que fallan son las mismas familias de falla que con los manuales reales:
+el filtro de solidez que deja sin tarjetas una pregunta con una sola palabra en común, las
+conversaciones de seguimiento, los rótulos en mayúsculas que se pierden al leer el PDF y un
+aviso falso por errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
+acierta la app en el piso.** Eso se mide fuera del repo, con tres baterías separadas
+(desarrollo, prueba y confirmación, esta última corrida una sola vez), y ahí el modo manual
+da 58–70 % con preguntas que no vio al afinarse.
 
 #### La batería con respuesta conocida
 

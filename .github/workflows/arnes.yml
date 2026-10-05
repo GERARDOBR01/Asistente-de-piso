@@ -31,3 +31,7 @@ jobs:
         run: node eval/arnes.mjs
       - name: Agente lector contra proveedores simulados
         run: node eval/agente-simulado.mjs
+      # La app real contra los manuales ficticios de eval/corpus-publico: falla si
+      # una pregunta que estaba bien pasa a mal. El informe queda en el resumen del job.
+      - name: eval-gate (corpus público)
+        run: node lab/gate.mjs

@@ -25,15 +25,21 @@ código y pruebas.
    - Entre dos configuraciones: la diferencia pareada con su IC y **McNemar exacta**
      («arregla N, rompe M, p = …»).
 4. **`calificador.mjs`**: el único calificador, compartido con `eval/modo-ia.mjs`.
+5. **`gate.mjs`**: la compuerta del CI. Vuelca la app con el corpus público
+   (`eval/corpus-publico/`, manuales ficticios) y falla si una pregunta que estaba bien pasa
+   a mal respecto a `eval/corpus-publico/linea-base.json`. Ver el README, «El eval-gate».
 
 ## Uso
 
 ```sh
 # con la app servida en 9601, el driver del navegador y el puente en 9701
 node lab/volcar.mjs --corpus ../eval-manuales-reales/lab
+# sin puente, con su propio navegador (lo que usa el CI con el corpus público)
+node lab/volcar.mjs --local eval/corpus-publico/manuales.json --corpus /tmp/pub --preguntas eval/corpus-publico/bateria.json --salida /tmp/pub
+node lab/gate.mjs [--actualizar]
 node lab/volcar.mjs --preguntas ../eval-manuales-reales/bateria-piso-2026-10.json --salida ../eval-manuales-reales/lab
 node lab/correr.mjs --datos ../eval-manuales-reales/lab --informe ../eval-manuales-reales/lab/informe.md
 node --test "lab/*.test.mjs"
 ```
 
-`volcar.mjs` se niega a escribir dentro del repo.
+`volcar.mjs` se niega a escribir dentro del repo, salvo con el corpus público.
