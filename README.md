@@ -469,6 +469,7 @@ Lo de antes se mantiene:
 | `index.html` | Estilos y pantallas |
 | `src/main.js` | Arranque: carga los módulos y los publica para el resto de la app |
 | `src/motor/` | La búsqueda, sin DOM: se importa desde Node. Hoy, `texto.js` (stopwords, sinónimos, tokenización) |
+| `src/estado.js` | El estado del corpus en un solo objeto (manuales, fragmentos, índice), el registro de cachés y `conEstado`, con el que el arnés monta un corpus de prueba y siempre vuelve al de antes |
 | `src/seguridad/` | Saneado del HTML y defensa contra instrucciones escondidas (ADR 0004) |
 | `src/app.js` | Lo que falta por partir, en bloques con rótulo `/* ════ NOMBRE ════ */` |
 

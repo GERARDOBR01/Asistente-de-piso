@@ -13,10 +13,10 @@
    - El código de la app (src/) va igual que la página: si se sirviera primero
      de la caché, un index.html nuevo podría arrancar con un app.js viejo.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.7.0';
+const VERSION='ap-v1.7.1';
 /* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
    eval/arnes.mjs. */
-const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js'];
+const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js'];
 const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf',...CODIGO];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

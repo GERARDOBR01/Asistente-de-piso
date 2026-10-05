@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Paso 1 hecho; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 y 2 hechos; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -52,7 +52,7 @@ lo que está en el repo es lo que corre.
 | Paso | Qué sale de `app.js` | Estado |
 |---|---|---|
 | 1 | Seguridad (`html`, `inyeccion`) y texto (stopwords, sinónimos, tokenización) | hecho |
-| 2 | Estado del corpus en un solo objeto (`src/estado.js`); el arnés usa setters en vez de reasignar globales | |
+| 2 | Estado del corpus en un solo objeto (`src/estado.js`); el arnés usa setters en vez de reasignar globales | hecho |
 | 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | |
 | 4 | Búsqueda y router de sección | |
 | 5 | Puerta de evidencia | |
@@ -70,6 +70,19 @@ lo que está en el repo es lo que corre.
   idempotente, tokenización estable, neutralización idempotente, ninguna regla sin forma de
   orden se toca, toda orden conocida se quita, el sello no se cierra desde el manual).
 - Probado en modo avión en Chrome: la app abre desde la caché con los módulos.
+
+## Medido (paso 2)
+
+- **`src/estado.js`:** un objeto `estado` con `manualSections`, `docChunks`, `docFigures`, `corpus`, `docs` y `bm25`.
+  - `alReiniciar`/`reiniciarCaches`: cada caché que depende del corpus se registra junto a su código, en vez de una lista a mano dentro de `rebuildCorpus`.
+  - `conEstado`/`montar`: el arnés monta un corpus de prueba y vuelve siempre al de antes, aunque la prueba truene. Antes guardaba y devolvía seis globales a mano, y en la mitad de los casos sin `finally`.
+- **Capa de compatibilidad:** en `src/main.js`, los nombres de siempre son accesores de `globalThis` sobre `estado`, así que `app.js` y `eval/` no cambian. No son configurables, así que un `let docs` olvidado en `app.js` da error al cargar en vez de crear un segundo `docs`.
+- **Trampa encontrada:** `rebuildCorpus` calcula el vocabulario de la sección activa, así que al salir de una prueba la sección se devuelve antes de rehacer el índice (`conCorpusYSeccion`).
+- **Golden master:** 667 preguntas idénticas con los 14 manuales reales.
+- Arnés 305/305, agente simulado y eval-gate en verde.
+- 27 pruebas en Node: la frontera ya incluye `estado.js`, y hay 4 pruebas nuevas para `conEstado`, la versión asíncrona, las claves ajenas y el orden de las cachés.
+- `tsc` estricto con `estado.js` incluido.
+- Probado sin señal; ap-v1.7.1.
 
 ## Consecuencias
 

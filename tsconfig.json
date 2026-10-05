@@ -14,5 +14,5 @@
     "types": [],
     "skipLibCheck": true
   },
-  "include": ["src/tipos.d.ts", "src/motor/**/*.js", "src/seguridad/inyeccion.js"]
+  "include": ["src/tipos.d.ts", "src/estado.js", "src/motor/**/*.js", "src/seguridad/inyeccion.js"]
 }
