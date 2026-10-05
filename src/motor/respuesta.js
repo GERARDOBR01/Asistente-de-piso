@@ -9,10 +9,12 @@
 // Salió de app.js con el motor en Node, sin cambiar nada de lo que hace
 // (golden master idéntico). Sin DOM: se importa igual desde Node.
 import { estado } from '../estado.js';
+import { vocabDeDoc, masParecida } from './erratas.js';
+import { normalizeText, variantes, tokenize } from './texto.js';
 import { nombreDeSeccion } from './secciones.js';
 import { filtroSolidez } from './solidez.js';
 import { retrieve, chunkLabel, getPdfContext, getManualContext } from './busqueda.js';
-import { terminosAusentes, avisoDeCuenta, avisoDeAusentes, palabrasPorParecidas, contratoDeDecision, esOperacionDeTienda } from './puerta.js';
+import { NO_SE_CUENTA, palabrasDeTema, terminosAusentes, avisoDeCuenta, avisoDeAusentes, palabrasPorParecidas, contratoDeDecision, esOperacionDeTienda } from './puerta.js';
 import { otraSeccionConEvidencia } from './ruta.js';
 import { SEGUIMIENTO, consultaAmpliada, preguntaAnterior, assessQuestionScope, isGreetingQuestion, esPreguntaDeEstado, seccionDeLaPregunta } from './conversacion.js';
 
@@ -56,6 +58,62 @@ export const FALLBACK_BUDGET=1800,FALLBACK_MAX_SECCIONES=3;
    sabe, es no fingir que lo sabe: entrega el fragmento tal cual, con su página
    y diciendo que nadie lo interpretó, y quien lee ve en un vistazo que no
    contesta lo que preguntó. */
+/* Cuando nada es sólido, el modo manual callaba aunque la sección tuviera la
+   lámina. «¿dónde van las piedras decorativas?» en FLORES Y VELAS acierta
+   «piedras» en la página 8 —la respuesta— y no «decorativas»: un acierto, y con
+   catorce manuales se exigen dos. Con modelo, ese mismo caso entra como
+   contexto flojo y el modelo juzga; sin modelo no había nadie que juzgara, y se
+   contestaba «nada coincide».
+
+   Se probó afinar el listón por fragmento —palabra rara, el primero que se
+   despega del segundo, la palabra en el título— y ninguno separa: «piedras»
+   (en 2 fragmentos) acierta igual que «juntas» (2) en «¿cuándo es la junta con
+   la regional?», y «cava» en el título aparece tanto en preguntas buenas como
+   en las que no están. Lo que sí separa es otra cosa, y son tres condiciones:
+
+   1. Con sección. Sin ella no hay manual contra el que comprobar qué falta, y
+      «¿cuál es la clave del wifi?» salía con TENIS de ZAPATOS.
+   2. Las tarjetas que se enseñan cubren cada palabra de tema que el manual SÍ
+      tiene. Si la palabra está en el manual pero en otra lámina, las tarjetas
+      contestan otra cosa: «¿de qué color es el mantel de la mesa de
+      liquidación?» acierta «mantel» y deja fuera «color», que MESA FINA usa en
+      otras páginas. La palabra que el manual no tiene no se exige: de eso avisa
+      `terminosAusentes` si es de otro manual, y si no es de nadie
+      («decorativas») no hay lámina que la traiga.
+
+   3. Ninguna palabra de tema es ajena a todos los manuales (ver abajo).
+
+   Lo que pasa se enseña como coincidencia floja: nivel 1 en el contrato
+   (`parcial`, «coincidencia-floja») y una nota encima de las tarjetas. Medido
+   con las cinco baterías de desarrollo: arregla 4 de dato y 0 rotas; los «no
+   está» siguen bien, con su aviso. */
+/** @param {Resultado[]} resultados @param {string} consulta @param {string | null} doc @returns {Resultado[]} */
+export function coincidenciaFloja(resultados,consulta,doc){
+  if(!doc)return[];
+  const voc=vocabDeDoc(doc),propio=new Set(tokenize(nombreDeSeccion(doc)));
+  /* El nombre de la sección no distingue dentro de ella (igual que en retrieve). */
+  const tema=palabrasDeTema(consulta).map(k=>variantes(k)).filter(f=>!f.some(v=>propio.has(v)));
+  /** @param {Resultado} r */
+  const textoDe=r=>' '+normalizeText((r.c.heading||'')+' '+r.c.text).replace(/\s+/g,' ')+' ';
+  /* El acierto tiene que ser la palabra escrita (o su errata corregida). Un
+     «altura» que cuenta porque la lámina trae una medida no basta solo:
+     «¿a qué altura va el techo?» se llevaba la lámina de SENSORES. */
+  const flojos=resultados.filter(r=>r.hitsErrata>=1||(r.hits>=1&&tema.some(f=>f.some(v=>textoDe(r).includes(' '+v+' '))))).slice(0,12);
+  if(!flojos.length)return[];
+  const texto=flojos.slice(0,FALLBACK_MAX_SECCIONES).map(textoDe).join('');
+  for(const formas of tema){
+    /* Una palabra que no está en ningún manual cargado —ni como errata— dice
+       que la pregunta es de fuera. Con dos aciertos se toleraba; con uno, no:
+       «¿a qué altura va el techo?» se llevaba ALTURAS Y NIVELES. Las unidades
+       no cuentan: «¿a qué hora?» pide la forma de la respuesta («17:00»), no
+       un tema. */
+    if(!formas.some(v=>estado.bm25.df[v]||NO_SE_CUENTA.has(v))&&!masParecida(formas[0]))return[];
+    if(!formas.some(v=>voc.has(v)))continue;
+    if(!formas.some(v=>texto.includes(' '+v+' ')))return[];
+  }
+  return flojos.map(r=>({...r,flojo:true}))
+}
+
 /**
  * Los fragmentos que enseñaría el modo manual, en orden.
  * @param {string} q
@@ -78,8 +136,10 @@ export function relevantesSinModelo(q,sec,hist){
      trae el diccionario llenaban los doce lugares, el filtro los quitaba a
      todos y la lámina con la palabra escrita se había quedado en el 13.º:
      «que ba en la tore» salía en blanco teniendo TORRE en su página 11. */
+  /** @type {Resultado[]} */
+  let ultimos=[];
   /** @param {string} c */
-  const buscar=c=>retrieve(c,{limit:60,doc,source}).filter(filtroSolidez(c)).slice(0,12);
+  const buscar=c=>{ultimos=retrieve(c,{limit:60,doc,source});return ultimos.filter(filtroSolidez(c)).slice(0,12)};
   if(esOperacionDeTienda(q))return[];
   const consulta=consultaAmpliada(q,hist);
   /* Y la misma regla que con el modelo: una pregunta de una sola palabra se
@@ -90,7 +150,8 @@ export function relevantesSinModelo(q,sec,hist){
     const sola=buscar(q);
     if(sola.length)return sola;
   }
-  return buscar(consulta)
+  const amp=buscar(consulta);
+  return amp.length?amp:coincidenciaFloja(ultimos,consulta,doc)
 }
 
 /**
@@ -167,12 +228,17 @@ export function respuestaSinModelo(q,hist,rutaDe){
      buscó por otra— y deja al asesor juzgar con la tarjeta delante. */
   const avisoParecidas=porParecidas.length
     ?'ℹ Tu manual no dice '+porParecidas.map(p=>`«${p.dijo}»`).join(' ni ')+'; lo encontré como '+porParecidas.map(p=>`«${p.como}»`).join(' y ')+'.':'';
+  const flojo=!!(primera&&primera.flojo);
+  /* La coincidencia floja se dice, pero como nota: la lámina sí es del manual
+     y sí trae lo que se preguntó; lo que no hay es una que lo diga todo junto. */
+  const avisoFlojo=flojo&&!avisoAusente&&!avisoParecidas
+    ?'ℹ Ninguna lámina dice todo lo que preguntas junto; esto es lo más cercano en tu sección. Revisa que sí sea lo que buscas.':'';
   const decision=contratoDeDecision({pregunta:q,consulta:consultaAmpliada(q,hist),seccion:activo,porPregunta:sec.porPregunta,
-    nivel:fragmentos?2:0,evidencia:tarjetas.map(t=>t.c),
+    nivel:fragmentos?(flojo?1:2):0,evidencia:tarjetas.map(t=>t.c),
     otraSeccion:nombrada||(enOtra?{nombre:enOtra,motivo:'evidencia'}:null),
     ausentes,avisoCifra:!!avisoCuenta,parecidas:porParecidas.length>0,operacion:esOperacionDeTienda(q)});
   return{tipo:fragmentos?'tarjetas':'nada',ruta,sec,activo,relevantes,tarjetas,fragmentos,nombrada,enOtra,
-    ausentes,avisoAusente,porParecidas,avisoParecidas,decision,
+    ausentes,avisoAusente,porParecidas,avisoParecidas,avisoFlojo,decision,
     /* La sección con que se recuerda el turno: de ahí sigue un «¿y en…?». */
     seccionDelTurno:(tarjetas[0]&&tarjetas[0].c.docName)||ruta.doc||null};
 }

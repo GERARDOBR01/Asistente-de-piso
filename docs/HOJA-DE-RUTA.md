@@ -58,8 +58,15 @@ motor mientras el nivel 1 no cumpla su criterio de salida.
      IDF por manual rompe 2 y no arregla ninguna: se queda el global, y se vuelve a medir con
      cada cambio de la Fase 3.
 3. **Puerta de evidencia sin modelo**, con reglas medidas:
-   - solidez adaptativa: una palabra rara o en el título basta
-   - avisos de palabra ausente más finos
+   - solidez adaptativa: una palabra rara o en el título basta. Medido, ni la rareza, ni el
+     despegue, ni el título separan las buenas de las que no están. **Hecho** en su lugar: la
+     coincidencia floja del modo manual (`coincidenciaFloja`), con sección, cubriendo las
+     palabras que el manual sí tiene y sin palabras ajenas a todos los manuales; sale como
+     `parcial` con nota
+   - avisos de palabra ausente más finos. **Hecho** en parte: la raíz cuenta para las formas de
+     la propia palabra (con su conjugación y diptongo), no para sus sinónimos
+   - Medido con `lab/comparar.mjs` en desarrollo: arregla 10 (4 de dato y 6 «no está» de las
+     cruzadas), rompe 0; el gate pasa de 68 a 74 de 78
    - una sola decisión con estado: respaldada, parcial, aclarar o sin evidencia
    - seguimiento que sustituye el objeto («¿y las sandalias?»), en vez de pegar las dos preguntas
    - fragmento hermano: el patrón de ventana o fusión padre-hijo, acotado a la misma página y región

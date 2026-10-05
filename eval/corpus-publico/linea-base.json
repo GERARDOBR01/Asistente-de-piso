@@ -1,9 +1,9 @@
 {
  "bateria": "a5f4f20f5767af70",
- "version": "ap-v1.6.1",
+ "version": "ap-v1.7.6",
  "resumen": {
   "preguntas": 93,
-  "datoBien": 68,
+  "datoBien": 74,
   "dato": 78,
   "noEstaBien": 14,
   "noEsta": 15,
@@ -62,12 +62,11 @@
    "q": "¿cada cuánto se cambian los maniquíes?",
    "tipo": "dato",
    "cat": "directa",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 1,
    "hit3": 1,
-   "rr": 1,
-   "fallo": "sin tarjetas"
+   "rr": 1
   },
   {
    "i": 5,
@@ -383,12 +382,11 @@
    "q": "¿qué datos lleva la cenefa?",
    "tipo": "dato",
    "cat": "directa",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 1,
    "hit3": 1,
-   "rr": 1,
-   "fallo": "sin tarjetas"
+   "rr": 1
   },
   {
    "i": 34,
@@ -406,12 +404,11 @@
    "q": "¿qué días hay degustación?",
    "tipo": "dato",
    "cat": "titulo de dos renglones",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 1,
    "hit3": 1,
-   "rr": 1,
-   "fallo": "sin tarjetas"
+   "rr": 1
   },
   {
    "i": 36,
@@ -451,12 +448,11 @@
    "q": "¿de qué color es el moño de destilados?",
    "tipo": "dato",
    "cat": "directa",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 1,
    "hit3": 1,
-   "rr": 1,
-   "fallo": "sin tarjetas"
+   "rr": 1
   },
   {
    "i": 40,
@@ -585,12 +581,11 @@
    "q": "¿en qué orden van los colores de los blancos?",
    "tipo": "dato",
    "cat": "titulo de dos renglones",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 1,
    "hit3": 1,
-   "rr": 1,
-   "fallo": "sin tarjetas"
+   "rr": 1
   },
   {
    "i": 52,
@@ -817,12 +812,11 @@
    "q": "¿a qué hora?",
    "tipo": "dato",
    "cat": "conversación",
-   "ok": 0,
-   "top1": 0,
+   "ok": 1,
+   "top1": 1,
    "hit1": 0,
    "hit3": 0,
-   "rr": 0,
-   "fallo": "sin tarjetas"
+   "rr": 0
   },
   {
    "i": 73,
