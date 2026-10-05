@@ -1,0 +1,12 @@
+{
+  "modelo": "Xenova/multilingual-e5-small",
+  "variante": "crudo",
+  "w": 0.6,
+  "puntaje": "cos",
+  "alfa": 0.02,
+  "tau": 0.8730903032293853,
+  "negativas": 287,
+  "manuales": 15,
+  "coladasPorManual": "5/287",
+  "fecha": "2026-10-05"
+}

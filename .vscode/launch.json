@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    { "name": "Depurar laboratorio (métricas)", "type": "node", "request": "launch", "program": "${workspaceFolder}/lab/correr.mjs", "args": ["--datos", "${workspaceFolder}/../eval-manuales-reales/lab"], "console": "integratedTerminal" },
+    { "name": "Depurar pruebas del laboratorio", "type": "node", "request": "launch", "runtimeArgs": ["--test", "lab/lab.test.mjs"], "cwd": "${workspaceFolder}", "console": "integratedTerminal" }
+  ]
+}

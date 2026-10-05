@@ -24,6 +24,8 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
+      - name: Pruebas del laboratorio (métricas, estadística, garantía conformal)
+        run: node --test "lab/*.test.mjs"
       - name: Arnés
         run: node eval/arnes.mjs
       - name: Agente lector contra proveedores simulados
