@@ -1,0 +1,18 @@
+{
+  // Revisión de tipos sin compilar nada: los archivos siguen siendo .js y
+  // GitHub Pages los sirve tal cual. Los tipos van en JSDoc. Empieza por el
+  // motor (sin DOM) y crece a medida que app.js se parte. `npm run tipos`.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022"],
+    "types": [],
+    "skipLibCheck": true
+  },
+  "include": ["src/tipos.d.ts", "src/motor/**/*.js", "src/seguridad/inyeccion.js"]
+}

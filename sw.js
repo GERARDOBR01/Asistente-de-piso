@@ -10,9 +10,14 @@
      espera a que venza nada.
    - Librerías de cdnjs y fuentes: sus URL llevan versión, así que lo
      guardado no caduca: primero la caché.
+   - El código de la app (src/) va igual que la página: si se sirviera primero
+     de la caché, un index.html nuevo podría arrancar con un app.js viejo.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.6.1';
-const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf'];
+const VERSION='ap-v1.7.0';
+/* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
+   eval/arnes.mjs. */
+const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js'];
+const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf',...CODIGO];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
@@ -66,13 +71,15 @@ self.addEventListener('fetch',e=>{
   const deCdn=url.origin==='https://cdnjs.cloudflare.com'||url.origin==='https://fonts.googleapis.com'||url.origin==='https://fonts.gstatic.com';
   if(!propia&&!deCdn)return;
 
-  if(propia&&(req.mode==='navigate'||url.pathname.endsWith('/index.html'))){
+  const esPagina=req.mode==='navigate'||url.pathname.endsWith('/index.html');
+  if(propia&&(esPagina||CODIGO.some(p=>url.pathname.endsWith('/'+p)))){
     e.respondWith((async()=>{
       const cache=await caches.open(VERSION);
-      const red=fetch(req).then(r=>{if(r.ok)cache.put('index.html',r.clone());return r});
+      const clave=esPagina?'index.html':req;
+      const red=fetch(req).then(r=>{if(r.ok)cache.put(clave,r.clone());return r});
       try{return await conTope(red,3000)}
       catch{
-        const guardada=await cache.match('index.html');
+        const guardada=await cache.match(clave);
         if(guardada){red.catch(()=>{});return guardada}
         return red;
       }

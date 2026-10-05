@@ -16,7 +16,7 @@ estamos y qué sigue, en orden.
 - **Los manuales reales no entran al repo** (ni sus marcas ni sus cifras): los exámenes y los
   resultados con datos reales viven fuera.
 
-## Dónde estamos (4-oct-2026)
+## Dónde estamos (5-oct-2026)
 
 | Capa | Estado |
 |---|---|
@@ -27,14 +27,34 @@ estamos y qué sigue, en orden.
 | Verificación | Cifras, nombres, páginas, citas y atadura; certeza baja a MEDIA si algo no se comprueba |
 | Seguridad | Instrucciones escondidas en un PDF: spotlighting, neutralización, aviso al cargar y enlaces con datos como texto (ADR 0004) |
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
-| Pruebas | Arnés 305, agente simulado y laboratorio 12, todos en el CI |
+| Pruebas | Arnés 305, agente simulado, 21 pruebas en Node (laboratorio, frontera del motor y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
+| eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 68/78 datos y 14/15 «no está» |
+| Código | Módulos ES sin bundler (ADR 0005), paso 1 de 8: seguridad y texto fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales |
 
 Las decisiones están en `docs/adr/`:
 - **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
 - **0003, abstención conformal:** la garantía se cumple, pero la mejora no se confirmó. Está en revisión.
 - **0004, prompt injection.**
+- **0005, módulos sin bundler:** cómo se parte `index.html` y en qué orden.
 
-## Ahora: la puerta de evidencia
+## Ahora (plan de oct-2026: cimientos primero, el modelo local aparcado)
+
+1. **Terminar de partir `app.js`** (ADR 0005, pasos 2 a 8), con el golden master idéntico en
+   cada paso. Después, `lab/motor-node.mjs`: el motor importado en Node mide en segundos sin
+   navegador.
+2. **Puerta de evidencia sin modelo**, con reglas medidas:
+   - solidez adaptativa: una palabra rara o en el título basta
+   - avisos de palabra ausente más finos
+   - seguimiento conversacional en modo manual
+   - fragmento hermano
+   - rótulos en mayúsculas que hoy se pierden al leer el PDF
+
+   Desarrollo con las tres baterías de antes. Confirmación con una batería nueva de 57
+   preguntas sobre páginas que nadie había usado, revisada por Gerardo y corrida una sola vez.
+3. **Trazas con el estándar OpenTelemetry GenAI** y un «¿por qué esta respuesta?» en la app.
+4. **Servidor MCP del motor.**
+
+## Aparcado: la puerta con modelo local
 
 1. **Retomar el juez de la puerta con EmbeddingGemma q4** (197 MB).
    - Juez: el coseno entre la pregunta y la lámina que eligió la búsqueda por palabras.
@@ -46,12 +66,6 @@ Las decisiones están en `docs/adr/`:
 
 ## Después
 
-- **Corpus público:** 2 o 3 manuales ficticios y una batería pública, para que el CI mida la búsqueda (`eval-gate`) sin datos reales.
-- **Partir `index.html` en módulos sin bundler:**
-  - con golden master (los volcados de `lab/volcar.mjs`)
-  - el estado mutable en un solo objeto
-  - tipos JSDoc con `tsc --checkJs`
-  - pruebas de propiedades
 - **La línea base con modelo real**, pendiente de antes:
   - medir el clásico y el agente
   - juntar preguntas reales del Tablero para el examen v2
@@ -83,5 +97,3 @@ números que suma y no rompe nada:
 - **Backend mínimo**, cuando haya equipo o tienda piloto: compartir fichas, vocabulario y
   tablero entre teléfonos, y guardar la key fuera de ellos. Los manuales del cliente saldrían del
   teléfono: es una decisión del cliente, no técnica.
-- **Partir `index.html` en módulos** (sin bundler) cuando entre otra persona al código o cuando
-  un cambio empiece a romper cosas lejanas.

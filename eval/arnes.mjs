@@ -50,9 +50,18 @@ const b = await pw.chromium.launch({
    la del service worker: si no, dos corridas con código distinto se leerían
    como la misma. */
 const vSw = (fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8').match(/VERSION='([^']+)'/) || [])[1];
-const vApp = (fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8').match(/const VERSION_APP='([^']+)'/) || [])[1];
+const vApp = (fs.readFileSync(path.join(RAIZ, 'src', 'app.js'), 'utf8').match(/const VERSION_APP='([^']+)'/) || [])[1];
 if (!vSw || vSw !== vApp) {
-  console.log(`✗ [versión] sw.js dice ${vSw} e index.html dice ${vApp}`);
+  console.log(`✗ [versión] sw.js dice ${vSw} y src/app.js dice ${vApp}`);
+  await b.close(); srv.close(); process.exit(1);
+}
+/* Un módulo que no esté en la lista del service worker no carga sin señal, y
+   la app no arranca: en modo avión se ve en blanco. */
+const enSw = (fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8').match(/const CODIGO=\[([^\]]*)\]/) || [])[1] || '';
+const modulos = fs.readdirSync(path.join(RAIZ, 'src'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => 'src/' + f.split(path.sep).join('/'));
+const faltan = modulos.filter(m => !enSw.includes(`'${m}'`));
+if (faltan.length) {
+  console.log(`✗ [sin señal] sw.js no guarda: ${faltan.join(', ')}`);
   await b.close(); srv.close(); process.exit(1);
 }
 let malas = [{}];

@@ -21,11 +21,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Playwright y Chromium
+      - name: Playwright, Chromium, fast-check y TypeScript
         run: |
-          npm install --no-save --no-package-lock playwright@1.63.0
+          npm install --no-save --no-package-lock playwright@1.63.0 fast-check@4.10.2 typescript@5.9.3
           npx playwright install --with-deps chromium
-      - name: Pruebas del laboratorio (métricas, estadística, garantía conformal)
+      - name: Tipos del motor (tsc --checkJs, sin compilar)
+        run: npx tsc -p .
+      - name: Pruebas en Node (laboratorio, frontera del motor y propiedades)
         run: node --test "lab/*.test.mjs"
       - name: Arnés
         run: node eval/arnes.mjs
