@@ -1,6 +1,7 @@
 # Corre el arnés de la app (index.html?test=1) en cada push a main y en cada
-# pull request. El repo no tiene package.json a propósito: Playwright se
-# instala solo aquí, sin guardarse.
+# pull request. El package.json es solo para desarrollo (sus devDependencies
+# pesan: transformers.js trae onnxruntime), así que aquí no se corre npm ci:
+# Playwright se instala solo, sin guardarse.
 name: arnés
 
 on:

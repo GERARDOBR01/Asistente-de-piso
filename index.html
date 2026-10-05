@@ -2944,8 +2944,8 @@ const LARGO_MINIMO=12;
 const PALABRAS_DE_MEDIDA=new Set(['altura','alturas','distancia','distancias','separacion','separaciones','medida','medidas']);
 const CON_MEDIDA=/\d\s*(?:cm|centimetros?|mts?|metros?|mm)\b/;
 /* Un rótulo es un fragmento sin una sola frase: la lista de marcas de un
-   planograma, «Izquierda / Arriba / Adelante», «Nórdico / Industrial / Mid
-   Century». Muchas veces ES la respuesta —«¿qué marcas van en premium?», «30%
+   planograma, «Izquierda / Arriba / Adelante», «Nórdico / Industrial /
+   Brutalista». Muchas veces ES la respuesta —«¿qué marcas van en premium?», «30%
    de participación»—, pero no a un «¿dónde…?» ni a un «¿cómo…?»: ahí ganaba por
    corto y por llevar la palabra en el título. En ROPA INTERIOR, «¿dónde van los
    básicos?» salía con la lista de marcas de BÁSICOS y no con
@@ -4027,7 +4027,7 @@ function terminosAusentes(query,activo){
     if(duenos.length){duenos.sort((a,b)=>b.n-a.n);fuera.push({palabra:k,duenos})}
     /* Y si no es de nadie, tampoco es del manual del asesor. Medido en el piso:
        «marca preferencial» —una palabra que no aparece en ninguno de los once
-       manuales— se contestó con «Haus es la marca preferencial». El resto de la
+       manuales— se contestó con «‹marca X› es la marca preferencial». El resto de la
        pregunta («marca») encontraba láminas de sobra, así que el contexto salía
        sin un solo aviso. Se pide una palabra larga para no señalar cualquier
        cosa: las cortas son las de relleno. */
@@ -8033,7 +8033,7 @@ function palabraOriginal(q,x){
 /* El aviso de «¿cuántos?» para unas tarjetas ({c,texto}) de la sección
    `activo`, o '' si alguna trae la cifra. */
 function avisoDeCuenta(q,tarjetas,activo){
-  /* Lo mismo con el porcentaje: «¿qué porcentaje tiene Elemento Uomo?» —que es
+  /* Lo mismo con el porcentaje: «¿qué porcentaje tiene ‹sección›?» —que es
      la sección entera— enseñaba MOBILIARIO, MERCADEO y CLASIFICACIÓN, sin un
      solo % entre las tres. Si ninguna tarjeta trae un porcentaje, se dice. */
   const pidePct=palabrasDeConsulta(q).some(w=>palabraDeCifra(w))||/%/.test(q);
@@ -9666,19 +9666,19 @@ function paresConUnidad(texto){
 
 /* ── LOS NOMBRES QUE EL MANUAL NO DICE ────────────
    Medido en el piso, con 101 MUEBLES activo y la API conectada: a «¿cuál es la
-   marca propia?» contestó «Haus es la marca propia de liverpool». Ninguna de
+   marca propia?» contestó «‹marca X› es la marca propia de liverpool». Ninguna de
    las dos palabras está en ese manual —comprobado sobre el texto crudo del PDF,
-   38 páginas: cero «haus», cero «liverpool»—. «Haus» es la marca de 365
-   BLANCOS y Liverpool es la cadena de la que son estos manuales. El modelo la
+   38 páginas: cero de la marca, cero «liverpool»—. Esa marca sale en otra
+   sección y Liverpool es la cadena de la que son estos manuales. El modelo la
    reconoció y completó con lo que sabe de ella, que es la única vía de
    invención que quedaba abierta: la verificación comprobaba cifras y páginas, y
    un nombre pasaba limpio.
 
-   La capitalización de la RESPUESTA no sirve para detectarlo: «Haus» iba al
+   La capitalización de la RESPUESTA no sirve para detectarlo: la marca iba al
    principio de la frase y «liverpool» en minúscula. Lo que sí sirve es lo que el
    corpus sabe que es un nombre. Un nombre propio en estos manuales se reconoce
-   por dos cosas a la vez: aparece en mayúscula a mitad de frase —«la marca Haus
-   Kids», «sistema de Mercaderías de Liverpool», «la marca propia Damaia»— y no
+   por dos cosas a la vez: aparece en mayúscula a mitad de frase —«la marca Vestra
+   Kids», «sistema de Mercaderías de Delmar», «la marca propia Damaia»— y no
    aparece nunca en minúscula. Las palabras corrientes fallan la segunda: «coloca»
    va en mayúscula al empezar renglón, pero también va en minúscula cien veces. */
 let entidadesCorpus=null;
@@ -10913,24 +10913,24 @@ function pruebasNombres(){
   docs=[{name:'MUEBLES.pdf'},{name:'BLANCOS.pdf'}];
   docChunks=[
     indexChunk({id:'n1',source:'pdf',docName:'MUEBLES.pdf',page:14,heading:'MUNDOS Y MARCAS',
-      text:'Verifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Mid Century.'}),
+      text:'Verifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Brutalista.'}),
     indexChunk({id:'n2',source:'pdf',docName:'BLANCOS.pdf',page:15,heading:'KIDS',
-      text:'Ofrece artículos para los más pequeños de la marca Haus Kids y Licencias.'}),
+      text:'Ofrece artículos para los más pequeños de la marca Vestra Kids y Licencias.'}),
     indexChunk({id:'n3',source:'pdf',docName:'BLANCOS.pdf',page:11,heading:'ETIQUETADO DE PRECIO',
-      text:'El tipo de etiqueta es asignado por el sistema de Mercaderías de Liverpool.'}),
+      text:'El tipo de etiqueta es asignado por el sistema de Mercaderías de Delmar.'}),
   ];
   entidadesCorpus=null;
-  const ctx='[MUEBLES.pdf · pág. 14 · MUNDOS Y MARCAS]\nVerifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Mid Century.';
+  const ctx='[MUEBLES.pdf · pág. 14 · MUNDOS Y MARCAS]\nVerifica que las marcas se encuentren ubicadas en su espacio. Los estilos son Nórdico, Industrial y Brutalista.';
   const nombres=r=>nombresSinRespaldo(r,ctx).map(x=>x.toLowerCase());
   const casos=[
-    {nombre:'«Haus» y «Liverpool» no están en el contexto de MUEBLES',
-      ok:(()=>{const n=nombres('Haus es la marca propia de Liverpool.');return n.includes('haus')&&n.includes('liverpool')})()},
-    {nombre:'en minúscula se detecta igual (la respuesta real decía «liverpool»)',
-      ok:nombres('Haus es la marca propia de liverpool.').includes('liverpool')},
-    {nombre:'a principio de frase también (allí iba «Haus»)',
-      ok:nombres('Haus es la marca preferencial.').includes('haus')},
+    {nombre:'«Vestra» y «Delmar» no están en el contexto de MUEBLES',
+      ok:(()=>{const n=nombres('Vestra es la marca propia de Delmar.');return n.includes('vestra')&&n.includes('delmar')})()},
+    {nombre:'en minúscula se detecta igual (la respuesta real traía la cadena en minúscula)',
+      ok:nombres('Vestra es la marca propia de delmar.').includes('delmar')},
+    {nombre:'a principio de frase también (allí iba la marca)',
+      ok:nombres('Vestra es la marca preferencial.').includes('vestra')},
     {nombre:'las marcas del PROPIO manual no se marcan',
-      ok:nombres('Los estilos son Nórdico, Industrial y Mid Century (pág. 14).').length===0},
+      ok:nombres('Los estilos son Nórdico, Industrial y Brutalista (pág. 14).').length===0},
     {nombre:'una palabra corriente en mayúscula no es un nombre',
       ok:!entidadesDelCorpus().has('verifica')&&!entidadesDelCorpus().has('ofrece')},
     {nombre:'una marca de fuera del corpus también se marca',
