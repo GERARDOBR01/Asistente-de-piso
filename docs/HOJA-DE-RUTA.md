@@ -16,26 +16,45 @@ estamos y qué sigue, en orden.
 - **Los manuales reales no entran al repo** (ni sus marcas ni sus cifras): los exámenes y los
   resultados con datos reales viven fuera.
 
-## Dónde estamos
+## Dónde estamos (4-oct-2026)
 
 | Capa | Estado |
 |---|---|
 | Lectura del PDF | Buena en texto y tablas simples (incluidos títulos de dos renglones). Débil en planogramas y datos que solo están en imagen: ahí depende de la ficha de IA |
-| Búsqueda | El dato llega en 77–83 de 86 preguntas con 5 manuales reales |
-| Sección | La pregunta la elige: 83/86 en sesión, con empate resuelto con botones |
-| Motores | Manual medido (56/86 con sección, 52/86 sin elegirla). **Clásico y agente sin medir con modelo real** |
-| Verificación | Cifras, nombres, páginas, citas y atadura (0/21 falsas alarmas, 60/77 detectadas); certeza baja a MEDIA si algo no se comprueba |
-| Aprende del piso | Hecho: atajos pregunta → página, vocabulario por sección con candados, «Sí, eso», reformulación, propuestas de la IA, Tablero y export. **Sin medir su efecto todavía** |
-| Pruebas | Arnés 232 + simulado 28 en el CI |
+| Búsqueda | Con 14 manuales reales: Hit@1 88 % y Hit@3 95 % en la batería de desarrollo; Hit@1 73 % en una batería nueva. Medido en `lab/` con IC |
+| Puerta de evidencia | **El cuello de botella.** Con preguntas nuevas, el modo manual acierta 58–70 %, no el 95 % de la batería con la que se afinó. La mayoría de las fallas tienen la lámina buena arriba y la esconde el filtro de solidez o un aviso falso de palabra ausente |
+| Sección | La pregunta la elige; empate resuelto con botones |
+| Verificación | Cifras, nombres, páginas, citas y atadura; certeza baja a MEDIA si algo no se comprueba |
+| Seguridad | Instrucciones escondidas en un PDF: spotlighting, neutralización, aviso al cargar y enlaces con datos como texto (ADR 0004) |
+| Aprende del piso | Hecho. **Sin medir su efecto todavía** |
+| Pruebas | Arnés 305, agente simulado y laboratorio 12, todos en el CI |
 
-## Ahora: la línea base con modelo real
+Las decisiones están en `docs/adr/`:
+- **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
+- **0003, abstención conformal:** la garantía se cumple, pero la mejora no se confirmó. Está en revisión.
+- **0004, prompt injection.**
 
-1. Releer los PDF en la app (lectura nueva) y correr «🩺 Chequeo antes de medir».
-2. Medir el clásico completo; después el agente (y, si alcanza la cuota, el agente «como el
-   asesor»).
-3. Clasificar las fallas por capa y decidir con números si el agente queda de fábrica y qué capa
-   se ataca primero.
-4. Juntar preguntas reales del Tablero («⬇ Preguntas para examen») para el examen v2.
+## Ahora: la puerta de evidencia
+
+1. **Retomar el juez de la puerta con EmbeddingGemma q4** (197 MB).
+   - Juez: el coseno entre la pregunta y la lámina que eligió la búsqueda por palabras.
+   - En el laboratorio separa con AUC 0.987, contra 0.892 de e5-small.
+   - El trabajo está en la rama `busqueda-hibrida`, **aparcada**: el modelo local está parado hasta que Gerardo lo retome.
+2. **Calibrar τ con la app en vivo** (`lab/calibrar.mjs`) y confirmar con una batería nueva, corrida una sola vez. Las tres baterías actuales ya se vieron y cuentan como desarrollo.
+3. **Medir el tiempo de vectorizar en el teléfono**, con WebGPU y con WASM.
+4. **Probar la defensa del ADR 0004 con un modelo real**, usando un PDF ficticio malicioso. Necesita key, así que se hace con manuales ficticios.
+
+## Después
+
+- **Corpus público:** 2 o 3 manuales ficticios y una batería pública, para que el CI mida la búsqueda (`eval-gate`) sin datos reales.
+- **Partir `index.html` en módulos sin bundler:**
+  - con golden master (los volcados de `lab/volcar.mjs`)
+  - el estado mutable en un solo objeto
+  - tipos JSDoc con `tsc --checkJs`
+  - pruebas de propiedades
+- **La línea base con modelo real**, pendiente de antes:
+  - medir el clásico y el agente
+  - juntar preguntas reales del Tablero para el examen v2
 
 ## Siguiente: medir lo que aprende del piso
 
