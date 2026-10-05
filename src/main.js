@@ -10,5 +10,21 @@
 import * as html from './seguridad/html.js';
 import * as inyeccion from './seguridad/inyeccion.js';
 import * as texto from './motor/texto.js';
+import * as estadoDelCorpus from './estado.js';
+import { estado, CLAVES } from './estado.js';
 
-Object.assign(globalThis, html, inyeccion, texto);
+Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus);
+
+/* El estado del corpus (src/estado.js) sigue llamándose como antes para
+   app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre
+   `estado`, así que `docChunks=[]` en app.js cambia `estado.docChunks`.
+   No configurables a propósito: si en app.js quedara un `let docs`, el
+   navegador da error al cargar en vez de tener dos «docs» distintos. */
+for (const k of CLAVES) {
+  Object.defineProperty(globalThis, k, {
+    get: () => estado[k],
+    set: k === 'bm25' ? undefined : v => { estado[k] = v; },
+    enumerable: true,
+    configurable: false,
+  });
+}
