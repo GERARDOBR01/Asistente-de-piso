@@ -5,6 +5,8 @@
 *.csv
 # El manual sintético de la demo sí va en el repo
 !docs/manual-demo.pdf
+# Y los manuales ficticios del corpus público (eval/corpus-publico)
+!eval/corpus-publico/*.pdf
 # Respuestas del modo IA medidas en local (eval/modo-ia.mjs)
 eval/resultados/
 node_modules/

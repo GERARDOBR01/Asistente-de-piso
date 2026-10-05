@@ -495,9 +495,9 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 296 filas falla. El repo sigue sin `package.json`: Playwright se instala solo
-en el CI. En local: `node eval/arnes.mjs` (con `CANAL=chrome` si no tienes el Chromium de
-Playwright).
+alguna de las 305 filas falla. La app no se compila: el `package.json` es solo para las
+herramientas de desarrollo, y en el CI Playwright se instala solo. En local: `npm run arnes`
+(con `CANAL=chrome` si no tienes el Chromium de Playwright).
 
 Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
 respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier
@@ -516,6 +516,35 @@ once avisan con **cero fragmentos y cero láminas**, que es lo que hace imposibl
 creíble y falsa. La contraprueba de por qué importa: «¿cómo circula el cliente en la
 sección?» la contestan diez secciones **con siete cifras distintas**, todas verdaderas en su
 manual.
+
+#### El eval-gate: un corpus público para que el CI mida la búsqueda
+
+El arnés comprueba comportamientos; no dice si un cambio al motor **acierta más o menos**.
+Eso se medía solo con los manuales reales, que no pueden entrar al repo, así que ningún
+número del motor era público ni corría en el CI. Para eso está `eval/corpus-publico/`:
+
+- **Cuatro manuales ficticios** (el demo y tres más: boutique, cava y hogar), generados de
+  HTML a PDF con `generar.mjs`. Están hechos para traer **las trampas que encontró el
+  benchmark** con manuales de verdad: títulos de dos renglones, tablas, check lists que
+  repiten reglas, rótulos sin frase, el mismo título en dos secciones con cifras distintas.
+- **Una batería de 93 preguntas**: 68 de dato, 10 conversaciones de seguimiento y 15 «no
+  está» o trampa, con el mismo formato y el mismo calificador que las privadas.
+- **`lab/gate.mjs`** carga los cuatro PDF en la app real (`lab/volcar.mjs --local`, sin
+  puente ni teléfono, 5 s), califica cada pregunta y la compara con
+  `eval/corpus-publico/linea-base.json`. **El PR no pasa si una sola pregunta que estaba
+  bien pasa a mal**, o si Hit@3 o MRR@10 bajan más de dos puntos. El informe —qué se rompió,
+  qué se arregló, McNemar— queda en el resumen del job. Si el cambio arregla preguntas,
+  `npm run gate -- --actualizar` sube la línea base y el diff del PR lo enseña.
+
+Comprobado con una mutación: pedirle al filtro de solidez una palabra más rompe 7 preguntas
+y el gate las lista y falla (p = 0.016). La línea base de hoy es **68/78 datos y 14/15 «no
+está»**, y las 10 que fallan son las mismas familias de falla que con los manuales reales:
+el filtro de solidez que deja sin tarjetas una pregunta con una sola palabra en común, las
+conversaciones de seguimiento, los rótulos en mayúsculas que se pierden al leer el PDF y un
+aviso falso por errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
+acierta la app en el piso.** Eso se mide fuera del repo, con tres baterías separadas
+(desarrollo, prueba y confirmación, esta última corrida una sola vez), y ahí el modo manual
+da 58–70 % con preguntas que no vio al afinarse.
 
 #### La batería con respuesta conocida
 
@@ -550,11 +579,11 @@ búsqueda en todas las secciones—, que corren en `?test=1` con y sin manuales.
 Dos de esas preguntas no las escribí yo. Salieron del piso, con la API conectada y 101
 MUEBLES abierto, y sus respuestas venían marcadas con 👎:
 
-> «¿cuál es la marca propia?» → **«Haus es la marca propia de liverpool»**
-> «¿cuál es marca preferencial?» → **«Haus es la marca preferencial»**
+> «¿cuál es la marca propia?» → **«‹marca X› es la marca propia de liverpool»**
+> «¿cuál es marca preferencial?» → **«‹marca X› es la marca preferencial»**
 
-Comprobado contra los manuales: «preferencial» no aparece en ninguno de los once, «Haus»
-solo en 365 BLANCOS, y el texto crudo del PDF de MUEBLES —38 páginas— no contiene ninguna de
+Comprobado contra los manuales: «preferencial» no aparece en ninguno de los once, la marca
+solo en otra sección, y el texto crudo del PDF de MUEBLES —38 páginas— no contiene ninguna de
 las dos palabras. Ninguna de las dos respuestas salió de un fragmento: salieron de que **el
 modelo reconoce la cadena real de la que son estos manuales y completó con lo que sabe de
 ella**. Es la última vía de invención que quedaba abierta, y la que ninguna comprobación
@@ -590,10 +619,10 @@ todo lo demás:
   detecta un razonamiento equivocado; detecta el dato traído de fuera del manual, que es el
   que llega al piso.
 - **Los nombres se reconocen por lo que sabe el corpus, no por las mayúsculas.** La respuesta
-  que falló decía «Haus» al principio de la frase y «liverpool» en minúscula, así que fiarse
+  que falló decía la marca al principio de la frase y «liverpool» en minúscula, así que fiarse
   de la capitalización de la respuesta no habría servido para ninguna de las dos. Lo que sí
   sirve es cómo escribe el manual: un nombre propio aparece en mayúscula a mitad de frase —«la
-  marca Haus Kids», «el sistema de Mercaderías de Liverpool»— y no aparece nunca en minúscula.
+  marca ‹X› Kids», «el sistema de ‹Nombre› de la cadena»— y no aparece nunca en minúscula.
   Las palabras corrientes fallan la segunda condición, así que no entran. Con eso, un nombre
   que está en otra sección —o en ninguna— y no en los fragmentos consultados sale marcado.
 - **La lámina que acompaña sale de lo que la respuesta citó**, no de lo que el buscador
@@ -657,7 +686,7 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   solo del lado de la pregunta, así que ampliarlas no obliga a reprocesar ningún manual ya
   guardado.
 - **Los manuales son de una cadena que existe, y el modelo la reconoce.** Es la vía de
-  invención más difícil de tapar, porque lo que sale suena cierto y a veces lo es: «Haus es la
+  invención más difícil de tapar, porque lo que sale suena cierto y a veces lo es: «‹marca X› es la
   marca propia de Liverpool» es verdad en el mundo y es falso en ese manual, que no dice ni
   una de las dos palabras. Hay tres defensas y ninguna es total: una regla del prompt que
   prohíbe usar lo que sepa de la cadena, un aviso en el contexto cuando una palabra de la
