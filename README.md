@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <img alt="Un solo archivo HTML" src="https://img.shields.io/badge/1%20archivo-index.html-F4F2F0?labelColor=0D0E12">
+  <img alt="Sin bundler" src="https://img.shields.io/badge/build-ninguno%20(m%C3%B3dulos%20ES)-F4F2F0?labelColor=0D0E12">
+  <img alt="eval-gate en el CI" src="https://img.shields.io/badge/CI-eval--gate-F4F2F0?labelColor=0D0E12">
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
@@ -398,9 +399,9 @@ con ella, medir cuánto suma lo aprendido del piso.
 
 ## Cómo está hecho
 
-- **Un solo archivo `index.html`.** Sin build, sin bundler, sin backend propio, sin
-  servidor que mantener. Se publica como archivo estático y se abre desde un link.
-  Es a propósito: [por qué, y cómo se recorre](#por-qué-todo-vive-en-un-solo-indexhtml).
+- **Archivos estáticos, sin build.** Módulos ES nativos, sin bundler, sin backend propio,
+  sin servidor que mantener. Se publica tal cual y se abre desde un link:
+  [cómo está partido el código](#cómo-está-partido-el-código-sin-bundler).
 - **Conocimiento embebido y estructurado**, con un diccionario de sinónimos y alias por
   término — la gente no pregunta con el vocabulario del manual. "Acomodar" tiene que
   encontrar "exhibir", "clasificar" y "mercadear".
@@ -444,44 +445,41 @@ con ella, medir cuánto suma lo aprendido del piso.
   lee automáticamente, no se muestra, y decide el distintivo del mensaje y si se enseña
   lámina o no.
 
-### Por qué todo vive en un solo `index.html`
+### Cómo está partido el código (sin bundler)
 
-Son unas 8,200 líneas en un archivo, y a primera vista parece desorden. Lo decidí así por
-cómo se usa la app en el piso:
+Hasta octubre de 2026 todo vivía en un `index.html` de 12,000 líneas, y fue a propósito: abre
+sin señal, se publica sin compilar y se puede revisar entero. Cuando el motor tuvo que usarse
+fuera del navegador (medir en Node, pruebas de propiedades, un servidor MCP), lo partí en
+**módulos ES nativos, todavía sin bundler** ([ADR 0005](docs/adr/0005-modulos-sin-bundler.md)).
+Lo de antes se mantiene:
 
-- **Tiene que abrir sin señal.** En el piso la señal va y viene, y la prueba de la junta es
-  poner el celular en modo avión y seguir preguntando. El service worker (`sw.js`) guarda
-  la página, las tres librerías del CDN y las fuentes. Como todo el código viaja en un solo
-  archivo, el celular nunca queda con el JavaScript nuevo y el HTML viejo.
-- **Se publica sin compilar.** GitHub Pages sirve el archivo tal cual: no hay build que se
-  rompa, ni `node_modules` que caduquen, ni servidor que pagar. Lo que está en `main` es lo
-  que abre el asesor.
-- **Se puede revisar entero.** Todo lo que la app hace con la pregunta y con la key está en
-  un archivo que se lee en GitHub o en DevTools. No hay un backend mío en medio.
+- **Abre sin señal.** El service worker (`sw.js`) guarda la página, cada archivo de `src/`,
+  las tres librerías del CDN y las fuentes. El código de `src/` va primero a la red, igual
+  que la página, para que el celular nunca junte un HTML nuevo con un JavaScript viejo. Si un
+  archivo de `src/` falta en la lista, el arnés falla.
+- **Se publica sin compilar.** GitHub Pages sirve los archivos tal cual. No hay build que se
+  rompa ni servidor que pagar.
+- **Se puede revisar entero.** Todo lo que la app hace con la pregunta y con la key se lee en
+  GitHub o en DevTools.
 - **El arnés prueba el código que corre.** `index.html?test=1` ejecuta las mismas funciones
-  que usa el asesor, no una copia.
+  que usa el asesor.
 
-Para recorrerlo: unas 1,150 líneas son estilos, 350 son las pantallas y el resto es
-JavaScript, partido en bloques con un rótulo `/* ════ NOMBRE ════ */`. Se busca el rótulo
-con Ctrl+F:
-
-| Rótulo | Qué hace |
+| Archivo | Qué es |
 |---|---|
-| `STOPWORDS + SINÓNIMOS` y `MOTOR 2 — CORPUS UNIFICADO Y RETRIEVAL BM25` | La búsqueda: BM25, variantes, erratas y cuándo decir «no está» |
-| `MOTOR 2 — RECONSTRUCCIÓN LAYOUT-AWARE` y `MOTOR 2 — DETECCIÓN DE FIGURAS` | Lee el PDF por columnas y recorta las láminas |
-| `MANUALES GUARDADOS EN EL DISPOSITIVO` | Guarda los manuales en IndexedDB para no reprocesarlos |
-| `MODO SIN MODELO — retrieval local, cero red` | El modo manual |
-| `CONSTRUCCIÓN DE CONTEXTO` | Qué fragmentos llegan al modelo |
-| `STREAMING` y `REINTENTOS Y RESPALDO` | Llamadas a Gemini y OpenAI, y el modelo de respaldo |
-| `EVIDENCIA VISUAL` y `VERIFICACIÓN CONTRA EL CONTEXTO` | Qué lámina se enseña y cuándo sale un aviso |
-| `ARNÉS DE MEDICIÓN — abrir con ?test=1` | Las pruebas |
+| `index.html` | Estilos y pantallas |
+| `src/main.js` | Arranque: carga los módulos y los publica para el resto de la app |
+| `src/motor/` | La búsqueda, sin DOM: se importa desde Node. Hoy, `texto.js` (stopwords, sinónimos, tokenización) |
+| `src/seguridad/` | Saneado del HTML y defensa contra instrucciones escondidas (ADR 0004) |
+| `src/app.js` | Lo que falta por partir, en bloques con rótulo `/* ════ NOMBRE ════ */` |
+
+El corte va por capas: estado, índice, búsqueda, puerta de evidencia, verificación, IA y UI.
+Cada paso tiene que dejar **idéntico**, campo por campo, lo que el motor hace con cientos de
+preguntas sobre manuales reales (golden master, `lab/identico.mjs`). Los tipos se revisan
+con `tsc --checkJs` sin compilar nada (`npm run tipos`), y las propiedades del motor se
+prueban con fast-check (`lab/motor.test.mjs`).
 
 Una cuarta parte del JavaScript son comentarios. Casi todos explican por qué una regla es
 como es, con la pregunta que la hizo necesaria.
-
-Lo partiría en módulos si entra otra persona a trabajar en él. Se puede hacer sin
-bundler; el costo es que el service worker tendría que guardar varios archivos de la misma
-versión.
 
 ### Cómo se mide
 
