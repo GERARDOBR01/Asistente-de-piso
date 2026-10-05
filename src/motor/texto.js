@@ -10,6 +10,7 @@ export const STOPWORDS=new Set(['de','la','el','en','y','a','los','del','se','la
      «manual» está en la portada y en el índice de cualquier manual: la portada
      entraba como segunda tarjeta a todo lo que se preguntaba así. */
   'manual','manuales']);
+/** @type {Record<string, string[]>} */
 export const SYNONYMS={
   // ═══ TIPOS DE PRENDA ═══
   'chamarra':['parte alta','exterior','prenda exterior','outerwear'],
@@ -145,8 +146,11 @@ export const SYNONYMS={
   'natural':['cliente natural','sustentable','organico','etico'],
   'disruptivo':['cliente disruptivo','unico','streetwear','original'],
 };
+/** Minúsculas, sin acentos y sin signos: la forma en que se compara todo. @param {string|null|undefined} t */
 export function normalizeText(t){return(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ')}
+/** @param {string} text @returns {string[]} */
 export function extractKeywords(text){return[...new Set(normalizeText(text).split(/\s+/).filter(w=>w.length>3&&!STOPWORDS.has(w)))]}
+/** @param {string[]} kws @returns {string[]} */
 export function expandKeywords(kws){
   const e=[...kws];
   for(const k of kws){
@@ -155,6 +159,7 @@ export function expandKeywords(kws){
   }
   return[...new Set(e)]
 }
+/** @param {string} text @param {string[]} kws */
 export function scoreText(text,kws){
   const norm=normalizeText(text);const first300=norm.slice(0,300);
   let score=0;
@@ -175,6 +180,7 @@ export function scoreText(text,kws){
    pasillo. También entran las cifras sueltas, porque aquí un "40%" es un dato,
    no ruido. */
 export const UNIDADES=new Set(['cm','mm','mt','mts','m2','kg','ml','lt','pz','pzs']);
+/** @param {string|null|undefined} t @returns {string[]} */
 export function tokenize(t){return normalizeText(t).split(/\s+/)
   .filter(w=>!STOPWORDS.has(w)&&(w.length>2||UNIDADES.has(w)||/^\d+$/.test(w)))}
 
@@ -186,5 +192,6 @@ export function tokenize(t){return normalizeText(t).split(/\s+/)
    términos y por tanto cero fragmentos — la pregunta más común del piso.
    `extractKeywords` se queda como está para la memoria de aprendizaje, que sí
    quiere solo palabras largas. */
+/** @param {string} q @returns {string[]} */
 export function palabrasDeConsulta(q){return[...new Set(tokenize(q))]}
 

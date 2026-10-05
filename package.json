@@ -10,9 +10,12 @@
     "simulado": "node eval/agente-simulado.mjs",
     "lab": "node lab/correr.mjs",
     "gate": "node lab/gate.mjs",
-    "corpus-publico": "node eval/corpus-publico/generar.mjs"
+    "corpus-publico": "node eval/corpus-publico/generar.mjs",
+    "tipos": "tsc -p ."
   },
   "devDependencies": {
-    "@huggingface/transformers": "4.3.0"
+    "@huggingface/transformers": "4.3.0",
+    "fast-check": "4.10.2",
+    "typescript": "5.9.3"
   }
 }
