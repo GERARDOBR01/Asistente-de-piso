@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 a 3 hechos; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 4 hechos; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -54,7 +54,7 @@ lo que está en el repo es lo que corre.
 | 1 | Seguridad (`html`, `inyeccion`) y texto (stopwords, sinónimos, tokenización) | hecho |
 | 2 | Estado del corpus en un solo objeto (`src/estado.js`); el arnés usa setters en vez de reasignar globales | hecho |
 | 3 | Índice BM25, erratas y fonética, layout del PDF y chunking | hecho |
-| 4 | Búsqueda y router de sección | |
+| 4 | Búsqueda y router de sección | hecho |
 | 5 | Puerta de evidencia | |
 | 6 | Verificación | |
 | 7 | IA (proveedores, prompt, agente), UI, almacenamiento | |
@@ -109,6 +109,35 @@ lo que está en el repo es lo que corre.
   - ningún fragmento pasa de `CHUNK_MAX` ni cruza de página (fast-check);
   - dos columnas no se funden;
   - `multiplicar` es la composición afín.
+
+## Medido (paso 4)
+
+- **Cuatro módulos más en `src/motor/`**, sin DOM y con `tsc` estricto:
+
+  | Módulo | Contenido |
+  |---|---|
+  | `secciones.js` | de qué sección es cada manual (`nombreDeSeccion`) y qué sección nombra la pregunta |
+  | `busqueda.js` | `weightedTerms`, `retrieve`, `packChunks`, `mezclarPorPartes`, `getPdfContext` |
+  | `puerta.js` | `exigenciaDeSolidez`, `filtroSolidez`, `nivelDeEvidencia`: la semilla del paso 5 |
+  | `ruta.js` | evidencia por sección, `otraSeccionNombrada`, `rutaPorEvidencia` |
+
+  `variantes` e `infinitivos` (morfología) pasan a `texto.js`. `app.js` baja de 9,620 a 8,540 líneas. No hay ciclos entre módulos: texto → secciones → puerta → búsqueda → ruta.
+- **La ruta se separa de la conversación.** `decidirSeccion` y `enrutarSeccion` se quedan en `app.js` con lo que depende de la pantalla y del historial: la sección forzada por un botón, los saludos, la caché por turno. La decisión con evidencia pasa a `ruta.js`, y lo que necesita de la conversación (la consulta ampliada, la sección del turno anterior, si es elipsis) llega como argumento. La consulta ampliada se pide solo si hace falta, igual que antes, porque `consultaDeBusqueda` marca si amplió.
+- **«Aprende del piso» entra por inyección.** La búsqueda usaba directamente las palabras y los atajos aprendidos, que viven en el almacenamiento del teléfono. Ahora `app.js` se los pasa con `usarAprendido`; en Node no hay nada aprendido y la búsqueda es la del manual.
+- **`ultimosFragmentos` pasa a `estado`**: lo escribe `packChunks` y lo leen la verificación, las láminas y `lab/volcar.mjs`, que lo siguen viendo con su nombre.
+- **`tsc` encontró una caché sin declarar** (`secPorDoc`, que estaba en un `var` de la parte de aprendizaje). En un módulo, que es estricto, habría tronado la primera vez que «Aprende del piso» buscara la sección de un manual (`secDe`).
+- **El script de extracción se niega a escribir** si un nombre exportado sigue declarado en `app.js` (un `function` clásico pisaría en silencio al del módulo) o si dos módulos exportan el mismo nombre.
+- **Golden master:** las 667 preguntas idénticas con los 14 manuales reales.
+- Arnés 305/305, agente simulado, eval-gate idéntico (arregla 0, rompe 0) y modo avión. ap-v1.7.3.
+- **38 pruebas en Node.** Las 6 nuevas buscan y enrutan sin navegador, sobre dos secciones ficticias con la misma plantilla:
+  - con `doc`, `retrieve` nunca devuelve fragmentos de otro manual (fast-check);
+  - `packChunks` no pasa del presupuesto (fast-check);
+  - la pregunta que nombra la sección va a esa, y sin nombrarla va a la que tiene evidencia;
+  - con una sección activa, solo otra sección nombrada la cambia;
+  - un seguimiento se queda en la sección de la conversación;
+  - un atajo aprendido reordena, pero no cambia el nivel de evidencia.
+
+  Se comprobó que cazan: con el filtro por manual quitado, o con la sección nombrada ignorada, falla su prueba.
 
 ## Consecuencias
 

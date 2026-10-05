@@ -16,6 +16,10 @@ import { indexChunk, bm25Score, reconstruirIndice } from '../src/motor/indice.js
 import { masParecida, vocabDeDoc } from '../src/motor/erratas.js';
 import { buildChunks, CHUNK_MAX } from '../src/motor/fragmentos.js';
 import { bloquesDeLineas, multiplicar } from '../src/motor/layout.js';
+import { retrieve, packChunks, chunkLabel, usarAprendido } from '../src/motor/busqueda.js';
+import { nivelDeEvidencia } from '../src/motor/puerta.js';
+import { nombreDeSeccion } from '../src/motor/secciones.js';
+import { rutaPorEvidencia, otraSeccionNombrada } from '../src/motor/ruta.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -199,3 +203,75 @@ test('multiplicar es la composición afín: identidad y traslación', () => {
   }));
   assert.deepEqual(multiplicar([1, 0, 0, 1, 5, 7], [2, 0, 0, 2, 1, 1]), [2, 0, 0, 2, 6, 8]);
 });
+
+/* ── La búsqueda y la ruta en Node (ADR 0005, paso 4) ─────────────────────
+   Dos secciones ficticias que comparten plantilla, como los manuales reales:
+   lo que las distingue es el nombre y los datos. */
+const DOS = [
+  frag('c1', 'cava.pdf', 1, '410 CAVA', 'Manual de exhibición de la cava. La cava se ordena por país y por uva.'),
+  frag('c2', 'cava.pdf', 2, 'BOTELLAS', 'Las botellas van acostadas en la cava, con la etiqueta al frente.'),
+  frag('c3', 'cava.pdf', 3, 'COPAS', 'Las copas se cuelgan boca abajo sobre la barra de degustación.'),
+  frag('d1', 'boutique.pdf', 1, '520 BOUTIQUE', 'Manual de exhibición de la boutique. La boutique se ordena por color.'),
+  frag('d2', 'boutique.pdf', 2, 'MANIQUÍES', 'Los maniquíes se visten cada 15 días con la propuesta de temporada.'),
+  frag('d3', 'boutique.pdf', 3, 'PASILLO', 'Deja 90 cm de pasillo entre los muebles de la boutique.'),
+];
+const conDos = fn => conEstado({
+  docChunks: DOS.map(c => ({ ...c })), manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }],
+  manualActivo: null, ultimosFragmentos: [],
+}, fn, reconstruirIndice);
+const VOCABULARIO = ['botellas', 'copas', 'cava', 'boutique', 'maniquies', 'pasillo', 'etiqueta', 'muebles', 'color', 'temporada', 'cuelgan', 'acostadas', 'llanta'];
+
+test('retrieve con `doc` nunca devuelve fragmentos de otro manual', () => conDos(() => {
+  fc.assert(fc.property(fc.subarray(VOCABULARIO, { minLength: 1 }), fc.constantFrom('cava.pdf', 'boutique.pdf'), (palabras, doc) => {
+    for (const r of retrieve(palabras.join(' '), { doc, source: 'pdf' })) assert.equal(r.c.docName, doc);
+  }));
+}));
+
+test('packChunks no pasa del presupuesto y recuerda solo lo que entró', () => conDos(() => {
+  fc.assert(fc.property(fc.subarray(VOCABULARIO, { minLength: 1 }), fc.integer({ min: 0, max: 600 }), (palabras, max) => {
+    estado.ultimosFragmentos = [];
+    packChunks(retrieve(palabras.join(' ')), max);
+    const usado = estado.ultimosFragmentos.reduce((n, c) => n + chunkLabel(c).length + 1 + c.text.length, 0);
+    assert.ok(usado <= max, `${usado} > ${max}`);
+  }));
+}));
+
+test('el nombre de la sección sale del rótulo, y la pregunta que lo dice va a esa sección', () => conDos(() => {
+  assert.equal(nombreDeSeccion('cava.pdf'), '410 CAVA');
+  assert.deepEqual(rutaPorEvidencia('¿cuántas botellas van en la cava?'), { doc: 'cava.pdf', motivo: 'nombrada', alternativas: [] });
+  /* Sin nombrarla: manda la única que tiene con qué responder. */
+  assert.equal(rutaPorEvidencia('¿cómo se cuelgan las copas?').doc, 'cava.pdf');
+  assert.equal(rutaPorEvidencia('¿cómo se cuelgan las copas?').motivo, 'evidencia');
+  /* Lo de ninguna sección no se manda a ninguna. */
+  assert.equal(rutaPorEvidencia('¿cómo cambio la llanta del coche?').doc, null);
+}));
+
+test('con una sección activa, solo otra sección NOMBRADA la cambia', () => conDos(() => {
+  assert.equal(otraSeccionNombrada('¿cada cuánto se visten los maniquíes en boutique?', 'cava.pdf')?.docName, 'boutique.pdf');
+  assert.equal(otraSeccionNombrada('¿cómo van las botellas en la cava?', 'cava.pdf'), null);
+  assert.equal(otraSeccionNombrada('¿cómo se cuelgan las copas?', 'cava.pdf'), null);
+}));
+
+test('un seguimiento se queda en la sección de la conversación', () => conDos(() => {
+  /* «¿y las copas?» después de una pregunta de la cava: la consulta ampliada
+     lleva la pregunta anterior, y la sección es la del turno anterior. */
+  const r = rutaPorEvidencia('¿y las copas?', { ampliada: () => '¿cómo van las botellas? ¿y las copas?', anterior: 'cava.pdf', elipsis: true });
+  assert.deepEqual([r.doc, r.motivo], ['cava.pdf', 'seguimiento']);
+}));
+
+test('lo aprendido en el piso entra por usarAprendido; sin él, la búsqueda es la del manual', () => conDos(() => {
+  const q = '¿la cava lleva copas o botellas?';
+  const sin = retrieve(q, { doc: 'cava.pdf' });
+  assert.ok(sin.every(r => !r.atajo));
+  usarAprendido({ atajos: () => [{ sec: '410 CAVA', pagina: 3 }] });
+  try {
+    const con = retrieve(q, { doc: 'cava.pdf' });
+    const p3 = con.find(r => r.c.page === 3);
+    assert.ok(p3 && p3.atajo);
+    assert.ok(p3.score > /** @type {any} */ (sin.find(r => r.c.page === 3)).score);
+    /* Un atajo reordena, no inventa evidencia. */
+    assert.equal(nivelDeEvidencia(con, q), nivelDeEvidencia(sin, q));
+  } finally {
+    usarAprendido({ atajos: () => [] });
+  }
+}));

@@ -32,6 +32,11 @@ export const estado = {
       la página de un manual que no era el suyo. En la app se nombra
       `appState.manualActivo`. @type {string | null} */
   manualActivo: /** @type {string | null} */ (null),
+  /** Los fragmentos que entraron DE VERDAD al contexto de la última pregunta
+      (`packChunks`), no los que puntuaron alto: es la única lista contra la
+      que tiene sentido verificar la respuesta y de la que salen las láminas
+      que la acompañan. @type {Fragmento[]} */
+  ultimosFragmentos: [],
 };
 
 /** @typedef {keyof typeof estado} Clave */

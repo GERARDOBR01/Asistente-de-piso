@@ -312,12 +312,7 @@ function rebuildCorpus(){
 /* Las cachés que siguen en este archivo. Las de los módulos se registran
    junto a su código, con alReiniciar (src/estado.js). */
 alReiniciar(()=>{
-  verbosVistos=new Map();
-  nombresEnTexto=null;
-  identificadores=null;
-  secPorDoc=null;
   entidadesCorpus=null;
-  fragmentosPorPagina=null;
 });
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
@@ -352,253 +347,6 @@ function refrescarVocabularioManual(){
     if(c.tf)for(const t in c.tf)vocabularioManual.add(t);
   }
 }
-/* El nombre del archivo, cuando trae el código de sección delante: «237 ZAPATOS
-   HOMBRES», «388 VINOS Y LICORES». Así se descarga del portal y así la llama el
-   asesor. Se corta en «MANUAL», que es lo que siempre viene detrás. Se exige
-   una palabra de verdad después del código, para que «205_201_20BICI_N» —dos
-   códigos seguidos y una palabra rota— no cuente como nombre. */
-function seccionEnArchivo(docName){
-  const limpio=docName.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'')
-    .replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
-  const m=limpio.match(/^\d{2,4}\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]+)*/);
-  if(!m)return null;
-  const nombre=m[0].replace(/\s+manual\b.*$/i,'').trim();
-  return nombre.length>5?nombre.toUpperCase():null
-}
-function compartenPalabra(a,b){
-  /* Por prefijo: al descargar se pierde el acento y «DULCERÍA» llega partida
-     como «DULCER A». Sigue siendo la misma palabra. */
-  const pal=s=>tokenize(s).filter(t=>t.length>3&&!/^\d+$/.test(t));
-  const A=pal(a),B=pal(b);
-  return A.some(x=>B.some(y=>x.startsWith(y)||y.startsWith(x)))
-}
-/* Lo que el manual dice de sí mismo en el texto: «El cliente de la sección 285
-   ROPA INTERIOR…», «Al entrar a la sección 323 ARTÍCULOS DE VIAJE…». Medido
-   sobre 33 manuales reales, es la fuente que más acierta: el check list venía
-   copiado de otro manual —el de calcetines dice «281 ROPA INTERIOR», igual
-   que el de ropa interior, y el de blancos «365», que es el número de
-   librería— y el primer título de la lámina daba «URBANO» por ACCESORIOS
-   HOMBRE. Se cuentan las menciones y, si hay varias secciones nombradas (el de
-   calcetines también nombra a su vecina, ROPA INTERIOR), desempata el archivo. */
-const MENCION_SECCION=/secci[oó]n(?:es)?\s+(?:de\s+)?(\d{2,4}(?:\s*(?:,|y|-)\s*\d{2,4})*(?:\s+(?:[A-ZÁÉÍÓÚÑ&]{2,}|Y|DE))+)/g;
-let nombresEnTexto=null;
-function seccionEnTexto(docName){
-  if(!nombresEnTexto)nombresEnTexto=new Map();
-  if(nombresEnTexto.has(docName))return nombresEnTexto.get(docName);
-  const cuenta=new Map();
-  for(const c of docChunks){
-    if(c.docName!==docName)continue;
-    for(const m of (c.text||'').matchAll(MENCION_SECCION)){
-      /* «Realiza cruce con producto de la sección 110 DECORACIÓN TEXTIL»,
-         «puede colindar con la sección 111 COLCHONES»: eso nombra a una
-         vecina, no a la sección del manual. Con el manual real de Decoración
-         Hogar las dos menciones de cruce empataban con las dos propias y el
-         desempate por largo lo bautizaba «110 DECORACIÓN TEXTIL». */
-      if(/\b(?:cruce|colind\w*|vecin\w*|complement\w*|juntos?|cerca)\b/i.test((c.text||'').slice(Math.max(0,m.index-50),m.index)))continue;
-      const n=m[1].replace(/\s+/g,' ').replace(/(?:\s+(?:Y|DE))+$/,'').trim();
-      if(!/[A-ZÁÉÍÓÚÑ]{3,}/.test(n))continue;
-      cuenta.set(n,(cuenta.get(n)||0)+1);
-    }
-  }
-  const archivo=docName.replace(/\.pdf$/i,'');
-  let mejor=null,puntos=-1;
-  for(const[n,k]of cuenta){
-    const p=k+(compartenPalabra(n,archivo)?100:0)+n.length/1000;
-    if(p>puntos){puntos=p;mejor=n}
-  }
-  nombresEnTexto.set(docName,mejor);
-  return mejor
-}
-/* «Manual Baño.pdf», «Manual Flores y Velas 2022 (1).pdf»: sin código de
-   sección, el archivo sin la palabra «manual» es mejor nombre que el primer
-   título de la lámina, que en estos manuales es «La importancia de la imagen
-   en la sección». */
-function seccionEnArchivoSinCodigo(docName){
-  if(!/manual/i.test(docName))return null;
-  /* Primero los guiones bajos: «_Manual Gourmet» no tiene frontera de palabra
-     antes de «Manual» y la palabra se quedaba en el nombre. */
-  const n=docName.replace(/\.pdf$/i,'').replace(/[_\-]+/g,' ').replace(/\(\d+\)/g,' ')
-    .replace(/\bmanual(?:es)?\b|\bde exhibici[oó]n\b|\b(?:19|20)\d{2}\b/gi,' ')
-    .replace(/\s+/g,' ').trim().replace(/^(?:de|del)\s+/i,'').trim();
-  return /[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}/.test(n)?n.toUpperCase():null
-}
-function nombreDeSeccion(docName){
-  const enTexto=seccionEnTexto(docName);
-  if(enTexto)return enTexto;
-  const propios=docChunks.filter(c=>c.docName===docName);
-  const util=h=>h&&h.trim().length>5&&!/:$/.test(h.trim());
-  const archivo=seccionEnArchivo(docName);
-  /* Estos manuales numeran la sección en el rótulo: «271 CASUAL», «512 MUJER
-     CLÁSICA», «101 MUEBLES». Es el nombre con el que el asesor la llama. */
-  for(const c of propios){
-    const m=(c.heading||'').match(/^(\d{2,4}\s+[A-ZÁÉÍÓÚÑ][^:]*)$/);
-    if(m&&util(m[1]))return m[1].trim();
-  }
-  for(const c of propios){
-    const m=(c.heading||'').match(/CHECK\s*LIST\s*:?\s*(.+)/i);
-    if(m&&util(m[1])){
-      /* El check list rotula a veces con la familia de la tienda y no con la
-         sección: el manual de vinos y licores se llama ahí «388 DIVERSOS», y
-         por «diversos» no lo busca nadie. Si el archivo trae el código y no
-         comparte ni una palabra con ese rótulo, manda el archivo. */
-      if(archivo&&!compartenPalabra(m[1],archivo))return archivo;
-      return m[1].trim();
-    }
-  }
-  /* Antes que el primer título de la página 2: ese título es de la lámina, no
-     de la sección. El manual de zapatos salía llamándose «ENTRADA PEATONAL». */
-  if(archivo)return archivo;
-  const sinCodigo=seccionEnArchivoSinCodigo(docName);
-  if(sinCodigo)return sinCodigo;
-  const primera=propios.find(c=>util(c.heading)&&c.page<=2&&!/^(propuesta|planograma|marcas?|conjunto|exterior)\b/i.test(c.heading));
-  if(primera)return primera.heading.trim();
-  /* Último recurso: el nombre de archivo. Llega con hash, guiones bajos y a
-     veces con el escape de la URL a medio deshacer, así que se limpia. */
-  return docName.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'')
-    .replace(/%?20/g,' ').replace(/[_\-]+/g,' ').replace(/\s+/g,' ')
-    .replace(/^\d+\s+\d+\s+/,'').trim()||docName
-}
-/* ── LA SECCIÓN QUE NOMBRA LA PREGUNTA ────────────
-   Estos manuales son la misma plantilla con distintos datos. Medido entre
-   101 MUEBLES y 251 JUVENILES: 22 títulos idénticos —PROPUESTA DE VALOR,
-   CIRCULACIÓN DEL CLIENTE, DISPLAY, ALINEACIÓN, LIMPIEZA…— y bajo ALINEACIÓN
-   los dos dicen 80 cm. Pero «¿qué porcentaje es el cliente clásico?» vale 25.6%
-   en Muebles y 0% en Juveniles.
-
-   Eso hace que preguntar con la sección equivocada activa sea peor que no tener
-   manual: la respuesta no sale vacía, sale un número creíble y falso, con su
-   página y su lámina. Y ningún ajuste de la búsqueda lo puede evitar, porque el
-   vocabulario de los dos manuales es el mismo.
-
-   Lo único que los distingue es cómo se llama la sección, y eso el asesor lo
-   escribe: «los perímetros EN JUVENILES». Así que el nombre de la sección se
-   busca dentro de la pregunta.
-
-   Un término solo identifica si de verdad señala a un manual: «juveniles»
-   aparece casi solo en el suyo, pero «muebles» aparece en todos —son muebles de
-   exhibición— y no identifica nada. Se exige que la mayoría de los fragmentos
-   que contienen el término sean de ese documento. */
-const DISCRIMINA_MIN=0.7;
-const DOMINANCIA_MIN=0.4;
-let identificadores=null;
-function identificadoresDeSeccion(){
-  if(identificadores)return identificadores;
-  identificadores=[];
-  if(!docChunks.length)return identificadores;
-  const porTermino=new Map();
-  for(const c of docChunks){
-    if(!c.tf)continue;
-    for(const t in c.tf){
-      let m=porTermino.get(t);
-      if(!m){m=new Map();porTermino.set(t,m)}
-      m.set(c.docName,(m.get(c.docName)||0)+1);
-    }
-  }
-  for(const d of docs){
-    const nombre=nombreDeSeccion(d.name);
-    /* También el nombre del archivo: «Manual_Juveniles_Urban_Zone» trae «urban
-       zone», que el rótulo interno no tiene y el asesor sí usa. */
-    const crudo=d.name.replace(/^[0-9a-f]{6,}-/i,'').replace(/\.pdf$/i,'').replace(/[_\-]+/g,' ');
-    const delNombre=new Set([...tokenize(nombre),...tokenize(crudo)]);
-    /* Los nombres bajados del portal llegan con el escape de la URL a medio
-       deshacer y el «%20» pegado a la palabra: «205_201_20BICI_N.pdf» daba
-       «20bici», que no es nada. Se prueba también sin ese 20 delante — pero solo
-       cuando lo que sigue son letras, para no convertir «205» en «5». */
-    for(const t of[...delNombre])if(/^20[a-z]{2,}$/.test(t))delNombre.add(t.slice(2));
-    const terminos=[];
-    for(const t of delNombre){
-      if(t==='manual')continue;
-      const m=porTermino.get(t);
-      /* Un código de sección («251», «101») puede no estar en el cuerpo del
-         manual y aun así ser el identificador más limpio que existe. */
-      if(!m){if(/^\d{2,4}$/.test(t))terminos.push(t);continue}
-      let total=0;for(const v of m.values())total+=v;
-      if(total&&(m.get(d.name)||0)/total>=DISCRIMINA_MIN)terminos.push(t);
-    }
-    /* Si la sección se quedó sin una sola palabra —solo con su número— el
-       asesor no la puede nombrar: escribe «en blancos», no «en 365». Ahí se
-       baja el listón hasta la dominancia clara: más del doble que el segundo
-       manual y al menos el 40%. Medido, «blancos» tiene 10 de 15 fragmentos
-       —67%, tres puntos por debajo del corte— con el segundo en 4, y entra;
-       «muebles» (16 propios de 85, con dulcería en 15) y «casual» (15 propios
-       contra 26 en zapatos) siguen fuera, que es lo correcto: son ambiguos.
-
-       Solo cuando no hay ninguna, nunca como añadido. «512 MUJER CLÁSICA» ya
-       se identifica por «clásica»; sumarle «mujer» bloquearía preguntas
-       legítimas de vestidos de fiesta, que también son de mujer. */
-    if(!terminos.some(t=>!/^\d+$/.test(t))){
-      for(const t of delNombre){
-        if(t==='manual'||/^\d+$/.test(t))continue;
-        const m=porTermino.get(t);
-        if(!m)continue;
-        let total=0,mayorAjeno=0,mio=0;
-        for(const[dn,v]of m){
-          total+=v;
-          if(dn===d.name)mio=v;else if(v>mayorAjeno)mayorAjeno=v;
-        }
-        if(total&&mio/total>=DOMINANCIA_MIN&&mio>mayorAjeno*2)terminos.push(t);
-      }
-    }
-    if(terminos.length)identificadores.push({docName:d.name,nombre,terminos});
-  }
-  return identificadores
-}
-function seccionesNombradasEnPregunta(q){
-  const lista=identificadoresDeSeccion();
-  /* Con un solo manual cargado no hay con qué confundirse. */
-  if(lista.length<2)return[];
-  const toks=new Set(tokenize(q||''));
-  /* Singular o plural da igual: «la corbata en camisas» nombra CAMISAS Y
-     CORBATAS igual que «las corbatas». El género no: «fino» no es MESA FINA.
-     Cada sección recuerda con qué palabra se la nombró (`termino`): con otra
-     sección activa, `decidirSeccion` mira si esa palabra también es de la
-     activa antes de mandar al asesor a otra. */
-  const nombra=t=>toks.has(t)||toks.has(t+'s')||toks.has(t+'es')||(t.length>4&&t.endsWith('s')&&(toks.has(t.slice(0,-1))||(t.endsWith('es')&&toks.has(t.slice(0,-2)))));
-  const out=[];
-  for(const id of lista){const t=id.terminos.find(nombra);if(t)out.push({...id,termino:t})}
-  return out
-}
-function seccionNombradaEnPregunta(q){return seccionesNombradasEnPregunta(q)[0]||null}
-/* ¿La palabra va dicha como nombre de sección? Al principio de la pregunta o
-   justo detrás de «en», «de» o «para», sin artículo: «en muebles», «papelería
-   qué va en el POS». Con artículo —«los muebles», «la ropa»— es un tema. */
-function dichaComoSeccion(q,formas){
-  const t=normalizeText(q||'').split(/\s+/).filter(Boolean);
-  return t.some((w,i)=>formas.includes(w)&&(i===0||/^(en|de|para)$/.test(t[i-1])))
-}
-/* La sección que no tiene ni una palabra propia —101 MUEBLES solo tiene su
-   número, GOURMET ni eso— también se nombra en el piso: «en muebles, ¿qué
-   pasillo dejo?». La palabra suelta no identifica, porque todos los manuales
-   hablan de muebles; pero dicha COMO sección sí (`dichaComoSeccion`). «¿Qué va
-   en los muebles del POS?» no la nombra. Y solo para elegir dónde buscar cuando
-   no hay sección activa (`enrutarSeccion`): con una elegida, «muebles» es tema
-   de esa sección y no un motivo para mandar al asesor a otra. La palabra tiene
-   que ser exclusiva de un nombre: «hombres» no vale, porque está en ZAPATOS
-   HOMBRES y en ACCESORIOS HOMBRE. */
-function seccionNombradaComoTal(q){
-  if(docs.length<2)return null;
-  const ids=identificadoresDeSeccion();
-  const conPalabra=new Set(ids.filter(i=>i.terminos.some(t=>!/^\d+$/.test(t))).map(i=>i.docName));
-  const palabras=docs.map(d=>({docName:d.name,nombre:nombreDeSeccion(d.name),
-    toks:tokenize(nombreDeSeccion(d.name)).filter(t=>t.length>=4&&!/^\d+$/.test(t)&&t!=='manual')}));
-  const ajenas=d=>new Set(palabras.filter(p=>p.docName!==d.docName).flatMap(p=>p.toks.flatMap(t=>variantes(t))));
-  const hallados=new Set();
-  for(const p of palabras){
-    if(conPalabra.has(p.docName))continue;
-    const otras=ajenas(p);
-    const suyas=p.toks.filter(t=>!variantes(t).some(v=>otras.has(v)));
-    if(suyas.some(t=>dichaComoSeccion(q,[t,t+'s',t+'es',t.replace(/e?s$/,'')])))hallados.add(p.docName);
-  }
-  if(hallados.size!==1)return null;
-  const docName=[...hallados][0];
-  return{docName,nombre:nombreDeSeccion(docName),terminos:[]}
-}
-function seccionActiva(){
-  if(!docChunks.length)return null;
-  if(appState.manualActivo)return nombreDeSeccion(appState.manualActivo);
-  const nombres=docs.map(d=>nombreDeSeccion(d.name));
-  return nombres.length===1?nombres[0]:null
-}
 
 function initManualSections(){
   manualSections=MANUAL_INTERNO.trim().split(/\n(?=## )/)
@@ -615,507 +363,11 @@ function initManualSections(){
   rebuildCorpus();
 }
 
-/* Los sinónimos siguen siendo el puente entre cómo pregunta la gente
-   ("acomodar") y cómo escribe el manual ("distribución"), pero pesan
-   menos que la palabra que el asesor realmente escribió: expandir sin
-   descontar es lo que hacía que una consulta se fuera por la tangente. */
-const SYNONYM_WEIGHT=0.55;
+/* La búsqueda vive en src/motor/: busqueda.js (retrieve y el empaquetado del
+   contexto), secciones.js (de qué sección es cada manual), puerta.js (cuándo
+   la evidencia es sólida) y ruta.js (contra qué sección se responde). Lo que
+   entró al contexto queda en `ultimosFragmentos` (src/estado.js). */
 
-/* Formas candidatas de una palabra, para que el plural del asesor encuentre el
-   singular del manual. Se generan solo del lado de la pregunta: el índice no se
-   toca, así que los manuales ya guardados siguen valiendo. No pretende ser un
-   lematizador —«muebles» produce también «muebl», que no es palabra—; las
-   variantes que no existen simplemente no coinciden con nada y no estorban. */
-function variantes(w){
-  const v=[w];
-  const plural=x=>{
-    if(x.length>4&&x.endsWith('s')){
-      v.push(x.slice(0,-1));
-      if(x.endsWith('es'))v.push(x.slice(0,-2));
-      if(x.endsWith('ces'))v.push(x.slice(0,-3)+'z');
-    }
-  };
-  plural(w);
-  /* Y al revés: el asesor escribe «maniquis» y el manual titula «MANIQUÍES».
-     Singularizar era la mitad del camino —la forma que el manual usa puede ser
-     la plural—, así que también se prueba añadiendo la terminación. Las que no
-     existen no coinciden con nada y no estorban. */
-  for(const x of[...v])if(x.length>3&&!x.endsWith('s')){v.push(x+'s');v.push(x+'es')}
-  /* El asesor pregunta "¿dónde acomodo lo rebajado?" y el manual escribe "la
-     mercancía rebajada": misma palabra, otro género, y el buscador devolvía
-     CERO fragmentos. Se prueba el género contrario en cada forma, incluida la
-     singularizada, para que «rebajados» también llegue a «rebajada». */
-  for(const x of[...v])if(x.length>4&&/[oa]$/.test(x))v.push(x.slice(0,-1)+(x.endsWith('o')?'a':'o'));
-  /* El asesor escribe el verbo y el manual titula el sustantivo. Medido sobre
-     87 preguntas con respuesta conocida en los once manuales, cuatro de los
-     cinco fallos de recall eran esto y solo esto: «doblo» no llegaba a DOBLADO,
-     «cuelgo» no llegaba a COLGADO, «colorizo» no llegaba a COLORIZACIÓN, y
-     «rebajado» no llegaba a «rebaja» —que el diccionario ya sabía llevar hasta
-     LIQUIDACIÓN—. No era vocabulario: la lámina estaba ahí y se llamaba casi
-     igual.
-
-     Dos derivaciones, en los dos sentidos: del verbo conjugado a la raíz
-     («doblo» → dobl) y del participio a la raíz («rebajado» → rebaj). Sobre
-     cada raíz se prueban las terminaciones con las que estos manuales titulan.
-
-     Y la diptongación, que es la que rompe el caso más común del piso: en
-     español la raíz cambia al conjugar —colgar/cuelgo, cerrar/cierro— así que
-     de «cuelg» se prueba también «colg». Sin eso, la mitad de los verbos
-     irregulares no alcanzan nunca su propio título. */
-  if(w.length>4){
-    const raices=[];
-    const part=w.match(/^(.{3,})(?:ados|adas|ado|ada)$/);
-    if(part)raices.push({raiz:part[1],part:true});
-    /* «¿cómo se doblan los pantalones?»: la tercera del plural también es
-       verbo, y sin ella «doblan» solo llegaba a DOBLADO de rebote, como errata. */
-    const conj=w.match(/^(.{3,})(?:an|en|[aeo])$/);
-    if(conj)raices.push({raiz:conj[1],part:false});
-    /* El mismo verbo en singular: «¿cómo se clasifican los cubiertos?» y el
-       manual de Mesa Fina dice «La cubertería se clasifica por estilos». Es la
-       misma persona gramatical que usa el manual para dar la regla, y no va
-       hacia el infinitivo, que es por donde se colaba «cambio» → «cambiar». */
-    if(/[^aeiou](?:an|en)$/.test(w))v.push(w.slice(0,-1));
-    /* Y al revés, de la primera persona del asesor a la del manual: «¿cómo
-       etiqueto…?» y la lámina dice «se etiquetan en la costura». Misma regla de
-       arriba: la persona con que el manual da la regla, nunca el infinitivo. */
-    if(conj&&/o$/.test(w))for(const t of['an','en'])v.push(conj[1]+t);
-    /* Solo se deriva hacia el sustantivo, nunca hacia el verbo. La primera
-       versión probaba también el infinitivo y reabrió un agujero que ya estaba
-       cerrado: «cambio» alcanzaba «cambiar», y «¿cómo cambio la llanta del
-       coche?» volvía a pasar por pregunta contestable —el arnés interno lo
-       cazó en el acto—. Es asimétrico a propósito, porque el problema lo es: el
-       asesor escribe el verbo y el manual titula el sustantivo, nunca al revés.
-       Del participio sí se vuelve al sustantivo corto («rebajado» → «rebaja»),
-       que es de donde el diccionario sabe seguir hasta LIQUIDACIÓN. */
-    /* «-eza» por «¿cuándo se limpia?»: la lámina se titula LIMPIEZA y dice
-       «limpiar», y la pregunta solo encontraba el check list. */
-    const SUF_VERBO=['ado','ada','ados','adas','acion','aciones','eza'];
-    const SUF_PARTICIPIO=['a','o','ar'];
-    for(const{raiz,part}of raices){
-      const dip=raiz.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
-      for(const r of dip===raiz?[raiz]:[raiz,dip])
-        for(const suf of part?SUF_PARTICIPIO:SUF_VERBO)v.push(r+suf);
-    }
-  }
-  return[...new Set(v)]
-}
-
-/* El diccionario de sinónimos está escrito en infinitivo —«acomodar»,
-   «colgar», «planchar»— y el asesor escribe conjugado. La derivación fuerte no
-   genera el infinitivo a propósito: por ahí se colaba «cambio» → «cambiar», y
-   con él las preguntas que no son del manual. Así que se genera aquí, y solo
-   para llamar a la puerta del diccionario: lo que entre por ella pesa lo que
-   pesa un sinónimo, no lo que pesa la palabra que el asesor escribió.
-
-   Sin esto, «¿cómo acomodo las tallas?» no llegaba a «colocar» —que es como lo
-   dice el manual de CASUAL, que nunca escribe «acomodar»— y la pregunta salía
-   marcada como si hablara de algo ajeno a su propia sección. */
-function infinitivos(w){
-  if(w.length<5)return[];
-  const m=w.match(/^(.{3,})(?:ados|adas|ado|ada|o|a|e)$/);
-  if(!m)return[];
-  const r=m[1];
-  const dip=r.replace(/ue([^aeiou]*)$/,'o$1').replace(/ie([^aeiou]*)$/,'e$1');
-  const out=[];
-  for(const x of dip===r?[r]:[r,dip])out.push(x+'ar',x+'er',x+'ir');
-  return out
-}
-
-/* Cada término recuerda de qué palabra del asesor salió (`g`). Sin eso,
-   «pasillos» aportaría un acierto por cada forma que probamos y el conteo de
-   aciertos —que es el que decide si hay respuesta o no— quedaría inflado por
-   una sola palabra. */
-function weightedTerms(query,doc){
-  const palabras=palabrasDeConsulta(query);
-  const terms=new Map();
-  const corregidas=new Map();
-  const add=(t,w,g)=>{if(t&&!terms.has(t))terms.set(t,{w,g})};
-  /* Se prueban TODAS las formas que existan en el índice, no solo cuando la
-     escrita falta. La regla vieja —"si la palabra existe, el manual ya usa esa
-     forma"— era cierta mientras el acierto se medía por trozo de palabra;
-     midiendo palabras enteras es falsa: «pasillo» aparece en la sección de
-     Tallas Especiales y «Pasillos: 90 cm» en la de datos técnicos, y quedarse
-     con la primera forma dejaba fuera precisamente la lámina que contesta.
-     No infla el conteo: todas las formas comparten grupo (`k`) y `hits` cuenta
-     grupos, no términos. */
-  const conVariantes=(t,w,g)=>{
-    add(t,w,g);
-    let existe=!!bm25.df[t];
-    for(const v of variantes(t))if(bm25.df[v]){add(v,w,g);existe=true}
-    return existe
-  };
-  for(const k of palabras){
-    for(const t of tokenize(k)){
-      /* Ni la palabra ni ninguna de sus formas está en el manual: puede ser una
-         errata, y entonces se prueba la palabra más parecida con descuento. */
-      if(!conVariantes(t,1,k)&&!esVerbo(k)){
-        /* La errata se marca con «!» y no con «~» para poder contarla aparte:
-           una palabra del diccionario es una apuesta del sistema, pero una
-           errata corregida ES la palabra que el asesor escribió, bien escrita.
-
-           Con una condición que costó una prueba del arnés: solo cuenta como
-           errata si la raíz cambia. El corrector busca por trigramas y no sabe
-           distinguir una errata de una forma legítima —«cambio» y «cambiar»
-           salen igual de parecidas que «colorisacion» y «colorizacion»—, pero
-           la raíz sí: en el primer caso es la misma («cambi») y en el segundo
-           no. Y una forma legítima ya tuvo su oportunidad en `variantes`; si
-           falló ahí, no es una errata del asesor. Sin esto, «¿cómo cambio la
-           llanta del coche?» volvía a pasar por pregunta contestable. */
-        const cerca=masParecida(t);
-        if(cerca){
-          add(cerca,SYNONYM_WEIGHT,(raizCorta(cerca)===raizCorta(t)?'~':'!')+k);
-          /* A sus sinónimos solo si está a una letra: «prmero» → «primero» sí;
-             «incapacidad» → «capacidad» (dos) llevaba a SURTIDO y LIMPIEZA. */
-          if(distanciaEdicion(t,cerca)<=1)corregidas.set(k,cerca);
-        }
-      }
-    }
-  }
-  /* Aquí NO se usan los infinitivos, y está medido: metiéndolos, «¿cómo cambio
-     la llanta del coche?» alcanzaba los sinónimos de «cambiar» —rotar,
-     actualizar, renovar— y dos de ellos bastaban para que la pregunta pasara
-     por contestable. El recall de la batería es el mismo con ellos y sin ellos
-     (88 de 88), así que no compran nada y cuestan una prueba de ruido. Donde sí
-     hacen falta es en `terminosAusentes`, que es una comprobación y no una
-     búsqueda: allí ensanchar solo puede callar un aviso, nunca inventarlo. */
-  /* La palabra corregida también llama a la puerta del diccionario: «q va
-     prmero en el pos» corregía a «primero», pero los sinónimos se buscaban con
-     «prmero», y «Prioridad 1» —como lo escriben los manuales— no llegaba. */
-  for(const k of palabras){
-    for(const base of variantes(k))for(const phrase of expandKeywords([base])){
-      if(phrase===base)continue;
-      /* El diccionario está escrito en singular («pasillo») y el manual titula
-         en plural («Pasillos: 90 cm»): el sinónimo se quedaba a una letra de su
-         propia lámina. */
-      for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
-    }
-    /* Los de la palabra corregida van a medio peso: son la apuesta de una
-       apuesta. Cuentan para no dejar en blanco la pregunta, pero no ordenan:
-       a peso entero, «las caisas ban con bolsa» corregía a «camisas» y sus
-       sinónimos —prenda alta, blusa— subían ENGANCHADO sobre la lámina que
-       dice «sin bolsa». */
-    if(corregidas.has(k))for(const base of variantes(corregidas.get(k)))for(const phrase of expandKeywords([base])){
-      if(phrase===base)continue;
-      for(const t of tokenize(phrase))conVariantes(t,SYNONYM_WEIGHT/2,'~'+k);
-    }
-    /* Lo que aprendió el piso entra como una palabra más del diccionario —mismo
-       peso, mismo grupo—: ayuda a llegar, pero no vale como palabra escrita. */
-    for(const p of palabrasAprendidasPara(k,doc))for(const t of tokenize(p.manual))conVariantes(t,SYNONYM_WEIGHT,'~'+k);
-  }
-  return[...terms].map(([t,{w,g}])=>({t,w,g}))
-}
-
-function queryShingles(query){
-  const toks=normalizeText(query).split(/\s+/).filter(Boolean);
-  const out=[];
-  for(let n=3;n>=2;n--)for(let i=0;i+n<=toks.length;i++){
-    const s=toks.slice(i,i+n).join(' ');
-    if(s.length>7)out.push(s);
-  }
-  return out.slice(0,8)
-}
-
-const CHECKLIST=/\bcheck ?list\b|\bchecklist\b|lista de (?:verificacion|revision)/;
-const PIDE_CHECKLIST=/check|lista|revis|verific|pendiente|todo lo que/;
-const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separacion|separación|porcentaje|cantidad|piezas|\bcm\b|\bmts?\b|metro|%/i;
-
-/* «¿A qué altura va el sensor?» se contesta con «de 8 a 12 cm de la
-   bastilla», y la lámina nunca escribe «altura». Esa palabra dice qué tipo de
-   respuesta se busca —una medida—, igual que «porcentaje» pide una cifra: una
-   lámina con una medida la cumple. Sin esto, en DISEÑADORES la lámina de
-   SENSORES puntuaba primera y aun así se quedaba fuera, porque de las dos
-   palabras que se le exigían solo traía «sensor». */
-const PALABRAS_DE_MEDIDA=new Set(['altura','alturas','distancia','distancias','separacion','separaciones','medida','medidas']);
-const CON_MEDIDA=/\d\s*(?:cm|centimetros?|mts?|metros?|mm)\b/;
-/* Un rótulo es un fragmento sin una sola frase: la lista de marcas de un
-   planograma, «Izquierda / Arriba / Adelante», «Nórdico / Industrial /
-   Brutalista». Muchas veces ES la respuesta —«¿qué marcas van en premium?», «30%
-   de participación»—, pero no a un «¿dónde…?» ni a un «¿cómo…?»: ahí ganaba por
-   corto y por llevar la palabra en el título. En ROPA INTERIOR, «¿dónde van los
-   básicos?» salía con la lista de marcas de BÁSICOS y no con
-   «va en el interior de la sección o en la parte trasera». Los renglones se unen
-   como en la tarjeta: el PDF corta la frase donde cortó la maqueta. */
-const PIDE_INSTRUCCION=/\b(?:donde|como|cuando|por ?que|para que)\b/;
-/* Lo mismo con el precio: «¿a partir de qué precio va un vino en la cava?» se
-   contesta con «mayor a $1,200.00», y salía antes MUEBLES TIPO CAVA, que dice
-   «punto de precio» sin dar ninguno. Solo cuando se pregunta una cantidad:
-   «¿dónde va la etiqueta de precio?» no pide ninguna. */
-function pideUnPrecio(q){
-  return /\b(?:que|cual|cuanto|minimo|maximo|mayor|menor)\s+(?:es\s+el\s+)?precio|\bcuest(?:a|an)\b|\bpesos\b/.test(normalizeText(q).replace(/\s+/g,' '))
-}
-function esRotulo(c){
-  if(c.rotulo===undefined){
-    const corrido=(c.text||'').replace(/([^.:;!?\n])\n(?=[a-záéíóúñ0-9(])/g,'$1 ');
-    /* Frase: seis palabras, o tres que cierran con punto. Lo segundo es por
-       las listas numeradas de características —«1. Varias formas y tamaños.»—,
-       que son frases cortas y no rótulos. */
-    c.rotulo=!corrido.split('\n').some(l=>{
-      const n=(l.match(/\p{L}{2,}/gu)||[]).length;
-      return n>=6||(n>=3&&/\.\s*$/.test(l))
-    });
-  }
-  return c.rotulo
-}
-/* La lámina que se llama como lo que se preguntó. «¿Cómo etiqueto un producto
-   SIN CAJA?» tiene su respuesta en una lámina titulada SIN CAJA —«se etiquetan
-   en la costura»—, y salían primero CON CAJA y CAJA CON COLGADOR, que traen más
-   palabras de la pregunta. El título contrario es la otra mitad: quien pregunta
-   «sin caja» ya descartó la de «con caja». Solo títulos de dos palabras o más,
-   porque los de una —BÁSICOS, PREMIUM, CORNER— son justo los rótulos que ya
-   ganan de más. */
-const OPUESTOS={sin:'con',con:'sin'};
-function titulosDeLaPregunta(query){
-  const q=normalizeText(query).split(/\s+/).filter(Boolean);
-  const formas=q.map(w=>new Set(w.length>3?variantes(w):[w]));
-  const pares=[];
-  for(let i=0;i+1<q.length;i++)if(OPUESTOS[q[i]]&&q[i+1].length>=3&&!STOPWORDS.has(q[i+1]))pares.push({pol:q[i],formas:formas[i+1]});
-  return{
-    nombrado(h){
-      if(h.length<2)return false;
-      for(let i=0;i+h.length<=q.length;i++)if(h.every((t,j)=>formas[i+j].has(t)))return true;
-      return false
-    },
-    /* +1 si el título trae la pareja de la pregunta («sin caja»), −1 si trae la
-       contraria («con caja»). Con «sin», también un título que nombra la cosa
-       y dice «con» en otro sitio: CAJA CON COLGADOR es un producto con caja.
-       Nombrarla a secas no basta para descartarla: SACOS Y PANTALONES no es lo
-       contrario de «saco sin pantalón», es la sección entera. */
-    polaridad(h){
-      let r=0;
-      for(const{pol,formas:f}of pares)for(let j=0;j<h.length;j++){
-        if(!f.has(h[j]))continue;
-        const antes=h[j-1];
-        if(antes===pol)r=Math.max(r,1);
-        else if(antes===OPUESTOS[pol]||(pol==='sin'&&h.includes('con')))return -1;
-      }
-      return r
-    }
-  }
-}
-
-/* Devuelve los fragmentos ordenados, y con cuántas palabras de la pregunta
-   coincidieron de verdad (`hits`). Ese conteo es lo que permite al modo sin
-   API decir "esto no está en el manual" en vez de entregar lo menos malo. */
-/* Los verbos con que se pregunta en el piso: «¿cómo ACOMODO los vinos?»,
-   «¿dónde VAN las cervezas?», «¿cuántos cubos PONGO?». El manual casi nunca los
-   usa —dice «Los vinos se exhiben en la cava»—, así que como palabra exigida
-   dejaban fuera la lámina que contesta: con 30 manuales reales cargados, 27 de
-   186 preguntas verificadas salían sin ninguna tarjeta. Siguen sumando puntaje
-   donde aparecen, pero no cuentan como acierto ni como palabra que exigir: si
-   contaran, «¿dónde van los perros?» pasaría por contestable solo por el «van». */
-const VERBOS_DE_PISO=new Set(['va','van','vaya','vayan','pongo','pone','ponen','poner','pongan','ponga','acomodo','acomoda','acomodan','acomodar','acomodamos','hago','hace','hacen','hacer','exhibo','exhibe','exhiben','exhibir','armo','arma','arman','armar','ordeno','ordena','ordenan','ordenar','coloco','coloca','colocan','colocar','sirve','sirven','servir','uso','usa','usan','usar','lleva','llevan','llevar','cuanto','cuanta','cuantos','cuantas','quito','quita','quitan','quitar','necesito','debo','deben','tengo','tienen','tener','dejo','deja','dejan','dejar',
-  /* «¿Puedo poner…?» pregunta si se permite, y el tema viene después. Desde que
-     la primera persona alcanza la tercera del plural —«etiqueto» → «etiquetan»—,
-     «puedo» acertaba en cualquier lámina con «pueden» y contaba como palabra. */
-  'puedo','pueden','podemos',
-  /* Y las que dicen QUÉ TIPO de respuesta se busca, no DE QUÉ: los manuales
-     escriben «56% de participación», casi nunca «porcentaje». Contando como
-     acierto, «¿qué porcentaje tiene contempo?» ponía primero a LIBRERÍA —«menor
-     porcentaje de participación», sin rastro de Contempo— y con Casual activa
-     mandaba al asesor a Librería en vez de a los cuatro manuales que sí lo
-     tienen. La cifra la tiene que traer la palabra de la que se pregunta. */
-  'porcentaje','porcentajes','porciento','participacion']);
-/* Y como se escriben en el piso: «donde BAN las sandalias», «q YEBA el
-   precio», «para ke SIRBEN los roperos», «como ACOMDO los vinos». Con 186
-   preguntas reales pasadas por erratas de celular, 52 salían sin ninguna
-   tarjeta, y en la mayoría la única errata era el verbo: «ban» no era «van»,
-   contaba como palabra exigida y el corrector lo llevaba a «baño». Se compara
-   cómo suena, y con una letra de diferencia solo si la palabra no existe en los
-   manuales: «orden» está en ellos y no es una errata de «ordena». */
-const VERBOS_FONETICOS=new Set([...VERBOS_DE_PISO].map(fonetica));
-let verbosVistos=new Map();
-function esVerbo(w){
-  if(verbosVistos.has(w))return verbosVistos.get(w);
-  let si=VERBOS_DE_PISO.has(w)||VERBOS_FONETICOS.has(fonetica(w));
-  if(!si&&w.length>=5&&!bm25.df[w]){
-    const f=fonetica(w);
-    for(const v of VERBOS_FONETICOS)if(v.length>=5&&v[0]===f[0]&&distanciaEdicion(f,v)<=1){si=true;break}
-    /* Y lo que el corrector ya sabe llevar a una de estas palabras: «porcntaje»
-       suena a «porkntaje» y «porcentaje» a «porsentaje» —dos letras—, pero los
-       trigramas sí lo llevan a «porcentaje». */
-    if(!si){const c=masParecida(w);si=!!c&&VERBOS_DE_PISO.has(c)}
-  }
-  verbosVistos.set(w,si);
-  return si
-}
-const esVerboDePiso=g=>esVerbo(g.replace(/^[~!]/,''));
-function retrieve(query,opts){
-  const{source=null,limit=40,doc=null}=opts||{};
-  let terms=weightedTerms(query,doc);
-  /* Dentro de UNA sección, su propio nombre no distingue nada: todo el manual
-     de CASUAL HOMBRE es de hombre. «entayado de hombres» contestaba con la
-     portada —titulada «140 CASUAL HOMBRE»— antes que con ENTALLADO. Entre
-     secciones sí distingue, y ahí (sin `doc`) se queda. */
-  if(doc){
-    const propio=new Set(tokenize(nombreDeSeccion(doc)));
-    const esDelNombre=g=>variantes(g.replace(/^[~!]/,'')).some(v=>propio.has(v));
-    const resto=terms.filter(x=>!esDelNombre(x.g));
-    /* Si tras quitar el nombre solo quedan verbos, la pregunta ES el nombre:
-       «¿cómo acomodo los vinos?» en VINOS Y LICORES. */
-    if(resto.some(x=>!esVerboDePiso(x.g)))terms=resto;
-  }
-  if(!terms.length)return[];
-  /* Lo que se exige se mide sobre lo que de verdad se busca. Contarlo sobre la
-     pregunta entera pedía dos aciertos a «¿el saco va junto al pantalón?» en
-     SACOS Y PANTALONES, donde a la búsqueda solo le queda «junto». */
-  const exigidos=exigenciaDeSolidez([...new Set(terms.map(x=>x.g.replace(/^[~!]/,'')))].filter(g=>!esVerbo(g)).length);
-  const strongContables=new Set(terms.filter(x=>x.w===1&&!esVerboDePiso(x.g)).map(x=>x.t));
-  const flojosContables=new Set(terms.filter(x=>x.w!==1&&!esVerboDePiso(x.g)).map(x=>x.t));
-  const strong=terms.filter(t=>t.w===1);
-  const flojos=terms.filter(t=>t.w!==1);
-  const palabrasEscritas=new Set(strong.filter(x=>!esVerboDePiso(x.g)).map(x=>x.g)).size||1;
-  const shingles=queryShingles(query);
-  /* Los manuales dan la participación siempre igual: «30% de participación».
-     Si se pregunta por el porcentaje, esa frase es la respuesta, y no el
-     planograma de la página siguiente con «50%+ 20%», que ganaba por corto. */
-  /* «que porsentaje tiene premium»: la errata también pide la cifra. */
-  const pidePorcentaje=/porcentaje|porciento|participacion/.test(normalizeText(query))||query.includes('%')
-    ||palabrasDeConsulta(query).some(w=>palabraDeCifra(w));
-  const wantsNumber=NUMERIC_INTENT.test(query)||pidePorcentaje;
-  const pidePrecio=pideUnPrecio(query);
-  const pideInstruccion=PIDE_INSTRUCCION.test(normalizeText(query));
-  const titulos=titulosDeLaPregunta(query);
-  const out=[];
-  for(const c of corpus){
-    if(source&&c.source!==source)continue;
-    /* Sección activa: el asesor trabaja UN manual, y filtrar aquí deja fuera de
-       una sola vez el contexto, las láminas y la verificación. */
-    if(doc&&c.docName!==doc)continue;
-    let score=bm25Score(c,terms);
-    if(score<=0)continue;
-    /* El acierto se cuenta por palabra entera, no por trozo. Con `includes` a
-       secas, «cambia» —variante de género de «cambio»— acertaba dentro de
-       «cambiar», y "¿cómo cambio la llanta del coche?" pasaba por pregunta
-       contestable: un acierto bastaba para que el modelo recibiera fragmentos
-       bajo la orden de responder con ellos. Las formas legítimas ya las genera
-       `variantes` de este lado; lo que se pierde aquí no es morfología, es
-       coincidencia parcial. Los espacios se normalizan porque `normalizeText`
-       conserva los saltos de línea y una palabra a principio de renglón no
-       quedaría rodeada de espacios. */
-    const norm=' '+normalizeText((c.heading?c.heading+' ':'')+c.text).replace(/\s+/g,' ')+' ';
-    const contiene=t=>norm.includes(' '+t+' ');
-    const gAcierto=new Set();
-    const conMedida=CON_MEDIDA.test(norm);
-    for(const{t,g}of strong)if(strongContables.has(t)&&(contiene(t)||(conMedida&&PALABRAS_DE_MEDIDA.has(g))))gAcierto.add(g);
-    const hits=gAcierto.size;
-    /* Los aciertos por sinónimo se cuentan aparte: valen menos que la palabra
-       que el asesor escribió, pero un fragmento que solo se encontró por el
-       diccionario es exactamente el caso para el que existe el diccionario.
-       Aquí sí cuenta cada término y no cada palabra de origen: que una lámina
-       diga «alineación», «circulación» y «80 cm» a la vez es evidencia, aunque
-       las tres salgan de haber escrito «pasillo». */
-    let hitsSyn=0,hitsErrata=0;
-    for(const{t,g}of flojos)if(flojosContables.has(t)&&contiene(t)){if(g[0]==='!')hitsErrata++;else hitsSyn++}
-    let phrase=0;
-    for(const sh of shingles)if(norm.includes(sh))phrase++;
-    score+=Math.min(phrase,3)*1.5;
-    if(c.heading){
-      const h=normalizeText(c.heading);
-      for(const{t}of strong)if(h.includes(t)){score+=2;break}
-    }
-    if(wantsNumber&&c.hasDigits)score+=1.5;
-    if(pidePorcentaje&&/\d\s*%\s*de\s+participaci[oó]n/i.test(c.text))score+=3;
-    if(pidePrecio&&/\$\s?\d/.test(c.text))score+=3;
-    /* El check list repite en un renglón cada regla del manual, y en una página
-       corta: BM25 lo subía por encima de la lámina que la explica. «¿para dónde
-       va el gancho?» contestaba con «Ganchos hacia la izquierda y 3 cm…» en vez
-       de ENGANCHADO, con su dibujo. Baja salvo que se pregunte por él. */
-    if(c.heading&&CHECKLIST.test(normalizeText(c.heading))&&!PIDE_CHECKLIST.test(normalizeText(query)))score*=0.6;
-    if(pideInstruccion&&esRotulo(c))score*=0.6;
-    if(c.heading){
-      const h=normalizeText(c.heading).split(/\s+/).filter(Boolean);
-      const pol=titulos.polaridad(h);
-      /* La pareja exacta pesa más que el título nombrado: además de nombrar,
-         descarta el caso contrario. A ×1.5, SIN CAJA seguía detrás de dos
-         láminas que llegan por «caja» → «punto de venta», que es otra caja. */
-      if(pol<0)score*=0.5;
-      else if(pol>0)score*=2;
-      else if(titulos.nombrado(h))score*=1.5;
-    }
-    /* Estos dos bonos suben un fragmento por lo que ES, no por lo que se
-       preguntó. Sin evidencia léxica de por medio convertían cualquier regla
-       obligatoria en la respuesta a todo, que es como una pregunta de cocina
-       acababa devolviendo la sección de entallado. */
-    if(hits+hitsSyn+hitsErrata>0){
-      if(/\[mandatory\]/i.test(c.text))score+=2;
-      if(/conflicto documentado/i.test(c.text))score+=2.5;
-    }
-    /* Cuántas de las palabras que escribió el asesor trae el fragmento. BM25
-       suma cada término por separado, y tres sinónimos pesaban más que la
-       palabra escrita: en CALCETINES, «¿dónde va la liquidación?» salía con
-       TEMPORADA BARATA —«barata» y «descuento», del diccionario— y no con la
-       lámina que dice «liquidación» tal cual. Un fragmento que las trae todas
-       vale el doble que uno que no trae ninguna. La errata corregida cuenta
-       como escrita, porque es la palabra del asesor bien escrita. */
-    score*=1+Math.min(palabrasEscritas,hits+hitsErrata)/palabrasEscritas;
-    out.push({c,score,hits,hitsSyn,hitsErrata,exigidos});
-  }
-  /* La página que el piso señaló para esta forma de preguntar sube un escalón.
-     Solo reordena lo que ya llegó por sus palabras: un atajo no mete una
-     página que la búsqueda no encontró, ni pasa por encima de la solidez. */
-  const atajos=out.length?atajosPara(query,doc):[];
-  if(atajos.length){
-    const mejor=Math.max(...out.map(r=>r.score));
-    const paginas=new Set(atajos.map(a=>a.sec+'|'+a.pagina));
-    for(const r of out)if(r.c.page&&paginas.has(secDe(r.c.docName)+'|'+r.c.page)){r.score+=mejor*APRENDE_BONO_ATAJO;r.atajo=true}
-  }
-  out.sort((a,b)=>b.score-a.score||b.hits-a.hits);
-  return(out.some(r=>r.c.isFicha==='indice')?paginasEnVezDeFicha(out,terms):out).slice(0,limit)
-}
-/* La ficha que escribió la IA dice que ESA página habla de lo preguntado, pero
-   no es el manual: en su lugar entran los fragmentos reales de la página, con
-   la puntuación y los aciertos que ganó la ficha. Así «¿qué marcas son
-   contemporáneas?» llega a la lámina que titula «Contempo», y lo que se lee —en
-   pantalla o en el contexto del modelo— sigue siendo texto del manual. */
-let fragmentosPorPagina=null;
-function fragmentosDePagina(docName,page){
-  if(!fragmentosPorPagina){
-    fragmentosPorPagina=new Map();
-    for(const c of corpus){
-      if(c.isFicha==='indice'||!c.page)continue;
-      const k=c.docName+'|'+c.page;
-      if(!fragmentosPorPagina.has(k))fragmentosPorPagina.set(k,[]);
-      fragmentosPorPagina.get(k).push(c);
-    }
-  }
-  return fragmentosPorPagina.get(docName+'|'+page)||[]
-}
-/* Entra UN fragmento de la página, el que más se parece a la pregunta. Con los
-   tres primeros, medido con dos manuales reales, 23 de 51 respuestas del modo
-   manual salían con las tres tarjetas de la misma página, y la que sí traía la
-   respuesta quedaba fuera. Los demás fragmentos de la página siguen compitiendo
-   con su propia puntuación. */
-function paginasEnVezDeFicha(resultados,terms){
-  const vistos=new Set(),salida=[];
-  const meter=r=>{if(!vistos.has(r.c)){vistos.add(r.c);salida.push(r)}};
-  for(const r of resultados){
-    if(r.c.isFicha!=='indice'){meter(r);continue}
-    let mejor=null,mejorP=-1;
-    for(const c of fragmentosDePagina(r.c.docName,r.c.page)){
-      if(vistos.has(c))continue;
-      const p=terms?bm25Score(c,terms):0;
-      if(p>mejorP){mejorP=p;mejor=c}
-    }
-    if(mejor)meter({...r,c:mejor});
-  }
-  return salida
-}
-
-/* La etiqueta de origen viaja pegada al fragmento hasta el prompt, para que
-   el modelo pueda citar la página y el asesor pueda ir a verla. */
-function chunkLabel(c){
-  const parts=[c.docName];
-  if(c.page)parts.push('pág. '+c.page);
-  if(c.heading)parts.push(c.heading);
-  if(c.isFigure)parts.push('figura descrita por IA');
-  if(c.isFicha==='visual')parts.push('lo que se lee en la imagen, transcrito por IA');
-  return'['+parts.join(' · ')+']'
-}
-
-/* Se recuerda qué fragmentos entraron de verdad al contexto, no cuáles
-   puntuaron alto: es la única lista contra la que tiene sentido verificar la
-   respuesta y de la que se pueden sacar las figuras que la acompañan. */
-let ultimosFragmentos=[];
 /* Y si la pregunta era de otra sección cargada, cuál: el botón que ofrece el
    cambio se pinta con la respuesta, que es donde el asesor está mirando. */
 let ultimaOtraSeccion=null;
@@ -1127,219 +379,6 @@ let ultimaSeccionSugerida=null;
    del selector. Va a la tira de fuentes: responder por una sección que el asesor
    no eligió sin decírselo es la misma trampa, al revés. */
 let ultimaSeccionUsada=null,ultimaSeccionPorPregunta=false;
-
-/* Se enviaban ~20 fragmentos por pregunta —41 con dos manuales cargados—, y eso
-   es lo que quema la cuota. Estos cuatro filtros se midieron sobre 24 preguntas
-   de respuesta conocida en los 7 manuales reales, incluidas seis en las que el
-   asesor NO usa las palabras de la lámina (que son las únicas que ponen a prueba
-   un corte por puntuación). Bajan el contexto de 7199 a 2860 caracteres —60%
-   menos— sin perder una sola respuesta.
-
-   El corte es RELATIVO al mejor fragmento de esa consulta, no absoluto: ya se
-   probó y se descartó el umbral fijo, porque las puntuaciones no son comparables
-   entre manuales —«¿a qué hora abre la tienda?» llega a 7.5 y una pregunta buena
-   se queda en 2.3—. Relativo, cada pregunta trae su propia escala.
-
-   α=0.25 y no más: el caso más ajustado de los medidos —«¿dónde coloco la alarma
-   en el pantalón?», que llega por sinónimo— se queda al 52% del mejor. Con 0.25
-   hay el doble de holgura; con 0.35 el ahorro sube al 72% pero el margen cae a
-   la mitad, y no vale la pena para una pregunta que no esté en la muestra. */
-const CTX_ALPHA=0.25;             // corte relativo al mejor fragmento
-const CTX_JACCARD=0.8;            // dos fragmentos casi iguales: sobra uno
-const CTX_MAX_POR_PAGINA=3;       // una lámina verbosa no se come el presupuesto
-
-function jaccardTokens(a,b){
-  let comunes=0;
-  for(const t of a)if(b.has(t))comunes++;
-  return comunes/(a.size+b.size-comunes||1)
-}
-
-/* ── DOS TEMAS EN UNA FRASE ────────────────────────
-   «¿Cómo doblo la mercancía y cada cuándo se resurte?» son dos preguntas, y el
-   corte de packChunks es relativo al MEJOR fragmento de la consulta entera: si
-   un tema puntúa alto, el otro se queda por debajo del 25% y desaparece del
-   contexto. Medido: esa pregunta traía DOBLADO y perdía SURTIDO, y el asesor
-   recibía media respuesta — que es de lo que se quejó en el piso.
-
-   No se toca el corte, que está medido y protege del ruido: se le da a cada
-   tema su propia escala. Cada parte se busca por separado, sus puntuaciones se
-   normalizan contra su propio mejor fragmento, y la mezcla se ordena ya en esa
-   escala común. La consulta entera también aporta, porque hay fragmentos que
-   solo casan con la frase completa. */
-function partesDeConsulta(q){
-  const trozos=(q||'').split(/\s+y\s+/i).map(s=>s.trim());
-  if(trozos.length<2)return[];
-  const utiles=trozos.filter(s=>palabrasDeConsulta(s).length>=1);
-  return utiles.length>=2?utiles:[]
-}
-function mezclarPorPartes(query,results,opts){
-  const partes=partesDeConsulta(query);
-  if(partes.length<2||!results.length)return results;
-  const mejor=new Map();
-  const meter=lista=>{
-    const top=lista.length?(lista[0].score||1):1;
-    for(const r of lista){
-      const rel=r.score/top;
-      const prev=mejor.get(r.c);
-      if(!prev||rel>prev.score)mejor.set(r.c,Object.assign({},r,{score:rel}));
-    }
-  };
-  meter(results);
-  for(const p of partes)meter(retrieve(p,opts));
-  return[...mejor.values()].sort((a,b)=>b.score-a.score||b.hits-a.hits)
-}
-
-function packChunks(results,maxChars,maxFrag){
-  let out='',chars=0,n=0;
-  const corte=results.length?results[0].score*CTX_ALPHA:0;
-  const firmas=[],porPagina=new Map();
-  for(const r of results){
-    if(chars>=maxChars)break;
-    if(maxFrag&&n>=maxFrag)break;
-    if(r.score<corte)continue;
-    if(r.c.page){
-      const k=r.c.docName+'|'+r.c.page;
-      if((porPagina.get(k)||0)>=CTX_MAX_POR_PAGINA)continue;
-      porPagina.set(k,(porPagina.get(k)||0)+1);
-    }
-    /* Los 7 manuales comparten plantilla, así que el mismo párrafo aparece
-       cinco veces con otro número dentro. Repetirlo no informa, solo ocupa.
-       Dos precauciones que costaron una respuesta en la prueba con dos manuales
-       cargados: la firma incluye el TÍTULO, porque el dato distintivo suele
-       vivir ahí —«PRÁCTICO» en un manual y «PRÁCTICO (20.8%):» en el otro, con
-       el mismo párrafo debajo—; y nunca se comparan fragmentos de documentos
-       distintos, porque que dos manuales digan lo mismo no vuelve prescindible
-       al del asesor. Sin esto, el 20.8% de Blancos desaparecía del contexto por
-       parecerse a una lámina de Caballero. */
-    const firma=new Set(tokenize((r.c.heading||'')+' '+r.c.text));
-    if(firmas.some(g=>g.doc===r.c.docName&&jaccardTokens(firma,g.set)>=CTX_JACCARD))continue;
-    const header=chunkLabel(r.c)+'\n';
-    const space=maxChars-chars-header.length;
-    if(space<80)break;
-    /* Antes el último fragmento entraba cortado a la mitad con «[...]». Media
-       regla es peor que ninguna: el modelo la cita completa igual, y la
-       verificación numérica no encuentra la cifra que quedó fuera.
-       Pero cortar AQUÍ el empaquetado entero —que es lo que hacía un `break`—
-       tiraba también todos los fragmentos siguientes, más cortos y que sí
-       cabían: una lámina larga en tercer lugar dejaba fuera la que traía la
-       respuesta. El que no cabe se salta; los demás siguen entrando. */
-    if(r.c.text.length>space)continue;
-    out+=header+textoComoDato(r.c.text)+'\n\n';
-    chars+=header.length+r.c.text.length;
-    n++;
-    firmas.push({doc:r.c.docName,set:firma});
-    ultimosFragmentos.push(r.c);
-  }
-  /* Lo que va al modelo, entre las marcas con el sello de la sesión. */
-  return envolverComoDato(out.trim())
-}
-/* Un fragmento «sólido» es el que coincidió de verdad con la pregunta.
-   Contarlos es lo que permite avisar al modelo de que no se encontró nada, en
-   vez de entregarle fragmentos sueltos bajo la orden de "responde solo con
-   esto" — que es la vía por la que entraban casi todas las invenciones.
-
-   El listón depende de la escala. Con los 10 fragmentos del manual interno,
-   pedir un acierto bastaba. Con cinco manuales reales cargados —572 fragmentos—
-   un solo acierto de palabra común deja pasar cualquier cosa: medido, «¿a qué
-   hora abre la tienda?» acierta «tienda» y se lleva 8412 caracteres de contexto,
-   y «¿cómo cambio la llanta del coche?» se lleva una lámina de PLANCHADO.
-
-   Medido sobre los 5 manuales, 8 preguntas buenas contra 5 de ruido: la
-   puntuación NO separa (6.49 de una buena contra 6.7 de un ruido), pero
-   `hits+hitsSyn` sí — todas las buenas llegan a 2 y ningún ruido pasa de 1.
-
-   Pero el mismo listón aplicado al manual interno tumba respuestas buenas, y no
-   es una contradicción: es que un acierto vale distinto según con cuánto
-   compita. El interno son 10 secciones de mil caracteres, y cada una ES un tema
-   entero —acertar «producto» dentro de «BÁSICOS DE DISPLAY» apunta de verdad a
-   la regla de slow movers—. Los manuales reales son fragmentos de 185
-   caracteres: ahí la misma palabra suelta es una coincidencia.
-
-   Así que la exigencia escala con el corpus. Los dos regímenes medidos están
-   lejos —10 fragmentos el interno, 88 a 572 los reales—, así que el corte no es
-   un número afinado al borde: cualquier valor entre ambos se comporta igual.
-
-   Dos caminos, porque son dos tipos de evidencia distintos: la palabra que el
-   asesor escribió (`hits`), o dos términos del diccionario a la vez (`hitsSyn`),
-   que es el caso de «¿cuánto espacio dejo para que pase la gente?» — no comparte
-   ni una palabra con la lámina de ALINEACIÓN y aun así es su respuesta.
-
-   La excepción de una sola palabra no es un parche: «¿qué va en el POS?» y
-   «maniquis» son preguntas de una palabra y no pueden aportar dos aciertos.
-
-   Y no es una decisión binaria, porque medido no puede serlo: a escala real
-   «¿cómo acomodo las tallas?» —una pregunta central del piso— deja la misma
-   huella que «¿a qué hora abre la tienda?»: un solo acierto en el mejor
-   fragmento. Cortar ahí en seco contesta "el manual no especifica" a una
-   pregunta que el manual sí contesta, y eso vacía la herramienta mucho más
-   rápido que un contexto de más.
-
-   Así que hay tres niveles. Con evidencia sólida se responde normal; con
-   evidencia débil se entrega el contexto PERO avisando de que la coincidencia es
-   floja, y es el modelo —que sabe leer si esos fragmentos vienen al caso— quien
-   decide; sin ninguna coincidencia no se finge nada. El corte duro sigue siendo
-   la red de seguridad; el aviso de invención vive en la regla CERO INVENCIÓN y
-   en la verificación, no aquí. */
-const CORPUS_GRANDE=40;
-function exigenciaDeSolidez(consulta){
-  const palabras=(typeof consulta==='number'?consulta:palabrasDeConsulta(consulta).length)||1;
-  return Math.max(1,Math.min(corpus.length>CORPUS_GRANDE?2:1,palabras))
-}
-/* Algo, aunque sea poco: un acierto de la palabra escrita, dos del diccionario,
-   o una errata corregida.
-
-   Lo tercero faltaba, y se veía en una pregunta de una sola palabra mal
-   escrita: «¿cómo va colorisacion?» corregía bien —COLORIZACIÓN— y devolvía
-   CERO fragmentos, porque la corrección pesaba como un sinónimo y el listón del
-   diccionario son dos. Un sinónimo es una apuesta del sistema y por eso se le
-   piden dos; una errata corregida es la palabra que el asesor escribió, y pedir
-   dos equivale a no contestarle nunca cuando escribe rápido. */
-const hayAlgo=r=>r.hits>=1||r.hitsSyn>=2||r.hitsErrata>=1;
-function filtroSolidez(consulta){
-  const exigidos=exigenciaDeSolidez(consulta);
-  return r=>hayAlgo(r)&&(r.hits+r.hitsSyn+r.hitsErrata)>=(r.exigidos??exigidos)
-}
-/* 2 = sólido · 1 = flojo · 0 = nada */
-function nivelDeEvidencia(results,consulta){
-  if(results.some(filtroSolidez(consulta)))return 2;
-  return results.some(hayAlgo)?1:0
-}
-const MUESTRA_SIN_COINCIDENCIAS=1200;
-
-function getManualContext(query,maxChars,maxFrag){
-  const opts={source:'manual'};
-  const results=retrieve(query,opts);
-  const nivel=nivelDeEvidencia(results,query);
-  if(!nivel)return{texto:manualSections.slice(0,2).map(s=>s.text).join('\n\n').slice(0,MUESTRA_SIN_COINCIDENCIAS),nivel:0};
-  return{texto:packChunks(mezclarPorPartes(query,results,opts),maxChars,maxFrag),nivel}
-}
-
-/* 40 candidatos era generoso de más: después de los filtros de packChunks nunca
-   sobreviven más de 9, así que puntuar el doble solo alarga la lista. */
-const PDF_CANDIDATOS=20;
-function getPdfContext(query,maxChars,doc){
-  if(!docChunks.length)return{texto:'',nivel:0};
-  const opts={source:'pdf',limit:PDF_CANDIDATOS,doc:doc===undefined?appState.manualActivo:doc};
-  const results=retrieve(query,opts);
-  const nivel=nivelDeEvidencia(results,query);
-  if(nivel)return{texto:packChunks(mezclarPorPartes(query,results,opts),maxChars),nivel};
-  /* Sin una sola coincidencia sólida: en vez de callar, se entrega una muestra
-     corta de cada manual para que el modelo vea de qué trata y pueda decir que
-     no encontró la regla, no que el manual no existe. Corta a propósito: cuanto
-     más material se le pone delante bajo la orden de "responde solo con esto",
-     más fácil es que componga una respuesta plausible con lo que haya. */
-  /* Y solo del manual del asesor si eligió sección. Con once cargados la
-     muestra traía la portada de los once: se ve en pantalla, debajo de un aviso
-     que dice "esto no es la respuesta", una ristra de secciones que no son la
-     suya. La muestra existe para que el modelo sepa de qué va SU manual. */
-  const fuente=opts.doc?docChunks.filter(c=>c.docName===opts.doc):docChunks;
-  const byDoc=new Map();
-  for(const c of fuente)if(!byDoc.has(c.docName))byDoc.set(c.docName,[]);
-  for(const c of fuente){const arr=byDoc.get(c.docName);if(arr.length<Math.max(1,Math.floor(4/byDoc.size)))arr.push(c)}
-  const sampled=[];
-  for(const arr of byDoc.values())for(const c of arr)sampled.push({c,score:0,hits:0});
-  return{texto:packChunks(sampled,MUESTRA_SIN_COINCIDENCIAS),nivel:0}
-}
 
 /* ════════════════════════════════════════════════
    CONSTRUCCIÓN DE CONTEXTO
@@ -1458,38 +497,9 @@ function decidirSeccion(query){
     const ruta=rutaDe(query);
     return{doc:ruta.doc,otraSeccion:null,porPregunta:RUTA_ROTULO[ruta.motivo]||false}
   }
-  /* Con la pregunta ESCRITA, nunca con la ampliada: si la ampliación pegó la
-     pregunta anterior, sus palabras señalarían a la sección de aquel turno. */
-  const nombradas=seccionesNombradasEnPregunta(query);
-  /* Si nombra varias y una es la activa, manda la activa. */
-  const nombrada=nombradas.some(n=>n.docName===activo)?null:nombradas[0]||null;
-  if(!nombrada)return{doc:activo,otraSeccion:null,porPregunta:false};
-  if(nombrada.docName===activo)return{doc:activo,otraSeccion:null,porPregunta:false};
-  /* Si el manual activo también usa esa palabra, puede ser tema suyo y no el
-     nombre de otra sección: en MESA FINA, «¿dónde van los accesorios de bar?»
-     mandaba a ACCESORIOS HOMBRE, y en FLORES Y VELAS, «los accesorios» —que es
-     un título de su propio manual— también. Ahí solo manda a otra sección si la
-     palabra va dicha como sección: «en accesorios, ¿cada cuánto…?». La palabra
-     que la activa no escribe nunca sigue mandando siempre: «¿dónde van los
-     vinos?» en ZAPATOS es de VINOS Y LICORES. Medido con 1938 preguntas de los
-     títulos de cada manual: 12 cambios de sección sin motivo, ahora 0. */
-  if(nombrada.termino&&!/^\d+$/.test(nombrada.termino)){
-    const voc=vocabDeDoc(activo);
-    const t=nombrada.termino;
-    const formas=[t,t+'s',t+'es',t.replace(/e?s$/,'')];
-    /* Y si la activa la usa en un TÍTULO, es suya aunque se diga como sección:
-       en FLORES Y VELAS, «¿qué va en accesorios?» pregunta por su lámina
-       ACCESORIOS, no por el manual de ACCESORIOS HOMBRE. */
-    const enTitulo=docChunks.some(c=>c.docName===activo&&c.heading&&normalizeText(c.heading).split(/\s+/).some(w=>formas.includes(w)));
-    /* Y también si la activa la dice con otra palabra: ACCESORIOS HOMBRE no
-       escribe «ropa» ni una vez, pero «¿cada cuánto le cambio la ropa al
-       maniquí?» es suya —«actualiza la vestimenta cada 15 días»— y no de ROPA
-       INTERIOR. Solo sinónimos de una palabra: «ropa de dormir» no cuenta. */
-    const porSinonimo=expandKeywords(formas).filter(s=>!/\s/.test(s)).some(s=>voc.has(normalizeText(s).trim()));
-    if((formas.some(v=>voc.has(v))||porSinonimo)&&(enTitulo||!dichaComoSeccion(query,formas)))return{doc:activo,otraSeccion:null,porPregunta:false};
-  }
-  return{doc:activo,porPregunta:false,
-    otraSeccion:{docName:nombrada.docName,nombre:nombrada.nombre,motivo:'nombrada'}}
+  /* Con sección elegida, la pregunta solo la cambia si nombra otra
+     (`otraSeccionNombrada`, src/motor/ruta.js). */
+  return{doc:activo,otraSeccion:otraSeccionNombrada(query,activo),porPregunta:false}
 }
 
 /* ── LA SECCIÓN QUE ELIGE LA PREGUNTA ─────────────
@@ -1512,19 +522,6 @@ function seccionDelTurnoAnterior(){
   }
   return null
 }
-/* Una sola búsqueda sobre todo lo cargado, agrupada por manual: con treinta
-   manuales, treinta búsquedas por separado serían treinta barridos. Sin `doc`
-   el nombre de la sección sí cuenta, que aquí es justo lo que distingue. */
-function evidenciaPorSeccion(consulta){
-  const por=new Map();
-  for(const r of retrieve(consulta,{source:'pdf',limit:400})){
-    if(!por.has(r.c.docName))por.set(r.c.docName,[]);
-    por.get(r.c.docName).push(r);
-  }
-  return[...por].map(([docName,rs])=>({docName,nivel:nivelDeEvidencia(rs,consulta),score:rs[0].score}))
-    .filter(c=>c.nivel>=1)
-    .sort((a,b)=>b.nivel-a.nivel||b.score-a.score)
-}
 /* La ruta depende de la pregunta y de todo lo que la rodea: la sección
    elegida, qué manuales hay y qué se preguntó antes. */
 const claveDeRuta=q=>[q,appState.manualActivo||'',docs.map(d=>d.name).join('|'),history.length].join('\u0001');
@@ -1545,50 +542,8 @@ function enrutarSeccion(q){
   if(esPreguntaDeEstado(q)||isCreatorQuestion(q)||esOperacionDeTienda(q))return ruta(null,'ninguna');
   const scope=assessQuestionScope(q);
   if(scope.isGreeting||scope.clearlyOff)return ruta(null,'ninguna');
-  const nombradas=seccionesNombradasEnPregunta(q);
-  if(!nombradas.length){
-    /* «en muebles, ¿qué pasillo dejo?»: MUEBLES no tiene palabra propia, pero
-       dicha como sección la nombra (`seccionNombradaComoTal`). */
-    const comoTal=seccionNombradaComoTal(q);
-    if(comoTal)return ruta(comoTal.docName,'nombrada');
-  }
-  if(nombradas.length===1)return ruta(nombradas[0].docName,'nombrada');
-  let cand=evidenciaPorSeccion(consultaDeBusqueda(q));
-  if(nombradas.length>1){
-    const solo=new Set(nombradas.map(n=>n.docName));
-    cand=cand.filter(c=>solo.has(c.docName));
-    if(!cand.length)return ruta(null,'empate',nombradas.slice(0,3).map(n=>n.docName));
-  }else{
-    const prev=seccionDelTurnoAnterior();
-    if(prev&&esElipsis(q)){
-      /* Un seguimiento se queda en la sección de la pregunta anterior, salvo que
-         lo escrito —sin la ampliación, que arrastra la pregunta anterior y por
-         tanto su sección— no esté ahí y otra lo tenga claro: «¿y los cojines?»
-         después de una pregunta de zapatos es otra sección, no un seguimiento. */
-      const propia=evidenciaPorSeccion(q);
-      if(propia.some(c=>c.docName===prev)||!propia.some(c=>c.nivel>=2))return ruta(prev,'seguimiento');
-      cand=propia;
-    }else if(prev&&cand.some(c=>c.docName===prev&&c.nivel>=2)){
-      /* El asesor que viene preguntando de su sección no cambia de sección
-         porque otra también hable de pasillos o del POS: si la de la
-         conversación responde con evidencia sólida, se queda. Medido con cinco
-         manuales reales, así es como «¿qué va en el pos?» deja de preguntar
-         «¿en cuál estás?» a media conversación. Las otras quedan de botón. */
-      return ruta(prev,'seguimiento',cand.filter(c=>c.docName!==prev&&c.nivel>=2).slice(0,2).map(c=>c.docName));
-    }
-  }
-  if(!cand.length)return ruta(null,'ninguna');
-  const[mejor,segundo]=cand;
-  const cerca=c=>c.nivel===mejor.nivel&&c.score*DESTAQUE_MIN>mejor.score;
-  if(segundo&&cerca(segundo)){
-    /* Dos con evidencia sólida y parecida: eso lo decide el asesor. Con
-       evidencia floja en las dos no hay nada que preguntar: se busca en todos
-       y el «no está» sale solo. */
-    if(mejor.nivel>=2)return ruta(null,'empate',cand.filter(cerca).slice(0,3).map(c=>c.docName));
-    return ruta(null,'ninguna');
-  }
-  return ruta(mejor.docName,nombradas.length>1?'nombrada':'evidencia',
-    cand.slice(1).filter(c=>c.nivel>=2).slice(0,2).map(c=>c.docName));
+  const r=rutaPorEvidencia(q,{ampliada:()=>consultaDeBusqueda(q),anterior:seccionDelTurnoAnterior(),elipsis:esElipsis(q)});
+  return ruta(r.doc,r.motivo,r.alternativas);
 }
 /* La ruta de ESTA pregunta, si ya se calculó; si no —una prueba, una
    medición que llama directo—, se calcula aquí. */
@@ -1635,32 +590,6 @@ function lineaDeRuta(q,ruta,soloBotones){
 function botonesDeRutaAlterna(loaderEl,q){
   const alt=lineaDeRuta(q,rutaActual&&rutaActual.q===q?rutaActual:null,true);
   if(alt)loaderEl.appendChild(alt);
-}
-
-/* Con la sección activa vacía, ¿alguna otra cargada sí responde? Se pregunta
-   solo cuando la activa no dio nada, así que no cuesta nada en el caso normal.
-
-   Exigir evidencia sólida aquí era demasiado: medido, «¿cómo se exhiben las
-   bicicletas?» encuentra en su manual la lámina titulada BICICLETAS —pág. 32,
-   la respuesta exacta— pero se queda en nivel 1 porque solo casa una palabra.
-   Y bajar a nivel 1 a secas tampoco vale: otro manual daba nivel 1 con un
-   fragmento que no venía a cuento. Así que se pide que el mejor DESTAQUE sobre
-   el segundo. Aquí no se responde nada, solo se señala a dónde ir: el precio de
-   señalar mal es un botón que el asesor ignora. */
-const DESTAQUE_MIN=1.25;
-function otraSeccionConEvidencia(consulta,activo){
-  const cand=[];
-  for(const d of docs){
-    if(d.name===activo)continue;
-    const r=retrieve(consulta,{source:'pdf',limit:PDF_CANDIDATOS,doc:d.name});
-    const nivel=nivelDeEvidencia(r,consulta);
-    if(nivel>=1&&r.length)cand.push({docName:d.name,nivel,score:r[0].score});
-  }
-  if(!cand.length)return null;
-  cand.sort((a,b)=>b.nivel-a.nivel||b.score-a.score);
-  const[mejor,segundo]=cand;
-  if(mejor.nivel<2&&segundo&&segundo.score*DESTAQUE_MIN>mejor.score)return null;
-  return{docName:mejor.docName,nombre:nombreDeSeccion(mejor.docName),motivo:'evidencia'}
 }
 
 /* ── LA PALABRA QUE ESTE MANUAL NO TIENE ──────────
@@ -1738,12 +667,6 @@ const PALABRAS_DE_RELACION=new Set(['sentido','lado','lados','orden','forma','fo
    (las del POS), que en estos manuales sí son el tema. */
 const VERBOS_DE_ACCION=new Set(['quedar','guardar','alcanzar','agrupar','acomodar','poner','meter','mover','cambiar','pegar',
   'subir','llegar','tocar','faltar','sobrar','caber','poder','querer','traer','encontrar']);
-/* «porcentaje» va en VERBOS_DE_PISO para que no cuente como acierto, pero aquí
-   sí dice algo: en MESA FINA o FLORES Y VELAS, que no traen ni un «% de
-   participación», «¿qué porcentaje tiene formal?» tiene que avisar. Se reconoce
-   también mal escrita («porsentaje») por cómo suena. */
-const PALABRAS_DE_CIFRA=['porcentaje','porcentajes','porciento','participacion'];
-const palabraDeCifra=w=>PALABRAS_DE_CIFRA.find(p=>p===w||fonetica(p)===fonetica(w))||null;
 function esPalabraDeAccion(w){
   if(palabraDeCifra(w))return false;
   if(PALABRAS_DE_RELACION.has(w)||VERBOS_DE_ACCION.has(w)||esVerbo(w))return true;
@@ -3022,10 +1945,9 @@ const APRENDE_CONFIRMACIONES=2;          // consultas distintas para activar una
 const APRENDE_MAX_PALABRAS=60;           // por sección
 const APRENDE_MAX_ATAJOS=120;            // por sección
 const APRENDE_JACCARD=0.6;               // parecido de la pregunta con el atajo
-const APRENDE_BONO_ATAJO=0.25;           // sobre el mejor puntaje de la consulta
 const APRENDE_VENTANA_REFORMULA=3*60e3;  // una reformulación llega en minutos
 let aprendido={v:1,palabras:[],atajos:[]};
-var indiceAprendido=null,secPorDoc=null;
+var indiceAprendido=null;
 let ultimaConsultaAprende=null;
 
 function aprendidoVacio(){return{v:1,palabras:[],atajos:[]}}
@@ -3082,12 +2004,6 @@ function puedeUsarAprendido(){
 function puedeAprender(){
   return!!appState.aprendeEnabled&&!(typeof midiendo!=='undefined'&&midiendo)
 }
-function secDe(doc){
-  if(!doc)return null;
-  if(!secPorDoc)secPorDoc=new Map();
-  if(!secPorDoc.has(doc))secPorDoc.set(doc,nombreDeSeccion(doc));
-  return secPorDoc.get(doc)
-}
 function docDeSec(sec){return(docs.find(d=>secDe(d.name)===sec)||{}).name||null}
 const palabraActiva=p=>!p.propuesta&&p.conf>=APRENDE_CONFIRMACIONES;
 function construirIndiceAprendido(){
@@ -3128,6 +2044,9 @@ function atajosPara(q,doc){
   if(!t.size)return[];
   return aprendido.atajos.filter(a=>(!sec||a.sec===sec)&&jaccardTokens(t,new Set(a.terminos))>=APRENDE_JACCARD)
 }
+/* La búsqueda vive en src/motor/busqueda.js y no sabe de almacenamiento: se
+   le dice aquí cómo consultar lo aprendido. */
+usarAprendido({palabras:palabrasAprendidasPara,atajos:atajosPara});
 /* Lo aprendido que tocó ESTA consulta, para decirlo en pantalla: si el asesor
    no ve el camino, no puede corregirlo. */
 function aprendidoEn(q,doc){
@@ -4135,7 +3054,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.7.2';
+const VERSION_APP='ap-v1.7.3';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -9484,14 +8403,15 @@ async function pruebasAgente(){
   /* Lo destapó un manual real: dos menciones de cruce a la sección vecina
      empataban con las propias y el manual tomaba el nombre de la vecina. */
   const NOM='nombre-prueba.pdf';
-  const guardaNombres=nombresEnTexto;nombresEnTexto=null;
-  docChunks.push(...buildChunks([
+  /* Sin rehacer el índice: el nombre sale de docChunks. Al montar y al volver
+     se olvida la caché de nombres (src/motor/secciones.js). */
+  conEstado({docChunks:[...docChunks,...buildChunks([
     pag(1,'','El cliente de la sección 900 DECORACIÓN HOGAR busca piezas para su casa.'),
     pag(2,'','La sección 900 DECORACIÓN HOGAR ordena el producto por clasificación.'),
     pag(3,'','Si hace falta, realiza cruce con producto de la sección 910 DECORACIÓN TEXTIL.'),
-    pag(4,'','Cruce de producto con la sección 910 DECORACIÓN TEXTIL en perímetro.')],NOM));
-  fila('el nombre de la sección no lo toma de la vecina con la que se hace cruce',nombreDeSeccion(NOM)==='900 DECORACIÓN HOGAR','quedó: '+nombreDeSeccion(NOM));
-  docChunks=docChunks.filter(c=>c.docName!==NOM);nombresEnTexto=guardaNombres;
+    pag(4,'','Cruce de producto con la sección 910 DECORACIÓN TEXTIL en perímetro.')],NOM)]},
+    ()=>fila('el nombre de la sección no lo toma de la vecina con la que se hace cruce',nombreDeSeccion(NOM)==='900 DECORACIÓN HOGAR','quedó: '+nombreDeSeccion(NOM)),
+    reiniciarCaches);
 
   /* Herramientas */
   const est=nuevoEstadoAgente(DOC);
