@@ -43,6 +43,11 @@ const ic = b => `${fmt(b.media)} [${fmt(b.bajo)}–${fmt(b.alto)}]`;
 const lineas = [];
 const out = (...xs) => { const t = xs.join(' '); console.log(t); lineas.push(t); };
 
+/* Los sistemas con embeddings calculan de una vez los vectores de todas las
+   preguntas (y los de los fragmentos, con caché). */
+const todas = conjuntos.flatMap(c => c.filas);
+for (const sis of sistemas) if (sis.preparar) await sis.preparar(todas);
+
 const resultados = {};   // sistema → conjunto → filas por pregunta
 for (const sis of sistemas) {
   resultados[sis.nombre] = {};

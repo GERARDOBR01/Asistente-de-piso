@@ -1,0 +1,16 @@
+{
+  "name": "asistente-de-piso",
+  "private": true,
+  "description": "Herramientas de desarrollo. La app no se compila: GitHub Pages sirve index.html tal cual.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"lab/*.test.mjs\"",
+    "arnes": "node eval/arnes.mjs",
+    "simulado": "node eval/agente-simulado.mjs",
+    "lab": "node lab/correr.mjs"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "4.3.0"
+  }
+}
