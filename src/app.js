@@ -303,251 +303,22 @@ const DEFAULT_QUICK=[
    src/estado.js (un solo objeto, ADR 0005 paso 2); aquí se siguen usando con
    su nombre de siempre a través de la capa de compatibilidad de src/main.js. */
 
-function indexChunk(c){
-  const toks=tokenize((c.heading?c.heading+' ':'')+c.text);
-  const tf=Object.create(null);
-  for(const t of toks)tf[t]=(tf[t]||0)+1;
-  c.tf=tf;c.len=toks.length||1;
-  c.hasDigits=/\d/.test(c.text);
-  return c;
-}
-
+/* El índice (indexChunk, BM25) vive en src/motor/indice.js. Aquí queda lo que
+   depende de la pantalla: el vocabulario de la sección activa. */
 function rebuildCorpus(){
-  corpus=manualSections.concat(docChunks);
-  const df=Object.create(null);
-  let total=0;
-  for(const c of corpus){
-    if(!c.tf)indexChunk(c);
-    total+=c.len;
-    for(const t in c.tf)df[t]=(df[t]||0)+1;
-  }
-  bm25.N=corpus.length||1;
-  bm25.avgdl=corpus.length?total/corpus.length:1;
-  bm25.df=df;
-  reiniciarCaches();
+  reconstruirIndice();
   refrescarVocabularioManual();
 }
 /* Las cachés que siguen en este archivo. Las de los módulos se registran
    junto a su código, con alReiniciar (src/estado.js). */
 alReiniciar(()=>{
-  vocabTrigramas=null;
-  vocabFonetico=null;
-  vocabLeido=null;
-  foneticoPorDoc=new Map();
   verbosVistos=new Map();
   nombresEnTexto=null;
   identificadores=null;
-  vocabPorDoc=null;secPorDoc=null;
+  secPorDoc=null;
   entidadesCorpus=null;
   fragmentosPorPagina=null;
 });
-
-/* ── ERRATAS ──────────────────────────────────────
-   En el piso se escribe rápido y con el teclado del teléfono: «entayado»,
-   «corvatas», «colorisación». Hoy eso devuelve cero, y cero se lee como "el
-   manual no lo dice".
-
-   Se busca la palabra del manual más parecida por trigramas, y solo cuando la
-   escrita —y todas sus variantes de plural y género— no existe en el índice: si
-   el asesor escribió una palabra que el manual usa, no hay nada que corregir.
-   La candidata entra con el mismo descuento que un sinónimo, nunca sustituye a
-   lo que se escribió, y con el listón alto (0.6 de solapamiento y tres letras de
-   diferencia como mucho) para que «llanta» no se convierta en «plantilla». */
-let vocabTrigramas=null;
-function trigramas(w){
-  const s='  '+w+' ',out=[];
-  for(let i=0;i+3<=s.length;i++)out.push(s.slice(i,i+3));
-  return out
-}
-function indiceTrigramas(){
-  if(vocabTrigramas)return vocabTrigramas;
-  const m=new Map();
-  for(const t in bm25.df){
-    if(t.length<4)continue;
-    const gs=trigramas(t);
-    for(const g of gs){let a=m.get(g);if(!a)m.set(g,a=[]);a.push(t)}
-  }
-  return vocabTrigramas=m
-}
-/* Raíz de andar por casa: quita la terminación y deja el tronco. No pretende
-   ser un lematizador; sirve para una sola pregunta, la de abajo. */
-function raizCorta(w){
-  /* «-al» y «-il» están aquí por un caso del piso: «preferencial» es una
-     derivación legítima de «preferencia», no una errata suya, y el corrector
-     por trigramas las da por iguales (0.85 de parecido). Con la misma raíz, la
-     corrección deja de contar como errata y entra con peso de sinónimo, que es
-     lo que es: una apuesta, no la palabra que el asesor escribió bien. */
-  return(w||'').replace(/(?:aciones|acion|ados|adas|ado|ada|ares|ales|iles|ar|er|ir|al|il|os|as|es|s|o|a|e)$/,'')
-}
-const ERRATA_MIN=0.6;
-/* Una errata de teclado cambia una o dos letras, no tres. Sin tope, el
-   parecido por trigramas corregía palabras bien escritas que el manual
-   simplemente no usa: «¿cómo se hace el inventario?» se leía como
-   «inventados» —de la nota de la portada— y la portada salía de respuesta. */
-function distanciaEdicion(a,b){
-  const m=a.length,n=b.length;
-  let prev2=null,prev=Array.from({length:n+1},(_,j)=>j);
-  for(let i=1;i<=m;i++){
-    const cur=[i];
-    for(let j=1;j<=n;j++){
-      cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
-      if(prev2&&i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])cur[j]=Math.min(cur[j],prev2[j-2]+1);
-    }
-    prev2=prev;prev=cur;
-  }
-  return prev[n]
-}
-const topeErrata=w=>w.length>=7?2:1;
-/* Cómo suena, no cómo se escribe: s/z/c, ll/y, b/v, la h muda. Los trigramas no
-   ven que «senzor» es «sensor» —en una palabra corta una sola letra rompe tres
-   de cuatro trigramas— y el asesor escribe de oído. */
-function fonetica(w){
-  return w.replace(/h/g,'').replace(/ll/g,'y').replace(/v/g,'b').replace(/qu/g,'k')
-    .replace(/c([ei])/g,'s$1').replace(/z/g,'s').replace(/c/g,'k').replace(/(.)\1+/g,'$1')
-}
-let vocabFonetico=null;
-function indiceFonetico(){
-  if(vocabFonetico)return vocabFonetico;
-  const m=new Map();
-  for(const t in bm25.df){
-    if(t.length<4)continue;
-    const k=fonetica(t);
-    const a=m.get(k);
-    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
-  }
-  return vocabFonetico=m
-}
-/* La errata se corrige hacia el manual que el asesor tiene abierto. El
-   vocabulario es el de todos los manuales cargados, y con treinta a la vez
-   «botyas» en VINOS Y LICORES se corregía a «botas» —de ZAPATOS, más común y a
-   una letra— en vez de a «botellas», que es la palabra de su lámina. Primero
-   se busca entre las palabras de la sección activa y, si ahí no hay nada, en
-   todas, como antes. */
-let foneticoPorDoc=new Map();
-function indiceFoneticoDeDoc(doc){
-  let m=foneticoPorDoc.get(doc);
-  if(m)return m;
-  m=new Map();
-  for(const[t]of vocabDeDoc(doc)){
-    if(t.length<4||!(t in bm25.df))continue;
-    const k=fonetica(t),a=m.get(k);
-    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
-  }
-  foneticoPorDoc.set(doc,m);
-  return m
-}
-/* Las palabras en inglés se escriben como suenan: «snikers» es SNEAKERS, y los
-   trigramas lo llevaban a «stickers» —de Papelería, a dos letras— con lo que «ke
-   marcas ban en snikers» salía en blanco en ZAPATOS. Se indexa cómo se lee la
-   palabra del manual en voz alta: «ea» y «ee» suenan i, «oo» suena u. Solo
-   cuenta el sonido idéntico, nunca el parecido. */
-const COMO_SE_LEE=t=>t.replace(/ea|ee/g,'i').replace(/oo/g,'u');
-let vocabLeido=null;
-function indiceLeido(){
-  if(vocabLeido)return vocabLeido;
-  const m=new Map();
-  for(const t in bm25.df){
-    if(t.length<4||COMO_SE_LEE(t)===t)continue;
-    const k=fonetica(COMO_SE_LEE(t)),a=m.get(k);
-    if(!a||bm25.df[t]>bm25.df[a])m.set(k,t);
-  }
-  return vocabLeido=m
-}
-/* El índice también lee así palabras españolas —«proveedor» sonaría
-   «probidor»—, que nadie pronuncia de esa forma. Por eso la lectura en inglés
-   solo gana a una apuesta floja: si el corrector de siempre encuentra algo a una
-   letra o que suena igual en español, manda él («probidor» → «probador»). */
-function masParecida(w){
-  const porLetras=masParecidaPorLetras(w);
-  const leida=w.length>=4&&indiceLeido().get(fonetica(w));
-  if(!leida||leida===w)return porLetras;
-  if(porLetras&&(distanciaEdicion(w,porLetras)<=1||fonetica(porLetras)===fonetica(w)))return porLetras;
-  return leida
-}
-function masParecidaPorLetras(w){
-  const activo=docChunks.length&&appState.manualActivo?appState.manualActivo:null;
-  const delActivo=activo?vocabDeDoc(activo):null;
-  const enActivo=t=>!!delActivo&&delActivo.has(t);
-  const fw=fonetica(w);
-  /* «que ba en la tore»: TORRE está en la página 11 y la palabra tiene cuatro
-     letras, así que el corrector ni la miraba. En una palabra tan corta una
-     letra ya es otra palabra, por eso aquí solo vale el sonido idéntico —la rr
-     que se escribe r— y nunca el parecido. */
-  if(w.length===4){
-    const t=(activo&&indiceFoneticoDeDoc(activo).get(fw))||indiceFonetico().get(fw);
-    return t&&t!==w?t:null
-  }
-  if(w.length<5)return null;
-  const idx=indiceTrigramas(),gs=trigramas(w),cuenta=new Map();
-  for(const g of gs){const a=idx.get(g);if(!a)continue;for(const t of a)cuenta.set(t,(cuenta.get(t)||0)+1)}
-  let mejor=null,mejorP=0,propia=null,propiaP=0;
-  for(const[t,c]of cuenta){
-    if(Math.abs(t.length-w.length)>3)continue;
-    const p=c/Math.max(gs.length,trigramas(t).length);
-    if(p<ERRATA_MIN||distanciaEdicion(w,t)>topeErrata(w))continue;
-    if(p>mejorP){mejorP=p;mejor=t}
-    if(enActivo(t)&&p>propiaP){propiaP=p;propia=t}
-  }
-  if(propia)return propia;
-  /* Letras cambiadas de lugar: «Trevsik» por «Tresvik». Con nombres de marca
-     es la errata más común —se escriben de memoria— y no la alcanzaba nada: la
-     «t» se movió dos lugares, rompe la mitad de los trigramas (0.44) y suena a
-     dos letras de distancia. Mismas letras, misma primera letra, seis o más:
-     con menos, dos palabras distintas comparten letras por casualidad. */
-  if(w.length>=6){
-    const firma=[...w].sort().join('');
-    let ana=null,anaDf=0;
-    for(const t in bm25.df){
-      if(t.length!==w.length||t[0]!==w[0]||t===w)continue;
-      if(activo&&!enActivo(t))continue;
-      if([...t].sort().join('')!==firma)continue;
-      /* Letras movidas, no otra palabra con las mismas letras: «cartón» es
-         anagrama de «contar» (a cuatro ediciones) y se corregía a ella, así que
-         «¿las plumas se quedan en su caja de cartón?» perdía el aviso de que el
-         manual no habla de cartón. «Trevsik» está a una. */
-      if(distanciaEdicion(w,t)>2)continue;
-      if(bm25.df[t]>anaDf){anaDf=bm25.df[t];ana=t}
-    }
-    if(ana&&(activo||!mejor))return ana;
-  }
-  if(!activo&&mejor)return mejor;
-  const oido=(activo?indiceFoneticoDeDoc(activo):indiceFonetico()).get(fw);
-  if(oido&&oido!==w)return oido;
-  /* Cómo suena Y una letra comida, que es la errata del pulgar: «likidcion»,
-     «mankies», «serveas». Ni los trigramas (demasiados rotos en una palabra
-     corta) ni el sonido exacto las alcanzaban, y eran la palabra clave de la
-     pregunta. Misma primera letra, a una edición de sonido, y entre varias la
-     que más usa el manual. Solo en palabras de seis o más: en una de cinco,
-     una letra ya es otra palabra, y «motos» salía como «moños». */
-  const cercaDe=(tope,difLargo,extra,soloActivo)=>{
-    let cerca=null,df=0;
-    for(const[k,t]of indiceFonetico()){
-      if(k[0]!==fw[0]||Math.abs(k.length-fw.length)>difLargo||t===w||!extra(k))continue;
-      if(soloActivo&&!enActivo(t))continue;
-      if(bm25.df[t]>df&&distanciaEdicion(fw,k)<=tope){df=bm25.df[t];cerca=t}
-    }
-    return cerca
-  };
-  /* Las dos letras que se come el pulgar en una palabra larga: «liidasion»,
-     «likidacon», «clasiican», «laavajiyas». A una sola edición no llegaban a
-     LIQUIDACIÓN, CLASIFICACIÓN ni LAVAVAJILLAS. Con dos ediciones cualquier
-     palabra se parece a otra, así que el listón sube: ocho sonidos o más, las
-     dos primeras letras y la última iguales, y la palabra buena más larga que
-     la errata, porque el pulgar come letras. Sin esto último «mascotas» se
-     leía como «macetas» y la pregunta trampa encontraba la lámina de PROPS.
-     «incapacidad» → «capacidad» sigue fuera, porque empieza distinto. */
-  const dosLetras=k=>k.length>fw.length&&k.slice(0,2)===fw.slice(0,2)&&k.slice(-1)===fw.slice(-1);
-  const pasos=soloActivo=>(fw.length>=6&&cercaDe(1,1,()=>true,soloActivo))
-    ||(fw.length>=8&&cercaDe(2,2,dosLetras,soloActivo))||null;
-  if(!activo)return pasos(false);
-  const propiaCerca=pasos(true);
-  if(propiaCerca)return propiaCerca;
-  /* Nada en la sección activa: lo de siempre, en todos los manuales. */
-  if(mejor)return mejor;
-  const oidoTodos=indiceFonetico().get(fw);
-  if(oidoTodos&&oidoTodos!==w)return oidoTodos;
-  return pasos(false)
-}
 
 /* ── EL MANUAL DICE DE QUÉ SECCIÓN ES ─────────────
    El asistente estaba cableado a «Hombres Mercadep», y delante de un manual de
@@ -562,45 +333,6 @@ function masParecidaPorLetras(w){
    reconocían con manuales de Mujer o Muebles cargados, y perdían la instrucción
    de responder con el formato completo. */
 let vocabularioManual=new Set();
-/* El vocabulario de CADA manual por separado, no solo el del activo. Sirve para
-   la pregunta que importa aquí: ¿esta palabra existe en el manual del asesor, o
-   solo en el de al lado? */
-let vocabPorDoc=null;
-function construirVocabPorDoc(){
-  vocabPorDoc=new Map();
-  for(const c of docChunks){
-    let s=vocabPorDoc.get(c.docName);
-    if(!s)vocabPorDoc.set(c.docName,s={palabras:new Map(),raices:new Map(),texto:''});
-    if(c.tf)for(const t in c.tf){
-      s.palabras.set(t,(s.palabras.get(t)||0)+1);
-      const r=raizCorta(t);
-      if(r.length>2)s.raices.set(r,(s.raices.get(r)||0)+1);
-    }
-    /* El texto entero normalizado, para poder buscar FRASES y no solo palabras
-       sueltas. Es lo que distingue el caso que se vio en el piso: «propia» sí
-       está en el manual de MUEBLES —una vez, dentro de ESTILO INDUSTRIAL,
-       hablando de estética— y «marca propia» no está en absoluto. */
-    s.texto+=' '+normalizeText((c.heading?c.heading+' ':'')+(c.text||'')).replace(/\s+/g,' ');
-  }
-}
-function vocabDeDoc(doc){
-  if(!vocabPorDoc)construirVocabPorDoc();
-  return(vocabPorDoc.get(doc)||{palabras:new Map(),raices:new Map()}).palabras
-}
-/* Y las raíces, que es con lo que hay que comparar para decidir si una palabra
-   «no está» en un manual: el asesor escribe «acomodo» y el manual escribe
-   «acomoda» o «acomodar». Comparando formas exactas, tres preguntas buenas de
-   la batería salían con el aviso de palabra ausente puesto sobre un verbo
-   corriente. La raíz las une y deja fuera lo que de verdad falta: «sábanas» no
-   comparte raíz con nada de ZAPATOS. */
-function raicesDeDoc(doc){
-  if(!vocabPorDoc)construirVocabPorDoc();
-  return(vocabPorDoc.get(doc)||{palabras:new Map(),raices:new Map()}).raices
-}
-function textoDeDoc(doc){
-  if(!vocabPorDoc)construirVocabPorDoc();
-  return(vocabPorDoc.get(doc)||{texto:''}).texto
-}
 function refrescarVocabularioManual(){
   vocabularioManual=new Set();
   /* Solo el manual activo. Con los once cargados la unión daba 2.952 palabras
@@ -1087,15 +819,6 @@ const CHECKLIST=/\bcheck ?list\b|\bchecklist\b|lista de (?:verificacion|revision
 const PIDE_CHECKLIST=/check|lista|revis|verific|pendiente|todo lo que/;
 const NUMERIC_INTENT=/\bcuant|\bcuánt|\bcuanto|medida|altura|distancia|separacion|separación|porcentaje|cantidad|piezas|\bcm\b|\bmts?\b|metro|%/i;
 
-/* Los rótulos sueltos de un dibujo —«+ CAPACIDAD −», «TAMAÑO», «ICEE»— llegan
-   como fragmentos de tres a cinco palabras, y BM25 premia tanto lo corto que
-   ganaban a la sección que explica: en LÍNEA BLANCA, «¿dónde van los
-   refrigeradores?» salía con el rótulo de la página 7 y no con «plataformas»
-   de la 9. Por debajo de 12 palabras, un fragmento se puntúa como si tuviera 12.
-   Medido con las 186 preguntas de los 30 manuales: con 8 o 16 mejora menos, y
-   con 30 o más sale peor que sin tope, porque entonces los fragmentos largos
-   tapan la respuesta. */
-const LARGO_MINIMO=12;
 /* «¿A qué altura va el sensor?» se contesta con «de 8 a 12 cm de la
    bastilla», y la lámina nunca escribe «altura». Esa palabra dice qué tipo de
    respuesta se busca —una medida—, igual que «porcentaje» pide una cifra: una
@@ -1168,17 +891,6 @@ function titulosDeLaPregunta(query){
       return r
     }
   }
-}
-function bm25Score(c,terms){
-  let s=0;
-  const largo=Math.max(c.len,LARGO_MINIMO);
-  for(const{t,w}of terms){
-    const f=c.tf[t];if(!f)continue;
-    const n=bm25.df[t]||0;
-    const idf=Math.log(1+(bm25.N-n+0.5)/(n+0.5));
-    s+=w*idf*(f*(bm25.k1+1))/(f+bm25.k1*(1-bm25.b+bm25.b*largo/bm25.avgdl));
-  }
-  return s
 }
 
 /* Devuelve los fragmentos ordenados, y con cuántas palabras de la pregunta
@@ -1600,71 +1312,6 @@ function getManualContext(query,maxChars,maxFrag){
   const nivel=nivelDeEvidencia(results,query);
   if(!nivel)return{texto:manualSections.slice(0,2).map(s=>s.text).join('\n\n').slice(0,MUESTRA_SIN_COINCIDENCIAS),nivel:0};
   return{texto:packChunks(mezclarPorPartes(query,results,opts),maxChars,maxFrag),nivel}
-}
-
-/* ════════════════════════════════════════════════
-   RAG — CHUNKS DEL PDF CARGADO
-
-   Un chunk = un bloque de la lámina, no 700 caracteres a ciegas.
-   Nunca cruza de página, porque la cita de página es lo que hace
-   la respuesta verificable, y arrastra el título de su sección.
-════════════════════════════════════════════════ */
-const CHUNK_MAX=900;
-
-function splitLongBlock(text){
-  if(text.length<=CHUNK_MAX)return[text];
-  const parts=[];
-  let rest=text;
-  while(rest.length>CHUNK_MAX){
-    const window=rest.slice(0,CHUNK_MAX);
-    let cut=Math.max(window.lastIndexOf('. '),window.lastIndexOf('\n'));
-    if(cut<CHUNK_MAX*0.5)cut=window.lastIndexOf(' ');
-    if(cut<CHUNK_MAX*0.3)cut=CHUNK_MAX;
-    parts.push(rest.slice(0,cut+1).trim());
-    rest=rest.slice(cut+1);
-  }
-  if(rest.trim())parts.push(rest.trim());
-  return parts
-}
-
-function buildChunks(pages,docName){
-  const chunks=[];
-  let heading='';
-  let n=0;
-  const push=(page,text)=>{
-    const clean=text.trim();
-    if(clean.length<15)return;
-    chunks.push(indexChunk({
-      id:docName+'#'+(n++),source:'pdf',docName,page,heading,text:clean,figureIds:[]
-    }));
-  };
-  for(const pg of pages){
-    let buf='';
-    /* El título arrancaba con el documento y no con la página, así que una
-       lámina sin títulos en mayúsculas heredaba el de la anterior: el fragmento
-       del producto descontinuado se citaba como "pág. 9 · ESQUINEROS", que es
-       una sección de la pág. 8. Y como el título se indexa, no solo se citaba
-       mal: se buscaba mal. Cada página arranca con el suyo. */
-    heading=pg.titulo||'';
-    for(const b of pg.blocks){
-      const h=(b.heading||'').replace(/\s+/g,' ').trim();
-      if(h&&h!==heading){
-        if(buf.trim())push(pg.page,buf);
-        buf='';heading=h;
-      }
-      if(b.isHeading||b.esTitulo)continue;
-      if(b.text.length>CHUNK_MAX){
-        if(buf.trim())push(pg.page,buf);
-        buf='';
-        for(const part of splitLongBlock(b.text))push(pg.page,part);
-        continue;
-      }
-      if(buf.length+b.text.length+1>CHUNK_MAX){push(pg.page,buf);buf=''}
-      buf+=(buf?'\n':'')+b.text;
-    }
-    if(buf.trim())push(pg.page,buf);
-  }
-  return chunks
 }
 
 /* 40 candidatos era generoso de más: después de los filtros de packChunks nunca
@@ -2751,14 +2398,14 @@ const appState={
   system:'',extra:'',tokenLimit:80000,
   aprendeEnabled:true,extraEnabled:true,temperature:0.2,
   modoRespuesta:'razonado',
-  /* `null` = todos los manuales. En el piso se trabaja UNA sección: con cinco
-     manuales de la misma plantilla cargados, la respuesta se armaba con los
-     cinco y el dato salía citado a la página de un manual que no era el suyo. */
-  manualActivo:null,
   /* 'agente': la IA lee el manual con herramientas. 'clasico': búsqueda local
      y seis etapas. Se elige en Ajustes. */
   motor:'clasico'
 };
+/* La sección activa vive en src/estado.js (estado.manualActivo): es el alcance
+   de la consulta y el motor la lee de ahí. appState.manualActivo la sigue
+   nombrando para el resto de la app. */
+Object.defineProperty(appState,'manualActivo',{get:()=>estado.manualActivo,set:v=>{estado.manualActivo=v},enumerable:true});
 let history=[],sessionTokens=0,quickBtns=[],editingQuick=false,isGenerating=false,chatDescartado=false;
 function estimateTokens(t){return Math.ceil((t||'').length/3.5)}
 
@@ -3938,257 +3585,6 @@ function withTimeout(promise, ms, label='operación') {
 }
 
 /* ════════════════════════════════════════════════
-   MOTOR 2 — RECONSTRUCCIÓN LAYOUT-AWARE
-
-   El manual de un cliente no es texto corrido: es una presentación.
-   En una misma lámina conviven dos reglas distintas, una en cada
-   columna, a la misma altura. El motor 1 agrupaba los fragmentos
-   solo por coordenada Y, así que fusionaba ambas columnas en una
-   línea y le entregaba al modelo una regla que no existe: el
-   "¿Qué es?" de ALINEACIÓN pegado al de LIMPIEZA.
-
-   Aquí el texto se reconstruye en tres pasos —fragmentos → líneas
-   (cortadas donde hay hueco horizontal) → bloques (agrupados por
-   cercanía)— y solo al final se ordena, por bandas horizontales y
-   de izquierda a derecha dentro de cada banda.
-════════════════════════════════════════════════ */
-const LINE_GAP_RATIO=1.2;      // hueco que corta una línea, en múltiplos de la altura de fuente
-const BLOCK_GAP_RATIO=1.7;     // separación vertical máxima dentro de un bloque
-const BLOCK_OVERLAP_MIN=0.25;  // solape horizontal mínimo para seguir en el mismo bloque
-
-function textItemsToLines(items,vp){
-  const rot=(((vp.rotation||0)%360)+360)%360;
-  const swap=(rot===90||rot===270);
-  const raw=[];
-  for(const it of items){
-    const s=it.str||'';
-    if(!s.trim())continue;
-    const t=pdfjsLib.Util.transform(vp.transform,it.transform);
-    const h=Math.abs(swap?it.width:it.height)||Math.hypot(t[2],t[3])||10;
-    const w=Math.abs(swap?it.height:it.width)||0;
-    raw.push({str:s,x0:t[4],x1:t[4]+w,yBot:t[5],h,cw:s.length?w/s.length:h*0.5});
-  }
-  if(!raw.length)return[];
-  raw.sort((a,b)=>a.yBot-b.yBot||a.x0-b.x0);
-
-  // Franjas de misma línea base
-  const rows=[];
-  for(const it of raw){
-    const row=rows[rows.length-1];
-    if(row&&Math.abs(it.yBot-row.yBot)<=Math.max(2,row.h*0.5)){
-      row.items.push(it);row.h=Math.max(row.h,it.h);
-    }else rows.push({yBot:it.yBot,h:it.h,items:[it]});
-  }
-
-  // Cada franja se corta donde hay un hueco horizontal: ahí acaba una
-  // columna y empieza otra. Es el corte que el motor 1 nunca hizo.
-  const lines=[];
-  for(const row of rows){
-    row.items.sort((a,b)=>a.x0-b.x0);
-    let seg=null;
-    for(const it of row.items){
-      const gapTol=Math.max(it.cw*2.5,row.h*LINE_GAP_RATIO);
-      if(seg&&it.x0-seg.x1<=gapTol){
-        seg.text+=(it.x0-seg.x1>it.cw*0.4?' ':'')+it.str;
-        seg.x1=Math.max(seg.x1,it.x1);
-        seg.h=Math.max(seg.h,it.h);
-      }else{
-        if(seg)lines.push(seg);
-        seg={text:it.str,x0:it.x0,x1:it.x1,yBot:row.yBot,h:Math.max(it.h,row.h)};
-      }
-    }
-    if(seg)lines.push(seg);
-  }
-  for(const ln of lines){
-    ln.text=ln.text.replace(/\s+/g,' ').trim();
-    ln.yTop=ln.yBot-ln.h;
-  }
-  return lines.filter(l=>l.text)
-}
-
-/* El solape se mide contra la ÚLTIMA línea del bloque, no contra su caja
-   acumulada. Midiendo contra la caja, en cuanto un bloque toca un título ancho
-   se vuelve ancho él mismo, y a partir de ahí absorbe las dos columnas: una
-   sola lámina termina siendo un bloque con la página entera dentro.
-
-   Y un título en mayúsculas siempre abre bloque. En estos manuales cada regla
-   empieza por su nombre —ALINEACIÓN, LIMPIEZA, SURTIDO—, así que ese es el
-   corte semántico real de la lámina. */
-function linesToBlocks(lines){
-  lines.sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
-  const blocks=[];
-  const attach=(b,ln)=>{
-    b.lines.push(ln.text);
-    b.x0=Math.min(b.x0,ln.x0);b.x1=Math.max(b.x1,ln.x1);
-    b.yBot=Math.max(b.yBot,ln.yBot);
-    b.lastX0=ln.x0;b.lastX1=ln.x1;b.lastYBot=ln.yBot;b.lastH=ln.h;
-  };
-  for(const ln of lines){
-    const esTitulo=isHeadingText(ln.text);
-    let best=null,bestGap=Infinity;
-    if(!esTitulo)for(const b of blocks){
-      const gap=ln.yTop-b.lastYBot;
-      const tol=Math.max(b.lastH,ln.h);
-      if(gap>tol*BLOCK_GAP_RATIO||gap<-tol)continue;
-      const ov=Math.min(b.lastX1,ln.x1)-Math.max(b.lastX0,ln.x0);
-      const narrow=Math.min(b.lastX1-b.lastX0,ln.x1-ln.x0)||1;
-      if(ov/narrow<BLOCK_OVERLAP_MIN)continue;
-      if(gap<bestGap){best=b;bestGap=gap}
-    }
-    if(best)attach(best,ln);
-    else blocks.push({
-      lines:esTitulo?[]:[ln.text],heading:esTitulo?ln.text:'',
-      hx0:esTitulo?ln.x0:null,hx1:esTitulo?ln.x1:null,hy1:esTitulo?ln.yBot:null,
-      hy0:esTitulo?ln.yTop:null,hh:esTitulo?ln.h:null,
-      x0:ln.x0,x1:ln.x1,yTop:ln.yTop,yBot:ln.yBot,
-      lastX0:ln.x0,lastX1:ln.x1,lastYBot:ln.yBot,lastH:ln.h
-    });
-  }
-  return blocks
-}
-
-/* Orden de lectura: bandas horizontales de arriba abajo, y dentro de cada
-   banda de izquierda a derecha. Ordenar por Y a secas intercala las columnas. */
-function orderBlocks(blocks){
-  blocks.sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
-  const bands=[];
-  for(const b of blocks){
-    const band=bands[bands.length-1];
-    if(band&&b.yTop<band.yBot-Math.min(b.lastH,4)){
-      band.items.push(b);band.yBot=Math.max(band.yBot,b.yBot);
-    }else bands.push({yBot:b.yBot,items:[b]});
-  }
-  const out=[];
-  for(const band of bands){band.items.sort((a,b)=>a.x0-b.x0);out.push(...band.items)}
-  return out
-}
-
-/* Un encabezado de tabla que no cabe en su celda se parte en dos renglones:
-   «TENIS» arriba y «CASUAL» abajo. Como cada renglón en mayúsculas abre su
-   bloque, el cuerpo —«N % de participación»— quedaba bajo «CASUAL», igual que
-   el de la columna vecina, y el contexto traía dos CASUAL con cifras distintas:
-   el modelo no tenía cómo saber cuál era el de tenis. Se unen solo si:
-   el de arriba está solo (sin cuerpo y sin otro título pegado encima), el de
-   abajo sí titula algo, van pegados, en la misma columna y con la misma letra.
-   Una lista de rótulos en mayúsculas no se une: son tres o más apilados, o
-   ninguno titula nada. */
-const TITULO_APILADO_GAP=0.8;   // hueco máximo entre los dos renglones, en alturas de letra
-const TITULO_APILADO_MAX=40;
-function unirTitulosApilados(blocks){
-  const solape=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0);
-  const pegado=(a,b)=>{
-    const h=Math.max(a.hh,b.hh);
-    const gap=b.hy0-a.hy1;
-    if(gap<-h*0.3||gap>h*TITULO_APILADO_GAP)return false;
-    if(Math.abs(a.hh-b.hh)>0.2*h)return false;
-    return solape(a.hx0,a.hx1,b.hx0,b.hx1)>=0.5*Math.min(a.hx1-a.hx0,b.hx1-b.hx0)
-  };
-  const titulos=blocks.filter(b=>b.heading&&b.hy0!=null&&b.hh);
-  if(titulos.length<2)return blocks;
-  const tituloSolo=b=>!b.lines.length;
-  const titulaAlgo=b=>b.lines.length>0||blocks.some(c=>!c.heading&&c.lines.length&&
-    c.yTop>=b.hy1-2&&c.yTop-b.hy1<=b.hh*6&&solape(c.x0,c.x1,b.hx0,b.hx1)>0);
-  const quitar=new Set();
-  for(const a of titulos){
-    if(!tituloSolo(a)||quitar.has(a))continue;
-    if(titulos.some(o=>o!==a&&tituloSolo(o)&&pegado(o,a)))continue;   // tercero de una pila
-    const b=titulos.find(o=>o!==a&&!quitar.has(o)&&pegado(a,o));
-    if(!b||!titulaAlgo(b))continue;
-    if(titulos.some(o=>o!==b&&o!==a&&pegado(b,o)))continue;          // b está a media pila
-    const unido=a.heading.trim()+' '+b.heading.trim();
-    if(unido.length>TITULO_APILADO_MAX)continue;
-    b.heading=unido;
-    b.hx0=Math.min(a.hx0,b.hx0);b.hx1=Math.max(a.hx1,b.hx1);b.hy0=a.hy0;
-    b.x0=Math.min(a.x0,b.x0);b.x1=Math.max(a.x1,b.x1);b.yTop=Math.min(a.yTop,b.yTop);
-    quitar.add(a);
-  }
-  return quitar.size?blocks.filter(b=>!quitar.has(b)):blocks
-}
-
-function isHeadingText(t){
-  const s=(t||'').trim();
-  if(s.length<3||s.length>80)return false;
-  if(/[,;]$/.test(s))return false;  // "TODO LUGAR," es media frase de una cita, no un título
-  const letters=s.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g,'');
-  if(letters.length<3)return false;
-  return letters===letters.toUpperCase()
-}
-
-/* El título de un bloque es el que tiene ENCIMA y en su misma columna, no el
-   último que apareció en el orden de lectura. En una lámina de dos reglas en
-   paralelo, el orden de lectura pone ALINEACIÓN, luego LIMPIEZA, y solo
-   después los cuerpos de ambas: heredar "el último título visto" le cuelga a
-   la regla de alineación la etiqueta de limpieza. Citar mal la sección es peor
-   que no citarla. */
-const HEADING_MAX_DY=500;      // más abajo de esto ya es otra sección de la lámina
-const HEADING_OFFSET_PENALTY=120; // un título que no solapa en X puede seguir siendo el tuyo, pero pesa
-function assignHeadings(blocks){
-  /* Candidato es todo bloque que empiece por título, aunque traiga cuerpo pegado:
-     SURTIDO arrastra su primera línea de texto y aun así titula las tres cajas
-     que tiene debajo. Se compara contra la caja del título, no la del bloque. */
-  const titulos=blocks.filter(b=>b.heading&&b.hy1!=null);
-  for(const b of blocks){
-    if(b.heading)continue;
-    let best=null,bestD=Infinity;
-    for(const h of titulos){
-      const dy=b.y0-h.hy1;
-      if(dy<-2||dy>HEADING_MAX_DY)continue;
-      /* Un título centrado sobre varias columnas no solapa con ninguna, así que
-         no puede exigirse solape: se penaliza y se deja competir por cercanía. */
-      const solapa=Math.min(h.hx1,b.x1)-Math.max(h.hx0,b.x0)>0;
-      const d=dy+(solapa?0:HEADING_OFFSET_PENALTY);
-      if(d<bestD){best=h;bestD=d}
-    }
-    if(best)b.heading=best.heading;
-  }
-  return blocks
-}
-
-/* Cada lámina lleva su nombre arriba a la izquierda —"Rotación", "Planograma",
-   "Perímetros de Básicos"—, pero en minúsculas, así que isHeadingText no lo ve
-   y acaba de primera línea del cuerpo. Es el rótulo que el asesor reconocería,
-   y sin él una página sin títulos en mayúsculas se queda sin sección ninguna. */
-const TITULO_PAG_BANDA=0.28;   // franja superior donde vive el nombre de la lámina
-const TITULO_PAG_MAX=60;
-function tituloDePagina(blocks,altura){
-  for(const b of blocks.slice(0,4)){
-    if(b.y0>altura*TITULO_PAG_BANDA)break;
-    if(b.heading)continue;                       // ya tiene título propio
-    const t=b.text.trim();
-    if(t.includes('\n'))continue;                // el nombre de la lámina es una línea
-    if(t.length<3||t.length>TITULO_PAG_MAX)continue;
-    /* En la portada el número de departamento va arriba y solo —"276 Y 279"—:
-       no nombra nada. Pedir tres letras lo descarta sin tocar los rótulos. */
-    if(t.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g,'').length<3)continue;
-    if(/[.,;:•●]/.test(t))continue;              // eso ya es cuerpo, no rótulo
-    b.esTitulo=true;                             // pasa a título: que no cuente dos veces
-    return t;
-  }
-  return''
-}
-
-function pageToBlocks(content,vp,pageNum){
-  const lines=textItemsToLines(content.items,vp);
-  /* Para tapar el texto al buscar figuras hay que usar la caja de cada LÍNEA.
-     La del bloque es la unión de todas sus líneas: en una lámina donde el texto
-     rodea a una foto, esa unión se traga la foto y la página se queda sin nada
-     que detectar. */
-  const textBoxes=lines.map(l=>({x0:l.x0,y0:l.yTop,x1:l.x1,y1:l.yBot}));
-  const finales=bloquesDeLineas(lines);
-  return{page:pageNum,textBoxes,blocks:finales,titulo:tituloDePagina(finales,vp.height)}
-}
-function bloquesDeLineas(lines){
-  const blocks=orderBlocks(unirTitulosApilados(linesToBlocks(lines)));
-  return assignHeadings(blocks.map(b=>({
-    text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
-    heading:b.heading,
-    isHeading:!b.lines.length&&!!b.heading,
-    hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
-    x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
-  })).filter(b=>b.text))
-}
-
-/* ════════════════════════════════════════════════
    MOTOR 2 — DETECCIÓN DE FIGURAS
 
    Los planogramas de estos manuales NO son fotos: son dibujos
@@ -4739,7 +4135,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.7.1';
+const VERSION_APP='ap-v1.7.2';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -9013,16 +8409,10 @@ const TEST_VERIF=[
 /* Un corpus de prueba, montado sobre el estado (src/estado.js) y reconstruido
    al entrar y al salir. Vuelve siempre al de antes, aunque la prueba truene. */
 const conCorpus=(parcial,fn)=>conEstado(parcial,fn,rebuildCorpus);
-/* Lo mismo con la sección activa, que no es del corpus pero las pruebas la
-   fijan. Se devuelve ANTES de rehacer el índice: rebuildCorpus calcula el
-   vocabulario de la sección activa, y con la de la prueba quedaría mal. */
-function conCorpusYSeccion(parcial,activo,fn){
-  const gActivo=appState.manualActivo;
-  appState.manualActivo=activo;
-  let volver=null;
-  try{volver=montar(parcial,rebuildCorpus);return fn()}
-  finally{appState.manualActivo=gActivo;if(volver)volver();else rebuildCorpus()}
-}
+/* Lo mismo con la sección activa (estado.manualActivo). montar la devuelve
+   junto con el corpus y ANTES de rehacer el índice, que importa: rebuildCorpus
+   calcula el vocabulario de la sección activa. */
+const conCorpusYSeccion=(parcial,activo,fn)=>conCorpus({...parcial,manualActivo:activo},fn);
 
 /* Esta primera tanda mide el modo SIN manual cargado —el asistente con solo su
    conocimiento interno—, así que se aparta el PDF mientras corre. Si no, con

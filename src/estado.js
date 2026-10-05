@@ -20,12 +20,18 @@ export const estado = {
   docChunks: [],
   /** Las láminas detectadas en los PDF. @type {Array<Record<string, unknown>>} */
   docFigures: [],
-  /** `manualSections` + `docChunks`, indexado. Lo rehace `rebuildCorpus`. @type {Fragmento[]} */
+  /** `manualSections` + `docChunks`, indexado. Lo rehace `reconstruirIndice` (src/motor/indice.js). @type {Fragmento[]} */
   corpus: [],
   /** Los manuales cargados. @type {Manual[]} */
   docs: [],
   /** Las estadísticas de BM25 sobre `corpus`. @type {Bm25} */
   bm25: { N: 0, avgdl: 1, df: Object.create(null), k1: 1.5, b: 0.75 },
+  /** La sección en la que se consulta; `null` = todos los manuales. En el piso
+      se trabaja UNA sección: con cinco manuales de la misma plantilla
+      cargados, la respuesta se armaba con los cinco y el dato salía citado a
+      la página de un manual que no era el suyo. En la app se nombra
+      `appState.manualActivo`. @type {string | null} */
+  manualActivo: /** @type {string | null} */ (null),
 };
 
 /** @typedef {keyof typeof estado} Clave */

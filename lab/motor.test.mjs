@@ -12,6 +12,10 @@ import fc from 'fast-check';
 import * as texto from '../src/motor/texto.js';
 import * as inyeccion from '../src/seguridad/inyeccion.js';
 import { estado, montar, conEstado, alReiniciar, reiniciarCaches } from '../src/estado.js';
+import { indexChunk, bm25Score, reconstruirIndice } from '../src/motor/indice.js';
+import { masParecida, vocabDeDoc } from '../src/motor/erratas.js';
+import { buildChunks, CHUNK_MAX } from '../src/motor/fragmentos.js';
+import { bloquesDeLineas, multiplicar } from '../src/motor/layout.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -135,4 +139,63 @@ test('reiniciarCaches corre cada caché registrada, en orden', () => {
   alReiniciar(() => orden.push(2));
   reiniciarCaches();
   assert.deepEqual(orden, [1, 2]);
+});
+
+/* ── El índice en Node (ADR 0005, paso 3) ─────────────────────────────────
+   El motor ya arma su índice sin navegador: es lo que va a usar motor-node. */
+const frag = (id, docName, page, heading, text) => ({ id, source: 'pdf', docName, page, heading, text });
+const MINI = [
+  frag('a1', 'A.pdf', 2, 'ENTALLADO', 'Las prendas entalladas van al frente del mueble.'),
+  frag('a2', 'A.pdf', 3, 'PASILLO', 'Deja 90 cm de pasillo entre muebles.'),
+  frag('b1', 'B.pdf', 4, 'BOTELLAS', 'Las botellas van acostadas en la cava.'),
+];
+
+test('el índice se arma en Node y BM25 pone primero el fragmento que trae la palabra', () => {
+  conEstado({ docChunks: MINI.map(c => ({ ...c })), manualSections: [] }, () => {
+    assert.equal(estado.corpus.length, 3);
+    assert.equal(estado.bm25.N, 3);
+    const terms = [{ t: 'pasillo', w: 1 }];
+    const orden = [...estado.corpus].sort((x, y) => bm25Score(/** @type {any} */ (y), terms) - bm25Score(/** @type {any} */ (x), terms));
+    assert.equal(orden[0].id, 'a2');
+  }, reconstruirIndice);
+});
+
+test('las erratas se corrigen hacia el manual de la sección activa, y la caché se olvida al cambiar el corpus', () => {
+  conEstado({ docChunks: MINI.map(c => ({ ...c })), manualSections: [], manualActivo: 'A.pdf' }, () => {
+    assert.equal(masParecida('entayadas'), 'entalladas');
+    assert.ok(vocabDeDoc('B.pdf').has('botellas'));
+  }, reconstruirIndice);
+  conEstado({ docChunks: [], manualSections: [] }, () => {
+    assert.equal(vocabDeDoc('B.pdf').size, 0);   // nada de la caché anterior
+  }, reconstruirIndice);
+});
+
+test('fragmentos: ninguno pasa de CHUNK_MAX ni cruza de página, y todos salen indexados', () => {
+  fc.assert(fc.property(fc.array(fc.string({ maxLength: 1500 }), { minLength: 1, maxLength: 6 }), textos => {
+    const paginas = textos.map((t, i) => ({ page: i + 1, titulo: '', blocks: [{ text: t + ' fin de la regla número ' + i, heading: '', isHeading: false, hx0: null, hx1: null, hy1: null, x0: 0, y0: 0, x1: 1, y1: 1 }] }));
+    for (const c of buildChunks(paginas, 'P.pdf')) {
+      assert.ok(c.text.length <= CHUNK_MAX + 1, 'largo ' + c.text.length);
+      assert.ok(c.tf && c.len >= 1);
+      assert.ok(paginas.some(p => p.page === c.page));
+    }
+  }));
+});
+
+test('layout: dos columnas a la misma altura no se funden en una línea', () => {
+  const linea = (text, x0, x1, yBot) => ({ text, x0, x1, yBot, yTop: yBot - 10, h: 10 });
+  const bloques = bloquesDeLineas([
+    linea('ALINEACIÓN', 0, 100, 10), linea('LIMPIEZA', 300, 400, 10),
+    linea('Deja 80 cm entre muebles.', 0, 200, 25), linea('Limpia los cristales al abrir.', 300, 500, 25),
+  ]);
+  const de = h => bloques.filter(b => b.heading === h && !b.isHeading).map(b => b.text).join('|');
+  assert.equal(de('ALINEACIÓN'), 'Deja 80 cm entre muebles.');
+  assert.equal(de('LIMPIEZA'), 'Limpia los cristales al abrir.');
+});
+
+test('multiplicar es la composición afín: identidad y traslación', () => {
+  const I = [1, 0, 0, 1, 0, 0];
+  fc.assert(fc.property(fc.array(fc.double({ noNaN: true, min: -1e3, max: 1e3 }), { minLength: 6, maxLength: 6 }), m => {
+    assert.ok(multiplicar(I, m).every((v, i) => v === m[i]));   // === trata -0 y 0 como iguales
+  }));
+  assert.deepEqual(multiplicar([1, 0, 0, 1, 5, 7], [2, 0, 0, 2, 1, 1]), [2, 0, 0, 2, 6, 8]);
 });

@@ -13,6 +13,15 @@ interface Fragmento {
   tf?: Record<string, number>;
   len?: number;
   hasDigits?: boolean;
+  /** Las láminas que acompañan al fragmento (las llena la detección de figuras). */
+  figureIds?: string[];
+}
+
+/** Un fragmento ya indexado: indexChunk le puso sus términos. */
+interface FragmentoIndexado extends Fragmento {
+  tf: Record<string, number>;
+  len: number;
+  hasDigits: boolean;
 }
 
 /** Un resultado de retrieve(): el fragmento, su puntaje y cuántas palabras de la pregunta acertó. */
