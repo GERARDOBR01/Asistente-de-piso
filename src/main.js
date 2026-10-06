@@ -1,3 +1,6 @@
+// Asistente de Piso · Copyright (c) 2026 Gerardo Barrera.
+// Licencia PolyForm Noncommercial 1.0.0: uso comercial solo con licencia escrita (LICENCIA-COMERCIAL.md).
+//
 // Arranque de la app en módulos ES, sin bundler: GitHub Pages sirve los
 // archivos tal cual.
 //

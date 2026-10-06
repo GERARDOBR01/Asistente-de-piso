@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-FF5A6E?style=for-the-badge&labelColor=0D0E12"></a>
   <a href="docs/como-funciona.mp4"><img alt="Cómo funciona" src="https://img.shields.io/badge/c%C3%B3mo%20funciona-13%20s-FF8A5B?style=for-the-badge&labelColor=0D0E12"></a>
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licencia-MIT-B3B0B8?style=for-the-badge&labelColor=0D0E12"></a>
+  <a href="LICENCIA-COMERCIAL.md"><img alt="Licencia: PolyForm Noncommercial" src="https://img.shields.io/badge/licencia-PolyForm%20NC-B3B0B8?style=for-the-badge&labelColor=0D0E12"></a>
 </p>
 
 <p align="center">
@@ -981,4 +981,7 @@ interfaz y la mecánica, con conocimiento de demostración.
 
 ## Licencia
 
-MIT.
+Código visible, no de uso libre para negocios: [PolyForm Noncommercial 1.0.0](LICENSE).
+Estudiarlo, probarlo y usarlo sin fines comerciales está permitido; **cualquier uso por o para
+una empresa necesita licencia comercial escrita**. Detalle en [LICENCIA-COMERCIAL.md](LICENCIA-COMERCIAL.md).
+Hasta el 5 de octubre de 2026 se publicó con licencia MIT.

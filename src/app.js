@@ -1,3 +1,6 @@
+// Asistente de Piso · Copyright (c) 2026 Gerardo Barrera.
+// Licencia PolyForm Noncommercial 1.0.0: uso comercial solo con licencia escrita (LICENCIA-COMERCIAL.md).
+//
 // La app (lo que queda de index.html por partir). Script clásico: sus
 // declaraciones de nivel superior son globales, como cuando vivía inline.
 // Lo que ya se movió a módulos llega por globalThis desde src/main.js.
@@ -2496,7 +2499,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.7.6';
+const VERSION_APP='ap-v1.7.7';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;

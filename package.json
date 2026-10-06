@@ -1,6 +1,7 @@
 {
   "name": "asistente-de-piso",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "Herramientas de desarrollo. La app no se compila: GitHub Pages sirve index.html tal cual.",
   "type": "module",
   "engines": { "node": ">=22" },
