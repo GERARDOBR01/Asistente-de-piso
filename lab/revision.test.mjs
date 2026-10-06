@@ -250,3 +250,18 @@ test('veredicto: reducir conserva la calidad para decidir', () => {
   assert.equal(noCalifica(chica), null);
   assert.equal(revisarColor(chica).nivel, 'CUMPLE');
 });
+
+/* ── Regresiones que encontró eval/revision.mjs --sinteticas ──────────── */
+test('colorización: una prenda blanca contra pared clara no desaparece como fondo', () => {
+  const c = [P.calido[0], P.neutro[4], P.calido[2], P.frio[0], P.frio[1], P.frio[3], P.neutro[0], P.neutro[2]];
+  const r = revisarColor(tringla(c, { ...SUCIA, semilla: 8 }));
+  assert.equal(r.nivel, 'GRAVE', r.evidencia.grupos);
+});
+
+test('triangulación: escalera con dos alturas iguales arriba → GRAVE (un lado no baja)', () => {
+  const r = revisarTriangulo([{ x: 100, y: 120 }, { x: 250, y: 118 }, { x: 400, y: 300 }, { x: 550, y: 320 }], TAM);
+  assert.equal(r.nivel, 'GRAVE');
+  assert.match(r.motivo, /no baja/);
+  /* Con 4 elementos, la cima en el segundo sí es triángulo. */
+  assert.equal(revisarTriangulo([{ x: 100, y: 300 }, { x: 250, y: 120 }, { x: 400, y: 220 }, { x: 550, y: 320 }], TAM).nivel, 'CUMPLE');
+});

@@ -11,9 +11,12 @@ import { resultado, redondear } from './veredicto.js';
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {{x:number,y:number}} Punto */
 
-/* SUPUESTO (ADR 0007): el tercio central, 12 % de desnivel y una tolerancia
-   de 4 % del alto para «baja hacia el lado». */
-export const REGLA_TRIANGULO = { centroDesde: 1 / 3, centroHasta: 2 / 3, desnivelMinimo: 0.12, tolerancia: 0.04 };
+/* SUPUESTO (ADR 0007): la mitad central del ancho (con 4 elementos la cima
+   cae en el segundo o el tercero, a 1/3 o 2/3), 12 % de desnivel, una
+   tolerancia de 4 % del alto para «baja hacia el lado», y cada lado tiene que
+   bajar al menos 40 % de lo que baja el otro: si uno casi no baja, es una
+   escalera. */
+export const REGLA_TRIANGULO = { centroDesde: 0.25, centroHasta: 0.75, desnivelMinimo: 0.12, tolerancia: 0.04, ladoMinimo: 0.4 };
 
 /**
  * @param {Punto[]} puntos      punto más alto de cada elemento (y crece hacia abajo)
@@ -51,10 +54,18 @@ export function revisarTriangulo(puntos, tam, op = {}) {
     return resultado('triangulacion', 'GRAVE', `Todo está casi a la misma altura (desnivel ${redondear(desnivel * 100, 0)} %): no hay triángulo. Usa niveles y desniveles.`, ev, { ...marcas, triangulo: null });
   if (cima === 0 || cima === ps.length - 1)
     return resultado('triangulacion', 'GRAVE', `El punto más alto está en un extremo: es una escalera, no un triángulo.`, ev, { ...marcas, triangulo: null });
+  /* Cuánto baja cada lado desde la cima hasta su extremo. */
+  const bajaIzq = ps[0].y - ps[cima].y, bajaDer = ps[ps.length - 1].y - ps[cima].y;
+  const menor = Math.min(bajaIzq, bajaDer), mayor = Math.max(bajaIzq, bajaDer);
+  ev.baja_izq_pct = redondear(bajaIzq / H * 100, 0);
+  ev.baja_der_pct = redondear(bajaDer / H * 100, 0);
+  if (menor <= tol)
+    return resultado('triangulacion', 'GRAVE', `Un lado no baja: ${bajaIzq < bajaDer ? 'a la izquierda' : 'a la derecha'} todo queda a la altura de la cima. Es una escalera, no un triángulo.`, ev, { ...marcas, triangulo: null });
+  const parejo = menor >= regla.ladoMinimo * mayor;
   const centrada = rel >= regla.centroDesde && rel <= regla.centroHasta;
-  if (centrada && !rompen)
+  if (centrada && !rompen && parejo)
     return resultado('triangulacion', 'CUMPLE', `Triángulo: la cima al centro (${redondear(rel * 100, 0)} %) y las alturas bajan hacia los lados (desnivel ${redondear(desnivel * 100, 0)} %).`, ev, marcas);
-  const porque = [!centrada ? `la cima está corrida (${redondear(rel * 100, 0)} % del ancho)` : '', rompen ? `${rompen} ${rompen === 1 ? 'elemento rompe' : 'elementos rompen'} la bajada` : ''].filter(Boolean).join(' y ');
+  const porque = [!centrada ? `la cima está corrida (${redondear(rel * 100, 0)} % del ancho)` : '', !parejo ? `un lado baja mucho menos que el otro` : '', rompen ? `${rompen} ${rompen === 1 ? 'elemento rompe' : 'elementos rompen'} la bajada` : ''].filter(Boolean).join(' y ');
   return resultado('triangulacion', 'OBSERVACIÓN', `Hay triángulo, pero ${porque}.`, ev, marcas);
 }
 

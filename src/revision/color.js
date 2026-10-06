@@ -152,7 +152,16 @@ export function tramos(img, r, fondo = null, luz = null) {
   const { x0, cols: crudas } = columnas(img, r, luz);
   const n = crudas.length;
   const cols = suavizar(crudas, Math.max(2, Math.round(n / 120)));
-  const esFondo = cols.map(c => !!fondo && dist(c, fondo) < 9);
+  /* Estricto a propósito: una prenda blanca contra una pared clara está a
+     ~4-8 de distancia y no debe desaparecer como si fuera pared. */
+  /* Además, la pared es lisa y una prenda tiene pliegues: la claridad de las
+     columnas vecinas casi no cambia en la pared. */
+  const rugosidad = cols.map((_, i) => {
+    const v = cols.slice(Math.max(0, i - 4), i + 5).map(p => p[0]);
+    const m = v.reduce((s, x) => s + x, 0) / v.length;
+    return Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / v.length);
+  });
+  const esFondo = cols.map((c, i) => !!fondo && dist(c, fondo) < 4 && rugosidad[i] < 2.5);
   /** @type {{i0:number,i1:number,suma:number[],k:number}[]} */
   const crudos = [];
   /** @type {{i0:number,i1:number,suma:number[],k:number}|null} */
