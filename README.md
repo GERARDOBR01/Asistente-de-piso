@@ -397,6 +397,39 @@ borran del teléfono al abrir la versión nueva. Las notas del 👎 ya viajaban 
 número), dónde estamos por capa y el orden de lo que viene: la línea base con modelo real y,
 con ella, medir cuánto suma lo aprendido del piso.
 
+## Revisar con foto: el mini Veristack en el teléfono
+
+La pestaña **Revisar** apunta la cámara a una tringla, un anaquel o un focal y en un segundo
+regresa la foto marcada, con un veredicto por básico y su porqué. Todo corre en el teléfono:
+**sin red, sin costo, sin subir la foto a nadie y sin IA que juzgue la foto.** El código mide
+y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para calificar
+(oscura, movida o sin suficientes elementos), sale `NO_CALIFICA`: nunca se inventa un
+`CUMPLE`. El diseño y los criterios de éxito, fijados antes de medir, están en el
+[ADR 0007](docs/adr/0007-revision-con-foto.md).
+
+| Básico | Qué mide el código | Qué marca en la foto |
+|---|---|---|
+| **Colorización** | Una franja a la altura del pecho, por columna en CIELAB; la corta en tramos de color y los clasifica en cálido, frío o neutro (los cafés y beiges son neutros, como en la guía). Corrige la luz con la pared y revisa el orden. | Una barra por tramo y el tramo que rompe el orden («frío entre cálidos, tramo 4 de 12») |
+| **Surtido** | Celdas con bordes de Sobel contra el color del fondo del mueble; un hueco es vacío de arriba abajo, no el aire de encima de una pila. | Los huecos rayados y el **% vacío medido** |
+| **Triangulación** | Los puntos altos de cada elemento: la cima al centro, los dos lados bajando y desnivel suficiente. Un detector en el teléfono (MediaPipe, EfficientDet-Lite0) **sugiere** los puntos y la persona los confirma. | El triángulo, o la línea de alturas cuando no lo hay |
+| **Origen de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con una declaración de IA en IPTC/C2PA. | `GRAVE` solo si la propia foto dice que es IA |
+
+Lo que una foto no puede probar (planchado, limpieza, sensores, entallado, el pasillo de
+90 cm) va en una lista para marcar a mano. La foto marcada y el resumen se comparten por
+WhatsApp con la Web Share API.
+
+**Medido hasta hoy, con honestidad:** con 160 imágenes sintéticas en tres niveles de
+suciedad (`node eval/revision.mjs --sinteticas`), la triangulación va 48/48, el surtido 53/56
+y la colorización 52/56. Casi todos los fallos están en el nivel «duro», donde un naranja en
+sombra fuerte *es* café para la cámara. Esas cifras prueban el método, **no** el criterio del
+ADR: ese se mide con fotos reales (`node eval/revision.mjs --fotos <carpeta>`), que todavía
+faltan. La regla de colorización (orden de los grupos y dirección) es un supuesto por
+confirmar, y se puede configurar en `REGLA_COLOR`.
+
+Sin cámara se puede probar con **Ejemplo** (una tringla, un anaquel y un focal dibujados por
+código, con y sin defecto) y con tres muestras de origen armadas en la app (foto de cámara,
+reenviada por WhatsApp y hecha con IA).
+
 ## Cómo está hecho
 
 - **Archivos estáticos, sin build.** Módulos ES nativos, sin bundler, sin backend propio,
@@ -471,6 +504,7 @@ Lo de antes se mantiene:
 | `src/motor/` | El motor, sin DOM: se importa desde Node. `texto.js` (stopwords, sinónimos, tokenización), `indice.js` (BM25), `erratas.js` (erratas, fonética y vocabulario de cada manual), `layout.js` (de pdf.js a bloques con título), `fragmentos.js`, `secciones.js` (de qué sección es cada manual y cuál nombra la pregunta), `solidez.js` (cuándo una coincidencia cuenta), `aprendido.js` (lo que enseñó el piso), `busqueda.js` (`retrieve` y el empaquetado del contexto), `puerta.js` (palabras ausentes, la cifra que falta y el **contrato de decisión**: `respaldada`, `parcial`, `aclarar` o `sin_evidencia`, con su evidencia y sus razones), `ruta.js` (contra qué sección se responde), `conversacion.js` (si la pregunta es del tema, el seguimiento y la ruta, con el historial como parámetro) y `respuesta.js` (las tarjetas del modo manual y el contexto del modelo, cada uno con su contrato) |
 | `src/estado.js` | El estado del corpus en un solo objeto (manuales, fragmentos, índice, lo que entró al contexto), el registro de cachés y `conEstado`, con el que el arnés monta un corpus de prueba y siempre vuelve al de antes |
 | `src/seguridad/` | Saneado del HTML y defensa contra instrucciones escondidas (ADR 0004) |
+| `src/revision/` | La revisión con foto (ADR 0007). Piezas puras sobre `{width,height,data}` que corren igual en Node: `procedencia.js` (EXIF, XMP/IPTC, C2PA y huella), `color.js`, `surtido.js`, `triangulo.js`, `veredicto.js` y `demo.js` (imágenes sintéticas). Solo `ui.js` (cámara, marcas y compartir) y `detector.js` (MediaPipe, carga perezosa) tocan el navegador |
 | `src/app.js` | Lo que falta por partir, en bloques con rótulo `/* ════ NOMBRE ════ */` |
 
 El corte va por capas: estado, índice, búsqueda, puerta de evidencia, verificación, IA y UI.
@@ -668,6 +702,10 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   antes de mandarlo, y al cargar un manual así se avisa con la página. En las respuestas, las
   imágenes no se pintan y los enlaces que llevan datos en la URL salen como texto. Detalle y
   límites en [`docs/adr/0004`](docs/adr/0004-instrucciones-escondidas.md).
+- **Las fotos de «Revisar» no salen del teléfono.** Se miden ahí mismo y solo se comparten si
+  la persona toca «Compartir». La primera vez que se pide una sugerencia en el focal, la app
+  baja el detector (MediaPipe 0.10.21 desde jsDelivr y el modelo desde Google Storage, ~14 MB).
+  Se guarda aparte y después funciona sin señal. La CSP solo abre esas dos rutas.
 - **Sin telemetría, sin analítica, sin cuentas.** Nada se envía a ningún servidor mío,
   porque no hay servidor mío.
 
@@ -971,6 +1009,10 @@ Es la otra mitad del mismo problema. [Veristack](https://github.com/GERARDOBR01/
 montarla bien desde el principio. Los dos parten del mismo insumo —el estándar operativo
 escrito— y comparten el mismo principio: cuando no hay evidencia suficiente, el sistema lo
 declara en vez de inventarlo.
+
+Desde la pestaña **Revisar**, una parte de Veristack ya vive aquí: el mismo principio y los
+mismos cuatro niveles, pero en el teléfono, sin red y con el % vacío medido de verdad (en
+Veristack era un dato de entrada).
 
 ## Historia
 

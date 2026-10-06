@@ -13,10 +13,10 @@
    - El código de la app (src/) va igual que la página: si se sirviera primero
      de la caché, un index.html nuevo podría arrancar con un app.js viejo.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.7.8';
+const VERSION='ap-v1.8.0';
 /* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
    eval/arnes.mjs. */
-const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js'];
+const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js','src/revision/veredicto.js','src/revision/procedencia.js','src/revision/color.js','src/revision/surtido.js','src/revision/triangulo.js','src/revision/demo.js','src/revision/ui.js','src/revision/detector.js'];
 const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf',...CODIGO];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -24,6 +24,11 @@ const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js'
 ];
+/* El detector del focal (src/revision/detector.js) pesa ~14 MB: no se baja al
+   instalar, sino la primera vez que alguien lo usa, y vive en su propia caché
+   para que una versión nueva de la app no obligue a bajarlo otra vez. */
+const DETECTOR='ap-detector-mp-0.10.21';
+const esDetector=u=>(u.origin==='https://cdn.jsdelivr.net'&&u.pathname.startsWith('/npm/@mediapipe/tasks-vision@0.10.21/'))||(u.origin==='https://storage.googleapis.com'&&u.pathname.startsWith('/mediapipe-models/'));
 const FUENTES='https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap';
 
 async function guardarFuentes(cache){
@@ -51,7 +56,7 @@ self.addEventListener('install',e=>{
 
 self.addEventListener('activate',e=>{
   e.waitUntil((async()=>{
-    for(const k of await caches.keys())if(k!==VERSION)await caches.delete(k);
+    for(const k of await caches.keys())if(k!==VERSION&&k!==DETECTOR)await caches.delete(k);
     await self.clients.claim();
   })());
 });
@@ -68,6 +73,17 @@ self.addEventListener('fetch',e=>{
   if(req.method!=='GET')return;
   const url=new URL(req.url);
   const propia=url.origin===self.location.origin;
+  if(esDetector(url)){
+    e.respondWith((async()=>{
+      const cache=await caches.open(DETECTOR);
+      const guardada=await cache.match(req);
+      if(guardada)return guardada;
+      const r=await fetch(req);
+      if(r.ok)cache.put(req,r.clone());
+      return r;
+    })());
+    return;
+  }
   const deCdn=url.origin==='https://cdnjs.cloudflare.com'||url.origin==='https://fonts.googleapis.com'||url.origin==='https://fonts.gstatic.com';
   if(!propia&&!deCdn)return;
 
