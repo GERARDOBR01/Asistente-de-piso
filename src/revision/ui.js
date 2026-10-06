@@ -493,6 +493,12 @@ function pintarResultados() {
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
     <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>`;
   if (c.n !== null) contar($('rv-num'), c.n);
+  /* Primero se ven las marcas sobre la foto; luego la cifra sube a la vista. */
+  setTimeout(() => {
+    const v = caja.querySelector('.rv-cifra-fila');
+    const r = v?.getBoundingClientRect();
+    if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  }, 950);
   $('rv-compartir').onclick = compartir;
 }
 
@@ -512,9 +518,23 @@ function resumenTexto() {
 function reporte() {
   const lz = $('rv-lienzo');
   dibujar(1);
-  const u = lz.width / 400, lineas = resumenTexto().split('\n');
+  const u = lz.width / 400, ancho = lz.width - 28 * u;
+  const medir = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  /* Cada línea del resumen se acomoda en renglones del ancho de la foto. */
+  /** @type {{t:string, titulo:boolean}[]} */
+  const renglones = [];
+  resumenTexto().split('\n').forEach((t, i) => {
+    medir.font = `${i ? 500 : 700} ${Math.round((i ? 12.5 : 14) * u)}px Geist, system-ui, sans-serif`;
+    let r = '';
+    for (const pal of t.split(' ')) {
+      const prueba = r ? r + ' ' + pal : pal;
+      if (r && medir.measureText(prueba).width > ancho) { renglones.push({ t: r, titulo: !i }); r = pal; }
+      else r = prueba;
+    }
+    renglones.push({ t: r, titulo: !i });
+  });
   const c = document.createElement('canvas');
-  const alto = Math.round((26 + lineas.length * 22) * u * 1.15);
+  const alto = Math.round((30 + renglones.length * 20) * u);
   c.width = lz.width; c.height = lz.height + alto;
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   ctx.drawImage(lz, 0, 0);
@@ -522,12 +542,10 @@ function reporte() {
   ctx.fillStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (st.res?.nivel || 'NO_CALIFICA')];
   ctx.fillRect(0, lz.height, c.width, 4 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  lineas.forEach((t, i) => {
-    ctx.font = `${i ? 500 : 700} ${Math.round((i ? 12.5 : 14) * u)}px Geist, system-ui, sans-serif`;
-    ctx.fillStyle = i ? '#C9C6CE' : '#F4F2F0';
-    let s = t;
-    while (s.length > 4 && ctx.measureText(s).width > c.width - 28 * u) s = s.slice(0, -2);
-    ctx.fillText(s === t ? t : s + '…', 14 * u, lz.height + (16 + i * 24) * u);
+  renglones.forEach((r, i) => {
+    ctx.font = `${r.titulo ? 700 : 500} ${Math.round((r.titulo ? 14 : 12.5) * u)}px Geist, system-ui, sans-serif`;
+    ctx.fillStyle = r.titulo ? '#F4F2F0' : '#C9C6CE';
+    ctx.fillText(r.t, 14 * u, lz.height + (16 + i * 20) * u);
   });
   return c;
 }
@@ -536,7 +554,8 @@ async function compartir() {
   const c = reporte();
   const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)));
   const texto = resumenTexto();
-  const nombre = `revision-${st.tipo}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.jpg`;
+  const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  const nombre = `revision-${st.tipo}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}-${f2(d.getHours())}${f2(d.getMinutes())}.jpg`;
   const archivo = new File([blob], nombre, { type: 'image/jpeg' });
   const nav = /** @type {any} */ (navigator);
   if (nav.canShare?.({ files: [archivo] })) {
