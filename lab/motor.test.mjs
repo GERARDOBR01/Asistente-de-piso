@@ -358,6 +358,16 @@ test('«parado o acostado», «hasta abajo», «se divide», «letreros» no fal
     assert.deepEqual(terminosAusentes(q, 'gourmet.pdf').map(a => a.palabra), [], q);
 }, reconstruirIndice));
 
+test('«¿X o Y?»: si el manual tiene una alternativa, la otra no falta; sin «o», sí', () => conEstado({
+  docChunks: [...DOS, frag('d4', 'boutique.pdf', 4, 'VESTIDOS', 'Los vestidos largos van al fondo.'),
+    frag('d5', 'boutique.pdf', 5, 'NOCHE', 'Los vestidos de noche van con zapatos.'),
+    frag('d6', 'boutique.pdf', 6, 'FIESTA', 'Los vestidos de fiesta se cuelgan por color.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, () => {
+  assert.deepEqual(terminosAusentes('¿en la barra van copas o vestidos?', 'cava.pdf').map(a => a.palabra), []);
+  assert.deepEqual(terminosAusentes('¿en la barra van vestidos?', 'cava.pdf').map(a => a.palabra), ['vestidos']);
+}, reconstruirIndice));
+
 /* La raíz es para las formas de la palabra, no para sus sinónimos: el
    diccionario lleva «ganchos» a «barra», y «barr» es también raíz de «barril».
    Con los sinónimos por raíz, «ganchos» nunca faltaba en la cava. */

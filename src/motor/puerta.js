@@ -127,6 +127,20 @@ export function conjugaciones(w){
   const finales=m[2]==='ar'?['a','an','as','o','e','en']:['e','en','es','o','a','an'];
   return[...raices].flatMap(r=>finales.map(f=>r+f))
 }
+/** Las palabras de una pregunta «X o Y», cada una con su alternativa.
+ * @param {string} query @returns {Map<string, string[]>} */
+export function alternativasDeConsulta(query){
+  const t=normalizeText(query).split(/\s+/).filter(Boolean);
+  /** @type {Map<string, string[]>} */
+  const m=new Map();
+  for(let i=1;i<t.length-1;i++){
+    if(t[i]!=='o'&&t[i]!=='u')continue;
+    const a=t[i-1],b=t[i+1];
+    if(STOPWORDS.has(a)||STOPWORDS.has(b))continue;
+    m.set(a,[...(m.get(a)||[]),b]);m.set(b,[...(m.get(b)||[]),a]);
+  }
+  return m
+}
 /** @param {string} query @param {string | null} activo @returns {Ausente[]} */
 export function terminosAusentes(query,activo){
   if(!activo||!estado.docChunks.length)return[];
@@ -167,8 +181,8 @@ export function terminosAusentes(query,activo){
   }
 
   /* 2 · La PALABRA sin ningún camino hasta este manual. */
-  for(const k of palabrasDeConsulta(query)){
-    if(k.length<5||/^\d/.test(k)||enFrase.has(k)||ORDINAL_A_CIFRA[k]||esPalabraDeAccion(k))continue;
+  /** @param {string} k @returns {{ dentro: boolean, formas: Set<string> }} */
+  const buscarEnManual=k=>{
     const formas=new Set();
     const propias=new Set();
     /* «porsentaje» no está en ningún índice, así que el corrector no la lleva a
@@ -194,7 +208,17 @@ export function terminosAusentes(query,activo){
     let dentro=false;
     for(const f of formas)if(propio.has(f)){dentro=true;break}
     if(!dentro)for(const r of raices)if(propioRaiz.has(r)){dentro=true;break}
+    return{dentro,formas};
+  };
+  /* «¿La liquidación va adelante o atrás?»: si el manual tiene una de las dos,
+     esa es la respuesta y la otra no falta. Con el aviso, el modelo contestaba
+     «atrás» y luego mandaba al asesor a otra sección a buscar «adelante». */
+  const alternativas=alternativasDeConsulta(query);
+  for(const k of palabrasDeConsulta(query)){
+    if(k.length<5||/^\d/.test(k)||enFrase.has(k)||ORDINAL_A_CIFRA[k]||esPalabraDeAccion(k))continue;
+    const{dentro,formas}=buscarEnManual(k);
     if(dentro)continue;
+    if((alternativas.get(k)||[]).some(w=>buscarEnManual(w).dentro))continue;
     const duenos=[];
     for(const d of estado.docs){
       if(d.name===activo)continue;

@@ -590,8 +590,11 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
    los 30 manuales reales (55/60 datos con su página, 49/50 «no está»).
    «rapido» cambia las seis etapas por un solo paso de LECTURA —ubicar la
    página y el rótulo del dato, o decir que no está— antes de responder. Con el
-   manual demo empata en aciertos y el primer texto sale en la mitad de tiempo;
-   con los manuales reales falta medirlo, y por eso no es el predeterminado.
+   manual demo empata en aciertos y el primer texto sale en la mitad de tiempo.
+   Con 14 manuales reales y 96 preguntas nuevas (6-oct-2026, 3.5 Flash-Lite):
+   razonado 74/80 datos y 16/16 «no está» con el primer texto en ~2 s; rápido
+   70/80 y 16/16 en ~1 s. Cuatro datos valen más que un segundo: el
+   predeterminado sigue siendo razonado.
    El cambio se hace al enviar, sobre el rol que haya en Ajustes: el texto
    guardado no se toca y no hace falta subir PROMPT_VERSION. */
 const MODOS_RESPUESTA=['razonado','rapido'];
@@ -622,8 +625,8 @@ function lecturaDe(texto,completa){
 /* En Ajustes, debajo del selector: con qué se midió cada modo. Elegir sin ese
    dato sería elegir a ciegas. */
 const NOTA_DEL_MODO={
-  razonado:'Medido con 30 manuales reales: 55/60 datos con su página y 49/50 «no está».',
-  rapido:'PENDIENTE_MEDICION'
+  razonado:'Medido con 14 manuales reales y preguntas nuevas: 74/80 datos con su página y 16/16 «no está». Primer texto en ~2 s.',
+  rapido:'Medido con los mismos 14 manuales y preguntas: 70/80 datos con su página y 16/16 «no está». Primer texto en ~1 s.'
 };
 function pintarNotaDelModo(){
   const sel=document.getElementById('modo-respuesta-select'),nota=document.getElementById('modo-respuesta-nota');
