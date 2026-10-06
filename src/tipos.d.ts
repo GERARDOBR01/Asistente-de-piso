@@ -194,3 +194,9 @@ interface ContextoDelModelo {
    no trae "dom". De la plataforma solo usa esto, que existe en el navegador y
    en Node ≥ 19. */
 declare const crypto: { getRandomValues<T extends ArrayBufferView>(a: T): T };
+
+/* Revisión con foto (src/revision/): lo mínimo de las APIs comunes a Node y al
+   navegador que usan las piezas puras. */
+declare class TextEncoder { encode(s?: string): Uint8Array }
+declare class TextDecoder { constructor(etiqueta?: string); decode(b?: ArrayBufferView): string }
+declare function atob(s: string): string;

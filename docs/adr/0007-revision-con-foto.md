@@ -99,9 +99,14 @@ la nitidez quedan bajo el umbral (los de `mandatory_engine.py` de Veristack como
 **Salida:** los huecos sombreados y el **% vacío medido**. En Veristack, `espacio_vacio` era un
 dato que se le daba al sistema, no una medición.
 
-**Umbral (supuesto, se calibra con las fotos de casa):** CUMPLE con menos de 8 % vacío y sin
-hueco grande; OBSERVACIÓN entre 8 y 20 %; GRAVE con 20 % o más, o con un hueco que ocupe 6 % de
-la foto. NO_CALIFICA con fotos oscuras o movidas.
+- Una celda vacía solo cuenta si forma una corrida vertical de al menos 15 % del alto. El aire
+  arriba de las pilas es parte del mueble, no un hueco.
+- **Umbral (supuesto, se calibra con las fotos de casa)**, en % del área encuadrada (una casilla
+  vacía de un anaquel de 3×6 mide ~2–3 %):
+  - CUMPLE con menos de 2 % vacío;
+  - OBSERVACIÓN entre 2 y 6 %;
+  - GRAVE con 6 % o más, o con un hueco que ocupe 6 % por sí solo.
+- NO_CALIFICA con fotos oscuras o movidas.
 
 ### 4. Triangulación del focal (la más arriesgada: va al final y es la primera que se recorta)
 
