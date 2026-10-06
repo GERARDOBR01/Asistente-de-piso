@@ -1,7 +1,9 @@
 # ADR 0007 · Revisión con foto en el teléfono (el «mini Veristack»)
 
-- **Estado:** propuesta (6-oct-2026). Va antes que el código; la regla de colorización es un
-  **supuesto por confirmar** con Gerardo.
+- **Estado:** implementada en la rama `revision-foto` (6-oct-2026), sin merge. La regla de
+  colorización sigue siendo un **supuesto por confirmar** con Gerardo, y el criterio de éxito
+  todavía no se mide con fotos reales. Lo que cambió al construirlo está en «Ajustes durante la
+  construcción», al final.
 
 ## Contexto
 
@@ -118,14 +120,21 @@ dato que se le daba al sistema, no una medición.
   - **Plan B:** la persona toca los 3 a 7 puntos altos y el código hace la geometría. Se presenta
     tal cual, sin esconderlo.
 - Geometría:
-  - el punto más alto tiene que quedar en el tercio central;
-  - las alturas bajan hacia los lados;
+  - el punto más alto tiene que quedar en la mitad central del ancho (con 4 elementos, la cima
+    cae en el segundo o el tercero);
+  - las alturas bajan hacia los lados, y **los dos lados bajan**: cada uno al menos 40 % de lo
+    que baja el otro;
   - tiene que haber desnivel: la diferencia de alturas pasa del 12 % del alto de la foto.
 - Niveles:
-  - **CUMPLE** con la cima al centro, las alturas bajando y desnivel;
-  - **OBSERVACIÓN** si hay triángulo pero la cima está corrida o un punto rompe la bajada;
-  - **GRAVE** si no hay triángulo: todo a la misma altura, o una escalera con la cima en un extremo;
+  - **CUMPLE** con la cima al centro, los dos lados bajando parejo y desnivel;
+  - **OBSERVACIÓN** si hay triángulo pero la cima está corrida, un lado baja mucho menos o un
+    punto rompe la bajada;
+  - **GRAVE** si no hay triángulo: todo a la misma altura, la cima en un extremo, o un lado que no
+    baja (una escalera);
   - **NO_CALIFICA** con menos de 3 puntos.
+- **Plan A, decidido tras el spike:** el detector solo **sugiere**. La persona confirma, quita
+  (tocando el punto) o agrega puntos antes de revisar, y la evidencia dice
+  `origen_puntos: detector | detector+manual | manual`.
 
 ### Lo que no se ve en foto
 
@@ -145,6 +154,35 @@ Mientras no existan esas fotos, se mide con imágenes sintéticas generadas por 
 sombra y desenfoque, en `lab/revision.test.mjs` y `eval/revision.mjs`). **Esas cifras no cuentan
 como evidencia del criterio**: solo prueban que el método hace lo que dice.
 
+## Medido hasta ahora (6-oct-2026)
+
+**Batería sintética** (`node eval/revision.mjs --sinteticas`, 160 imágenes en tres niveles de
+suciedad). Prueba el método; **no es evidencia del criterio**:
+
+| Básico | Aciertos | IC 95 % | CUMPLE falsos | limpia | media | dura |
+|---|---|---|---|---|---|---|
+| Colorización | 52/56 | 83–97 % | 1 | 16/16 | 16/16 | 12/16 |
+| Surtido | 53/56 | 85–98 % | 2 | 15/16 | 16/16 | 14/16 |
+| Triangulación | 48/48 | 93–100 % | 0 | 16/16 | 16/16 | 16/16 |
+
+- Los fallos de colorización están todos en el nivel «duro» (sombra fuerte + subexposición +
+  ruido). Ahí un naranja *es* café para la cámara: es una ambigüedad física, no un error de
+  código. La corrección de luz con la pared la reduce, pero no la elimina.
+- Los CUMPLE falsos del surtido son una casilla vacía en el lado más oscuro de la foto «dura»:
+  mide 1.6 %, debajo del umbral de 2 %.
+
+**Fotos reales públicas** (6 fotos de escaparates de Wikimedia Commons con licencia libre,
+usadas solo para probar y fuera del repo):
+- **Origen:** una foto con `Software = Adobe Photoshop CS` sale OBSERVACIÓN «pasó por un editor».
+  Una de cámara Panasonic sale OBSERVACIÓN «tomada hace 2319 días». Ninguna sale GRAVE.
+- **Detector (spike del plan A):** carga en ~1 s y tarda 60–150 ms por foto en una PC.
+  - Ve los maniquíes de cuerpo entero: 5 de 6 en un escaparate en fila (que sale GRAVE, «todo a
+    la misma altura», lo correcto).
+  - Ve a medias los bustos, y a veces junta dos en una caja.
+  - **No ve bases, mesas ni la mayoría de los accesorios.** Por eso solo sugiere.
+- **Sin red:** después del primer uso, la sugerencia tarda 0.2 s desde la caché del service
+  worker.
+
 ## Privacidad y material interno
 
 - Las fotos se procesan en el teléfono y no salen de él. Compartir es una acción de la persona
@@ -161,10 +199,45 @@ como evidencia del criterio**: solo prueban que el método hace lo que dice.
 - Cualquier modelo de lenguaje sobre la foto.
 - Validar la firma C2PA (v1 solo la detecta).
 
+## Ajustes durante la construcción
+
+Los encontró el propio evaluador o la revisión de las capturas. Se dejan escritos porque cambian
+lo que el ADR decía antes de medir:
+
+1. **Colorización, corrección de luz:** una sombra lateral hacía que un naranja saliera café.
+   Ahora se divide entre la luz de la pared en cada columna, solo si la pared es pareja en color,
+   y con una ganancia global acotada (×1.35, porque en tienda las paredes suelen ser claras).
+2. **Colorización, fondo:** una prenda blanca contra una pared clara desaparecía como si fuera
+   pared. Ahora el umbral es estricto y la pared tiene que ser lisa (sin pliegues).
+3. **Surtido:** el aire de arriba de las pilas contaba como hueco. Ahora un hueco tiene que ser
+   una corrida vertical de 15 % del alto. Los umbrales se recalibraron con las sintéticas
+   **antes** de medir con fotos reales: una casilla vacía de un anaquel de 3×6 mide ~2–3 %.
+   - Se probó y se descartó un umbral de bordes adaptado al ruido de la foto: subía los
+     huecos falsos de 1 a 14.
+4. **Triangulación:** una escalera con dos alturas iguales arriba salía CUMPLE. Ahora los dos
+   lados tienen que bajar, y la cima va en la mitad central (no el tercio), porque con 4
+   elementos el tercio central deja fuera las dos posiciones naturales.
+5. **CSP:** para el detector se abrieron solo `cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/`,
+   `storage.googleapis.com/mediapipe-models/` y `'wasm-unsafe-eval'`. El detector vive en una
+   caché aparte del service worker (`ap-detector-mp-0.10.21`) que sobrevive a las versiones de
+   la app.
+
+## Cómo medir con las fotos de casa
+
+1. `node eval/revision.mjs --plantilla C:/Users/gerar/eval-revision` escribe un `etiquetas.json`
+   de ejemplo.
+2. Se toman ~10 fotos por básico, bien y con un defecto puesto a propósito: una prenda fría
+   entre las cálidas, un hueco en la repisa, la cima a un lado. Se agregan 3–4 que no califican
+   (oscura, movida, reenviada por WhatsApp).
+3. Para el focal se anotan en `puntos` los puntos altos, en fracción del ancho y del alto.
+4. `PLAYWRIGHT_CORE=… CANAL=chrome node eval/revision.mjs --fotos C:/Users/gerar/eval-revision`
+   mide en Chrome con el mismo código del teléfono y marca ✓ o ✗ contra el criterio de arriba.
+
 ## Consecuencias
 
-- Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto}.js`) trabajan
+- Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan
   sobre `{width,height,data}` como `ImageData`, así que corren igual en Node y en el navegador, y
   las pruebas no necesitan navegador.
-- La pantalla (`src/revision/ui.js`) es la única que toca el DOM y la cámara.
+- La pantalla (`src/revision/ui.js`) es la única que toca el DOM y la cámara, junto con
+  `detector.js`, que solo carga MediaPipe cuando alguien lo pide.
 - El motor del manual no se toca: el golden master tiene que salir idéntico.
