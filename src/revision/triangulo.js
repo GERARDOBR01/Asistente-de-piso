@@ -21,7 +21,7 @@ export const REGLA_TRIANGULO = { centroDesde: 0.25, centroHasta: 0.75, desnivelM
 /**
  * @param {Punto[]} puntos      punto más alto de cada elemento (y crece hacia abajo)
  * @param {{width:number,height:number}} tam  tamaño de la foto
- * @param {{origen?:'detector'|'manual', regla?:typeof REGLA_TRIANGULO}} [op]
+ * @param {{origen?:'detector'|'manual'|'detector+manual', regla?:typeof REGLA_TRIANGULO}} [op]
  * @returns {Resultado}
  */
 export function revisarTriangulo(puntos, tam, op = {}) {

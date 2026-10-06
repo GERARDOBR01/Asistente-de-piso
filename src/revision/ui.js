@@ -38,7 +38,7 @@ const st = {
   /** @type {MediaStream|null} */ stream: null,
   /** @type {null|{img:Imagen, base:HTMLCanvasElement, via:'app'|'galeria'|'demo', bytes:Uint8Array|null, tomada:Date|null}} */ foto: null,
   /** @type {{x:number,y:number}[]} */ puntos: [],
-  /** @type {'manual'|'detector'} */ origenPuntos: 'manual',
+  /** @type {'manual'|'detector'|'detector+manual'} */ origenPuntos: 'manual',
   /** @type {Resultado|null} */ res: null,
   /** @type {any} */ origen: null,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
@@ -232,9 +232,29 @@ function modoTocar() {
 }
 function actualizarAyuda() {
   const n = st.puntos.length;
-  $('rv-ayuda-t').textContent = n ? `${n} ${n === 1 ? 'punto' : 'puntos'} · toca lo más alto de cada elemento` : 'Toca lo más alto de cada elemento (maniquí, base, planta)';
+  $('rv-ayuda-t').textContent = st.origenPuntos !== 'manual'
+    ? `${n} ${n === 1 ? 'punto sugerido' : 'puntos sugeridos'} · toca uno para quitarlo o donde falte para agregarlo`
+    : n ? `${n} ${n === 1 ? 'punto' : 'puntos'} · toca lo más alto de cada elemento` : 'Toca lo más alto de cada elemento (maniquí, base, planta) o pide una sugerencia';
   $('rv-listo').disabled = n < 3;
   $('rv-deshacer').disabled = !n;
+}
+
+/* Plan A como sugerencia: el detector propone, la persona confirma. */
+async function sugerir() {
+  const f = st.foto, b = $('rv-sugerir');
+  if (!f) return;
+  b.disabled = true; b.textContent = 'Buscando…';
+  try {
+    const { detectar } = await import('./detector.js');
+    const cajas = await detectar(f.base);
+    const k = f.img.width / f.base.width;
+    const ps = puntosDeCajas(cajas).map(p => ({ x: p.x * k, y: p.y * k }));
+    if (!ps.length) aviso('El detector no encontró maniquíes ni objetos: toca los puntos a mano.', 'warn');
+    else { st.puntos = ps; st.origenPuntos = 'detector'; }
+    actualizarAyuda(); dibujar(1);
+  } catch {
+    aviso('No se pudo cargar el detector (la primera vez necesita señal). Toca los puntos a mano.', 'warn');
+  } finally { b.disabled = false; b.textContent = 'Sugerir'; }
 }
 
 /** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e */
@@ -605,9 +625,17 @@ function iniciar() {
   $('rv-lienzo').addEventListener('click', (/** @type {MouseEvent} */ e) => {
     if (st.tipo !== 'focal' || st.res || !st.foto) return;
     const q = aImagen(e);
-    if (!q || st.puntos.length >= 9) return;
-    st.puntos.push(q); actualizarAyuda(); dibujar(1);
+    if (!q) return;
+    /* Tocar un punto lo quita (para corregir lo que sugirió el detector);
+       tocar en otro lado agrega uno. */
+    const lz = $('rv-lienzo'), cerca = 22 * st.foto.img.width / lz.getBoundingClientRect().width;
+    const i = st.puntos.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca);
+    if (i >= 0) st.puntos.splice(i, 1);
+    else if (st.puntos.length < 9) st.puntos.push(q);
+    if (st.origenPuntos === 'detector') st.origenPuntos = 'detector+manual';
+    actualizarAyuda(); dibujar(1);
   });
+  $('rv-sugerir').addEventListener('click', sugerir);
   $('rv-deshacer').addEventListener('click', () => { st.puntos.pop(); actualizarAyuda(); dibujar(1); });
   $('rv-listo').addEventListener('click', () => { $('rv-ayuda').hidden = true; empezarRevision(true); });
   /* La cámara no se queda prendida en otra pestaña. */
