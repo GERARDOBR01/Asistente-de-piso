@@ -344,6 +344,30 @@ test('la palabra que no está en la sección activa pero sí en otra dice de cu�
   assert.ok(d.razones.includes('palabra-ausente'));
 }, reconstruirIndice));
 
+/* Palabras de piso contra palabras de lámina: el aviso de palabra ausente le
+   decía al modelo «no está» con la respuesta delante, y el modelo obedecía. */
+test('«parado o acostado», «hasta abajo», «se divide», «letreros» no faltan si el manual lo dice con sus palabras', () => conEstado({
+  docChunks: [frag('t1', 'gourmet.pdf', 9, 'MONTAJE', 'Las latas de Ondera van de manera horizontal y las cajas, de manera vertical.'),
+    frag('t2', 'gourmet.pdf', 10, 'PERÍMETRO', 'En el entrepaño inferior van los paquetes grandes de Kalinde.'),
+    frag('t3', 'gourmet.pdf', 5, 'DISPLAY', 'Los productos están clasificados en dos mundos: Tresvik y Kalinde.'),
+    frag('t4', 'gourmet.pdf', 26, 'IDENTIFICADOR', 'Los señalizadores de categoría se solicitan al almacén central.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'gourmet.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, () => {
+  for (const q of ['las latas las acomodo parado o acostado', 'qué va hasta abajo en el perímetro',
+    'en qué mundos se dividen los productos', 'a quién le pido los letreros de categoría'])
+    assert.deepEqual(terminosAusentes(q, 'gourmet.pdf').map(a => a.palabra), [], q);
+}, reconstruirIndice));
+
+test('«¿X o Y?»: si el manual tiene una alternativa, la otra no falta; sin «o», sí', () => conEstado({
+  docChunks: [...DOS, frag('d4', 'boutique.pdf', 4, 'VESTIDOS', 'Los vestidos largos van al fondo.'),
+    frag('d5', 'boutique.pdf', 5, 'NOCHE', 'Los vestidos de noche van con zapatos.'),
+    frag('d6', 'boutique.pdf', 6, 'FIESTA', 'Los vestidos de fiesta se cuelgan por color.')].map(c => ({ ...c })),
+  manualSections: [], docs: [{ name: 'cava.pdf' }, { name: 'boutique.pdf' }], manualActivo: null, ultimosFragmentos: [],
+}, () => {
+  assert.deepEqual(terminosAusentes('¿en la barra van copas o vestidos?', 'cava.pdf').map(a => a.palabra), []);
+  assert.deepEqual(terminosAusentes('¿en la barra van vestidos?', 'cava.pdf').map(a => a.palabra), ['vestidos']);
+}, reconstruirIndice));
+
 /* La raíz es para las formas de la palabra, no para sus sinónimos: el
    diccionario lleva «ganchos» a «barra», y «barr» es también raíz de «barril».
    Con los sinónimos por raíz, «ganchos» nunca faltaba en la cava. */

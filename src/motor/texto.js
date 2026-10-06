@@ -138,6 +138,27 @@ export const SYNONYMS={
      marca», «Prioridad 1 · Pañuelos, moños, fajas», «priorizando: Tintos…».
      «prioridad» sale 130 veces en los 33 manuales reales y «primero», 12. */
   'primero':['prioridad','priorizando','priorizar'],
+  /* El piso dice dónde va algo con palabras de la calle y el manual con las de
+     la lámina. Con preguntas nuevas, 10 de 54 de dato llegaban al modelo con
+     el aviso «esa palabra no está en el manual» aunque la respuesta estuviera
+     en el contexto, y el modelo obedecía el aviso: «¿las latas las acomodo
+     parado o acostado?» contra una lámina que dice «de manera horizontal». La
+     batería vieja no tenía ninguna, por eso no se veía. */
+  /* Una palabra por sinónimo: la puerta parte las frases en palabras sueltas, y
+     «parte delantera» o «de manera horizontal» metían «parte» y «manera», que
+     están en todos los manuales y tapaban palabras que sí faltan («frente» en
+     VINOS). */
+  'abajo':['inferior','nivel inferior','entrepano inferior'],
+  'arriba':['superior','nivel superior','entrepano superior'],
+  'adelante':['frente','delante','delantera'],
+  'parado':['vertical','verticalmente'],
+  'acostado':['horizontal','horizontalmente'],
+  'poquito':['poco','poca','variedad'],
+  'revolver':['mezclar','mezcla','mezclado','mezclados'],
+  'distinto':['diferente','diferentes'],
+  'letrero':['senalizador','senalizadores','senalizacion','identificador','cartulina'],
+  'dividir':['divide','dividen','division','clasificadas','clasifican','mundos'],
+  'colgante':['colgar','cuelga','cuelgan','colgado'],
   // ═══ PERFILES DE CLIENTE ═══
   'clasico':['cliente clasico','tradicional','conservador','formal'],
   'practico':['cliente practico','funcional','rapido','eficiente'],
