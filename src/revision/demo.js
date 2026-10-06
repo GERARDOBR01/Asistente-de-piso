@@ -184,14 +184,19 @@ export function focal(alturas, op = {}) {
     if (baseAlto > 0) rect(img, cx - paso * 0.36, piso - baseAlto, cx + paso * 0.36, piso, [236, 233, 228], (x) => 0.85 + 0.15 * ((x - cx) / paso + 0.5));
     const cuerpoTop = top, cuerpoAlto = alto - baseAlto, cabeza = cuerpoAlto * 0.1;
     const piel = [228, 222, 214], ropa = rgb(prendas[(i + Math.floor(r() * 3)) % prendas.length]);
+    /* Silueta de maniquí: cabeza redonda, cuello, hombros, cintura y falda o
+       pantalón. */
+    const rc = Math.min(cabeza * 0.62, paso * 0.11), hombro = Math.min(paso * 0.26, cuerpoAlto * 0.16);
     for (let y = Math.round(cuerpoTop); y < cuerpoTop + cuerpoAlto; y++) {
-      const t = (y - cuerpoTop) / cuerpoAlto;
+      const t = (y - cuerpoTop) / cuerpoAlto, dy = y - cuerpoTop;
       let media, c = ropa;
-      if (t < 0.1) { media = cabeza * 0.45 * Math.sqrt(Math.max(0, 1 - ((t - 0.05) / 0.05) ** 2)); c = piel; }
-      else if (t < 0.13) { media = cabeza * 0.15; c = piel; }
-      else if (t < 0.55) media = paso * (0.2 - 0.04 * (t - 0.13));
-      else media = paso * (0.09 + 0.08 * (1 - t));
-      for (let x = Math.round(cx - media); x < cx + media; x++) pix(img, x, y, c, 0.8 + 0.2 * (1 - Math.abs(x - cx) / (media + 1)));
+      if (dy < 2 * rc) { media = Math.sqrt(Math.max(0, rc * rc - (dy - rc) ** 2)); c = piel; }
+      else if (t < 0.15) { media = rc * 0.42; c = piel; }
+      else if (t < 0.2) media = hombro * (0.55 + 0.45 * (t - 0.15) / 0.05);
+      else if (t < 0.48) media = hombro * (1 - 0.32 * (t - 0.2) / 0.28);
+      else if (t < 0.56) media = hombro * 0.68;
+      else media = hombro * (0.68 + 0.3 * (t - 0.56));
+      for (let x = Math.round(cx - media); x < cx + media; x++) pix(img, x, y, c, 0.72 + 0.28 * (1 - Math.abs(x - cx) / (media + 1)));
     }
     puntos.push({ x: cx, y: top });
   });

@@ -27,6 +27,9 @@ import * as conversacion from './motor/conversacion.js';
 import * as respuesta from './motor/respuesta.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
+/* La pestaña «Revisar» (ADR 0007) vive aparte del motor del manual: se arma
+   sola y no publica nada en globalThis salvo su gancho de medición. */
+import './revision/ui.js';
 
 Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
   secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta);

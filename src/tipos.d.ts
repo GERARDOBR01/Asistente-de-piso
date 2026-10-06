@@ -198,5 +198,5 @@ declare const crypto: { getRandomValues<T extends ArrayBufferView>(a: T): T };
 /* Revisión con foto (src/revision/): lo mínimo de las APIs comunes a Node y al
    navegador que usan las piezas puras. */
 declare class TextEncoder { encode(s?: string): Uint8Array }
-declare class TextDecoder { constructor(etiqueta?: string); decode(b?: ArrayBufferView): string }
+declare class TextDecoder { constructor(etiqueta?: string, opciones?: { fatal?: boolean }); decode(b?: ArrayBufferView): string }
 declare function atob(s: string): string;

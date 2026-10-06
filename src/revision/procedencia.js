@@ -43,6 +43,7 @@ export const EDITORES = ['photoshop', 'lightroom', 'gimp', 'snapseed', 'picsart'
 
 const enc = new TextEncoder();
 const latin1 = new TextDecoder('latin1');
+const utf8 = new TextDecoder('utf-8', { fatal: true });
 
 /** Primera posición de `aguja` en `b` desde `desde`, o -1.
  * @param {Uint8Array} b @param {Uint8Array|string} aguja @param {number} [desde] */
@@ -91,7 +92,12 @@ export function leerTiff(t) {
     if (tipo !== 2) return null;
     const ini = n <= 4 ? o : u32(o);
     if (ini + n > t.length) return null;
-    return latin1.decode(t.subarray(ini, ini + n)).replace(/\0+$/, '').trim() || null;
+    const b = t.subarray(ini, ini + n);
+    /* EXIF dice ASCII, pero muchos teléfonos escriben UTF-8: se intenta
+       primero y, si no es UTF-8 válido, latin1. */
+    let txt;
+    try { txt = utf8.decode(b); } catch { txt = latin1.decode(b); }
+    return txt.replace(/\0+$/, '').trim() || null;
   };
   /** @param {number} off @returns {number|null} puntero a la sub-IFD Exif */
   const ifd = (off) => {
