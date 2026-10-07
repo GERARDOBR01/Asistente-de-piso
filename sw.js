@@ -13,11 +13,11 @@
    - El código de la app (src/) va igual que la página: si se sirviera primero
      de la caché, un index.html nuevo podría arrancar con un app.js viejo.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.11.0';
+const VERSION='ap-v1.12.0';
 /* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
    eval/arnes.mjs. */
 const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js','src/revision/veredicto.js','src/revision/procedencia.js','src/revision/color.js','src/revision/surtido.js','src/revision/triangulo.js','src/revision/demo.js','src/revision/ui.js','src/revision/detector.js','src/revision/c2pa.js','src/revision/silueta.js'];
-const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf',...CODIGO];
+const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf','src/revision/c2pa-confianza.pem',...CODIGO];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',

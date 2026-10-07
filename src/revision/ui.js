@@ -222,13 +222,13 @@ async function decodificar(blob, bytes) {
  * Si la foto trae credencial C2PA, la lee y valida con el SDK oficial. Sin
  * señal la primera vez (o si no se puede leer), null: el origen lo dice y no
  * acusa a nadie por una palabra en los bytes.
- * @param {Blob} blob @param {import('./procedencia.js').Metadatos} meta
+ * @param {Blob} blob @param {import('./procedencia.js').Metadatos} meta @param {string} [anclas] solo para pruebas
  */
-async function credencialDe(blob, meta) {
+async function credencialDe(blob, meta, anclas) {
   if (!meta.c2pa.presente) return null;
   try {
     const { leerCredencial } = await import('./c2pa.js');
-    return interpretarC2pa(await conTope(leerCredencial(blob, meta.formato), 15000));
+    return interpretarC2pa(await conTope(leerCredencial(blob, meta.formato, { anclas }), 15000));
   } catch (e) {
     console.warn('Revisar: no se pudo leer la credencial C2PA', e);
     return null;
@@ -238,7 +238,7 @@ async function credencialDe(blob, meta) {
 /**
  * Del archivo a resultados, sin pantalla: lo usan la pestaña y eval/revision.mjs.
  * @param {Blob} blob @param {Tipo} tipo
- * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco}} [op]
+ * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco, anclasC2pa?:string}} [op]
  *   `puntos` y `marco` en fracción del ancho y del alto de la foto.
  */
 export async function analizarArchivo(blob, tipo, op = {}) {
@@ -249,7 +249,7 @@ export async function analizarArchivo(blob, tipo, op = {}) {
   const img = pixeles(base);
   const h = await huella(bytes);
   const meta = leerMetadatos(bytes);
-  const origen = veredictoOrigen({ via: op.via || 'galeria', meta, huella: h, bytes: bytes.length, tomada: op.tomada, credencial: await credencialDe(blob, meta) });
+  const origen = veredictoOrigen({ via: op.via || 'galeria', meta, huella: h, bytes: bytes.length, tomada: op.tomada, credencial: await credencialDe(blob, meta, op.anclasC2pa) });
   let resultados;
   try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco); }
   catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }

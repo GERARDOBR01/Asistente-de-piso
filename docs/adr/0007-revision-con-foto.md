@@ -56,7 +56,9 @@ engaña, y un falso positivo equivale a acusar a un compañero. Por eso no se us
   | Retocada con IA (borrador mágico, inpainting), según C2PA o IPTC | OBSERVACIÓN (7-oct; antes GRAVE) |
   | Credencial que no coincide con la imagen (alterada después de firmar) | OBSERVACIÓN |
   | Credencial que menciona IA pero no se pudo verificar (sin señal la primera vez) | OBSERVACIÓN: «ábrela con señal antes de concluir» |
-  | Credencial de cámara con firma de emisor confiable | CUMPLE (falta cargar la lista de confianza: hoy sale OBSERVACIÓN con el emisor) |
+  | Original firmada por una cámara de la lista de confianza de C2PA, de las últimas 24 h | CUMPLE (7-oct) |
+  | Original firmada por cámara confiable, pero vieja o sin hora | OBSERVACIÓN: «original, pero de hace N días» |
+  | Credencial de cámara con emisor fuera de la lista | OBSERVACIÓN, con el nombre del emisor |
 
   Nunca sale «es IA» por un detector. GRAVE solo sale cuando la propia foto declara que **se generó**
   con IA. Ver «Origen: falsos positivos de IA (7-oct)».
@@ -343,10 +345,22 @@ controladas (en `eval-revision/origen/`):
   las veces;
 - SynthID (Google) no tiene detector abierto ni API pública: solo el portal y la app Gemini.
 
-**Pendiente:**
-- cargar la lista de confianza de C2PA, para que una foto firmada por la cámara (Pixel 10 firma
-  todas las suyas) salga CUMPLE;
-- probarlo con fotos reales de Pixel y Galaxy.
+**Lista de confianza (después del #54):** se empaqueta la lista oficial del Conformance Program de
+C2PA.
+- **Fuente y licencia:** `c2pa-org/conformance-public`, `trust-list/C2PA-TRUST-LIST.pem`, commit
+  70ec46e del 13-ago-2026, CC-BY-4.0. Va en `src/revision/c2pa-confianza.pem`, se guarda en el
+  service worker y se pasa al SDK como anclas.
+- **Quién está:** 30 certificados de Google (Pixel: «Mobile A/B»), Xiaomi, vivo, Huawei, Adobe,
+  DigiCert y otros. Samsung no aparece por nombre.
+- **Regla:** una foto original firmada por una cámara de la lista sale CUMPLE solo si la firma (o
+  el EXIF) es de las últimas 24 h, porque una original vieja no prueba el montaje de hoy. Lo
+  generado con IA sigue saliendo GRAVE aunque el emisor sea confiable.
+- **Verificado con la raíz de prueba de c2pa-rs como ancla:**
+  - la muestra de cámara pasa a «emisor confiable»;
+  - la generada sigue en GRAVE;
+  - la alterada sigue en «no coincide».
+- **Con la lista oficial,** el certificado de prueba sigue «sin verificar», como debe.
+- **Mantenimiento:** la lista se actualiza a mano. Falta probarla con una foto real de Pixel 10.
 
 ## Focal: toque inteligente con Magic Touch (7-oct)
 
