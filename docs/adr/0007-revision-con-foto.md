@@ -1,9 +1,10 @@
 # ADR 0007 · Revisión con foto en el teléfono (el «mini Veristack»)
 
-- **Estado:** implementada en la rama `revision-foto` (6-oct-2026), sin merge. La regla de
-  colorización sigue siendo un **supuesto por confirmar** con Gerardo, y el criterio de éxito
-  todavía no se mide con fotos reales. Lo que cambió al construirlo está en «Ajustes durante la
-  construcción», al final.
+- **Estado:** en `main` (#51, 6-oct-2026). El 7-oct se calibró con fotos reales de piso (rama
+  `revision-tienda`): ver «Fotos reales de tienda (7-oct)». El orden entre grupos de color sigue
+  siendo un **supuesto por confirmar**. El criterio de éxito se ha medido solo con fotos de
+  **desarrollo**: falta el lote de confirmación. Lo que cambió al construirlo está en «Ajustes
+  durante la construcción», al final.
 
 ## Contexto
 
@@ -232,6 +233,73 @@ lo que el ADR decía antes de medir:
 3. Para el focal se anotan en `puntos` los puntos altos, en fracción del ancho y del alto.
 4. `PLAYWRIGHT_CORE=… CANAL=chrome node eval/revision.mjs --fotos C:/Users/gerar/eval-revision`
    mide en Chrome con el mismo código del teléfono y marca ✓ o ✗ contra el criterio de arriba.
+
+## Fotos reales de tienda (7-oct)
+
+Gerardo trajo 5 fotos de piso (reenviadas por WhatsApp, fuera del repo, en
+`eval-revision/tienda/`), todas de exhibiciones **bien montadas**: una tringla de chamarras,
+una mesa de doblado, una foto de área (mesa + tringla + focal) y dos focales. Con zonas son 7
+zonas y 15 básicos. Confirmó tres reglas: la **mezclilla es fría**, el **triángulo asimétrico
+vale**, y en un focal se califican **todos los básicos que se puedan medir**.
+
+| Zona | Antes (código del 6-oct) | Ahora | Por qué fallaba |
+|---|---|---|---|
+| Tringla (vino → mezclilla → café → negro) | NO_CALIFICA «muy oscura» | CUMPLE (cálidos → fríos → neutros) | El brillo se medía en la franja: los abrigos negros la oscurecen aunque la foto esté bien expuesta. Y la mezclilla salía neutra (croma ≈ 3) |
+| Mesa de doblado, llena | GRAVE 8 % vacío | CUMPLE 0 % | Unos jeans negros en sombra (L ≈ 0) contaban como hueco |
+| Mesa nido | OBSERVACIÓN 2 % | CUMPLE | Pantalones cafés lisos sobre una mesa beige: la claridad pesaba poco |
+| Tringla de un solo tono | CUMPLE | CUMPLE | — |
+| Focal con la cima a un lado | OBSERVACIÓN | CUMPLE (asimétrico) | La regla pedía la cima al centro |
+| Focal alto · bajo · medio | GRAVE «escalera» | CUMPLE | La regla pedía que los dos lados bajaran |
+| Focal de área | CUMPLE | CUMPLE | — |
+
+**Cambios:**
+
+1. **Zonas.** `analizarArchivo(…, { marco })` y la pantalla con «＋ Zona»: una foto de área se
+   revisa por partes. El veredicto general es el peor de las zonas; el origen va aparte.
+2. **Exposición de la foto completa** (percentil 90 de la luma ≥ 80) en lugar del brillo de la
+   zona. Fotos reales: p90 ≥ 138; sintéticas oscuras: ≈ 30.
+3. **Balance de blancos** por parche blanco (von Kries, ganancias 0.7–1.4) antes de leer
+   colores. La luz de tienda es cálida.
+4. **Mezclilla fría.** Un azul apagado (tono 200–300°, croma ≥ 3) es frío si L ≥ 26 y C/L ≥ 0.12.
+   - El **azul marino** (más oscuro) se queda en neutros: en una foto del manual, marino →
+     caqui → marino está bien montada.
+   - El **gris frío** (menos saturado) también se queda en neutros.
+   - **Márgenes angostos:** mezclilla L ≈ 30 contra marino L 19–23; C/L 0.17 contra 0.08 del
+     gris frío. Hay que confirmarlos con más fotos.
+5. **Surtido:** una celda casi negra (L < 15) no es hueco, y la claridad pesa 0.5 (antes 0.25)
+   al compararla con el fondo. Barrido de 0.25 a 0.6: de 0.4 a 0.6 aciertan las 2 mesas de
+   tienda y las 12 fotos de referencia.
+6. **Triangulación:** una sola cima con desnivel es CUMPLE, al centro o a un lado (se reporta
+   simétrico o asimétrico). Dos elementos empatados arriba (a menos de 4 % del alto) es
+   OBSERVACIÓN, y todo plano es GRAVE.
+   - El empate a 4 % es frágil: con los puntos del detector sin corregir, un focal real sale
+     OBSERVACIÓN por 0.4 puntos.
+7. **Alturas y niveles** (básico nuevo, **supuesto por confirmar**): 3 alturas o más → CUMPLE,
+   2 → OBSERVACIÓN, plano → GRAVE.
+   - Equilibrio, composición y simetría se quedan en la lista manual: con puntos no se mide
+     peso visual sin inventarlo.
+8. **Carga de la foto** (el «No se pudo leer» que vio Gerardo en el teléfono, no reproducido en
+   la PC):
+   - decodifica ya reducida, con la orientación del EXIF;
+   - usa un `<img>` de respaldo (CSP `img-src blob:`);
+   - rechaza la JPEG cortada y avisa claro con HEIC;
+   - el lector de metadatos nunca truena;
+   - separa «no se abrió» de «falló el análisis».
+
+**Medido con estas reglas** (todo es desarrollo: estas fotos se usaron para calibrar):
+
+| Batería | Resultado |
+|---|---|
+| Tienda | 15/15: colorización 2/2, surtido 2/2, triangulación 3/3, niveles 3/3, origen 5/5 |
+| Fotos de referencia del manual | 40/40: colorización 8/8, surtido 12/12 (antes 5/8 y 5/12), origen 20/20 |
+| Sintéticas | colorización 52/56, surtido 54/56, triangulación 72/72, niveles 36/36 |
+
+En todas: 0 CUMPLE falsos y 0 GRAVE falsos de origen.
+
+- **Detector** sobre los focales reales: ve los maniquíes en ~0.1 s, pero no ve la base con el
+  zapato ni las pampas, y suma un maniquí del fondo. Sigue siendo solo sugerencia.
+- **Siguiente:** un lote de confirmación (fotos nuevas, con defectos puestos a propósito),
+  corrido una sola vez sin tocar el código antes.
 
 ## Consecuencias
 
