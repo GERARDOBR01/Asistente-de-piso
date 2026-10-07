@@ -15,6 +15,7 @@ import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMu
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {'tringla'|'anaquel'|'focal'} Tipo */
+/** @typedef {{x:number,y:number,w:number,h:number}} Marco */
 
 /* Lo que encuadra la guía, en fracción de la foto. Es lo mismo que miden
    color.js y surtido.js: la guía no es decoración. */
@@ -210,7 +211,8 @@ async function decodificar(blob, bytes) {
 /**
  * Del archivo a resultados, sin pantalla: lo usan la pestaña y eval/revision.mjs.
  * @param {Blob} blob @param {Tipo} tipo
- * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[]}} [op]
+ * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco}} [op]
+ *   `puntos` y `marco` en fracción del ancho y del alto de la foto.
  */
 export async function analizarArchivo(blob, tipo, op = {}) {
   let bytes;
@@ -221,14 +223,15 @@ export async function analizarArchivo(blob, tipo, op = {}) {
   const h = await huella(bytes);
   const origen = veredictoOrigen({ via: op.via || 'galeria', meta: leerMetadatos(bytes), huella: h, bytes: bytes.length, tomada: op.tomada });
   let resultado;
-  try { resultado = medir(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null); }
+  try { resultado = medir(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco); }
   catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }
   return { bytes, base, img, origen, huella: h, resultado };
 }
 
-/** @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img */
-function medir(img, tipo, puntos = null) {
-  const m = MARCOS[tipo];
+/** @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
+ * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara */
+function medir(img, tipo, puntos = null, zona) {
+  const m = zona || MARCOS[tipo];
   const marco = { x: m.x * img.width, y: m.y * img.height, w: m.w * img.width, h: m.h * img.height };
   if (tipo === 'tringla') return revisarColor(img, { marco });
   if (tipo === 'anaquel') return revisarSurtido(img, { marco });

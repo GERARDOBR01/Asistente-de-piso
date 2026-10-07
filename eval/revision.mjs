@@ -14,7 +14,10 @@
 //
 // etiquetas.json: [{ "foto": "tringla-01.jpg", "tipo": "tringla|anaquel|focal|origen",
 //   "esperado": "CUMPLE|OBSERVACIÓN|GRAVE|NO_CALIFICA", "defecto": "texto libre",
-//   "via": "galeria|app", "puntos": [{"x":0.2,"y":0.6}, …] }]
+//   "via": "galeria|app", "puntos": [{"x":0.2,"y":0.6}, …],
+//   "marco": {"x":0.1,"y":0.4,"w":0.5,"h":0.3}, "origenEsperado": "NO_CALIFICA" }]
+// Una foto puede tener varias filas, una por zona (`marco`): la mesa, la
+// tringla y el focal de una misma foto de área.
 // Los puntos del focal van en fracción del ancho y del alto (lo que tocaría
 // la persona). Para «origen», `esperado` es el nivel del origen.
 //
@@ -38,7 +41,7 @@ function acierta(esperado, obtenido) {
   return obtenido === 'GRAVE' || obtenido === 'OBSERVACIÓN';
 }
 
-/** @param {{basico:string, esperado:string, obtenido:string, caso:string}[]} filas */
+/** @param {{basico:string, esperado:string, obtenido:string, caso:string, motivo?:string}[]} filas */
 export function calificar(filas) {
   const porBasico = {};
   for (const f of filas) (porBasico[f.basico] ||= []).push(f);
@@ -72,7 +75,7 @@ function informe(t, titulo, nota, porNivel = false) {
       l.push(`| ${r.basico} | ${celdas.join(' | ')} |`);
     }
   }
-  const fallos = t.flatMap(r => r.fallos.map(f => `- ${r.basico} · ${f.caso}: se esperaba ${f.esperado}, salió ${f.obtenido}`));
+  const fallos = t.flatMap(r => r.fallos.map(f => `- ${r.basico} · ${f.caso}: se esperaba ${f.esperado}, salió ${f.obtenido}${f.motivo ? ` — «${f.motivo}»` : ''}`));
   if (fallos.length) l.push('', '## Fallos, uno por uno', '', ...fallos);
   return l.join('\n');
 }
@@ -139,20 +142,23 @@ async function fotos(dir) {
   const { p, cerrar } = await abrirApp([], { log: () => {} });
   /** @type {{basico:string, esperado:string, obtenido:string, caso:string}[]} */
   const filas = [];
+  const vistas = new Set();
   try {
     await p.waitForFunction(() => /** @type {any} */ (window).__revision, null, { timeout: 30000 });
     for (const e of etiquetas) {
       const b64 = fs.readFileSync(path.join(dir, e.foto)).toString('base64');
       const tipo = e.tipo === 'origen' ? 'tringla' : e.tipo;
-      const r = await p.evaluate(async ({ b64, tipo, via, puntos }) => {
+      const r = await p.evaluate(async ({ b64, tipo, via, puntos, marco }) => {
         const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-        const a = await /** @type {any} */ (window).__revision.analizarArchivo(new Blob([bytes]), tipo, { via, puntos });
+        const a = await /** @type {any} */ (window).__revision.analizarArchivo(new Blob([bytes]), tipo, { via, puntos, marco });
         return { origen: a.origen.nivel, nivel: a.resultado ? a.resultado.nivel : null, motivo: a.resultado?.motivo };
-      }, { b64, tipo, via: e.via || 'galeria', puntos: e.puntos || null });
+      }, { b64, tipo, via: e.via || 'galeria', puntos: e.puntos || null, marco: e.marco || undefined });
       const basico = { tringla: 'colorizacion', anaquel: 'surtido', focal: 'triangulacion', origen: 'origen' }[e.tipo];
-      filas.push({ basico, esperado: e.esperado, obtenido: e.tipo === 'origen' ? r.origen : r.nivel || 'NO_CALIFICA', caso: `${e.foto}${e.defecto ? ' (' + e.defecto + ')' : ''}` });
-      /* Ninguna foto real puede salir GRAVE de origen sin declararlo. */
-      if (e.tipo !== 'origen') filas.push({ basico: 'origen', esperado: e.origenEsperado || 'OBSERVACIÓN', obtenido: r.origen, caso: e.foto });
+      filas.push({ basico, esperado: e.esperado, obtenido: e.tipo === 'origen' ? r.origen : r.nivel || 'NO_CALIFICA', caso: `${e.foto}${e.marco ? ' [zona]' : ''}${e.defecto ? ' (' + e.defecto + ')' : ''}`, motivo: r.motivo });
+      /* Ninguna foto real puede salir GRAVE de origen sin declararlo. Una
+         vez por foto, aunque tenga varias zonas. */
+      if (e.tipo !== 'origen' && !vistas.has(e.foto)) filas.push({ basico: 'origen', esperado: e.origenEsperado || 'OBSERVACIÓN', obtenido: r.origen, caso: e.foto });
+      vistas.add(e.foto);
     }
   } finally { await cerrar(); }
   return filas;

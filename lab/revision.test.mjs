@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
 import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto } from '../src/revision/procedencia.js';
-import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR } from '../src/revision/color.js';
+import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, puntosDeCajas } from '../src/revision/triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
@@ -175,6 +175,28 @@ test('colorización: en orden → CUMPLE, limpia y con sombra y ruido', () => {
     assert.equal(r.nivel, 'CUMPLE', JSON.stringify(op) + ' ' + r.motivo);
     assert.equal(r.evidencia.grupos, 'CCCCFFFFNNN');
   }
+});
+
+test('colorización: mezclilla apagada → fría; marino, gris frío y café → neutros (fotos de tienda, 7-oct)', () => {
+  assert.equal(clasificar(30, 5, 260).grupo, 'frio', 'mezclilla lavada en luz de tienda');
+  assert.equal(clasificar(45, 11, 250).grupo, 'frio', 'mezclilla clara');
+  assert.equal(clasificar(21, 8, 262).grupo, 'neutro', 'azul marino');
+  assert.equal(clasificar(59, 4.6, 280).grupo, 'neutro', 'gris frío');
+  assert.equal(clasificar(21, 5.5, 45).grupo, 'neutro', 'café');
+  assert.equal(clasificar(6, 1, 270).grupo, 'neutro', 'negro');
+});
+
+test('colorización: rojo → mezclilla → café → negro bajo luz cálida → CUMPLE', () => {
+  const VINO = '#7A2328', MEZCLILLA = '#5E6E84', CAFE = '#4A3427', NEGRO = '#1C1C1E';
+  const img = tringla([VINO, VINO, MEZCLILLA, MEZCLILLA, MEZCLILLA, CAFE, CAFE, NEGRO, NEGRO], { ...SUCIA, semilla: 7, pared: '#EFE2CF' });
+  const r = revisarColor(img);
+  assert.equal(r.nivel, 'CUMPLE', r.motivo);
+  assert.match(String(r.evidencia.grupos), /^C+F+N+$/);
+});
+
+test('colorización: el balance de blancos no inventa color si no hay blanco de referencia', () => {
+  const gris = { width: 40, height: 30, data: new Uint8ClampedArray(40 * 30 * 4).fill(90) };
+  assert.equal(balanceBlancos(gris), null);
 });
 
 test('colorización: un frío entre cálidos → GRAVE y señala el tramo', () => {

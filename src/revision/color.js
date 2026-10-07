@@ -49,6 +49,17 @@ export const REGLA_COLOR = {
    cierra; el morado y el violeta (~315-325°) van en fríos. */
 export const TONO = { calidoDesde: 335, calidoHasta: 102 };
 export const CROMA_NEUTRO = 15;
+/* La mezclilla es fría (lo confirmó Gerardo), pero en una foto de tienda
+   mide croma 4-6: casi gris para la cámara. Un azul apagado (tono 200-300°,
+   croma ≥ 4) cuenta como frío si es claro o medio. El azul marino, igual de
+   apagado pero oscuro, se queda en neutros: en una foto del propio manual una
+   tringla marino → caqui → marino está bien montada. Medido el 7-oct, ya con
+   balance de blancos: mezclilla L≈30 C≈5 h≈260; marino L 19-23 C 5-9.
+   Un gris frío también tiene croma 4-5, pero es más claro: lo que separa la
+   mezclilla es la saturación (C/L): mezclilla 0.17, gris frío 0.08. Los
+   cortes (L 26, C/L 0.12) tienen poco margen: se confirman con el siguiente
+   lote de fotos. */
+export const AZUL = { desde: 200, hasta: 300, croma: 3, claridad: 26, saturacion: 0.12 };
 
 export const NOMBRE_GRUPO = { calido: 'cálido', frio: 'frío', neutro: 'neutro' };
 
@@ -95,7 +106,8 @@ export function clasificar(L, C, h) {
      Límite físico: un naranja en sombra fuerte ES café para la cámara; la
      corrección de luz con la pared (pared()) es lo que evita confundirlos. */
   const tierra = h >= 45 && h <= 95 && (C < 32 || (L < 50 && C < 62) || (L >= 60 && C < 48));
-  if (C < CROMA_NEUTRO || tierra) {
+  const azulApagado = h >= AZUL.desde && h <= AZUL.hasta && C >= AZUL.croma && L >= AZUL.claridad && C / L >= AZUL.saturacion;
+  if ((C < CROMA_NEUTRO && !azulApagado) || tierra) {
     /* Neutros en el orden de la guía: tierras (café → beige), luego negro →
        gris → blanco. */
     return { grupo: 'neutro', rueda: (tierra && C >= CROMA_NEUTRO ? 0 : 100) + L, tierra };
@@ -278,11 +290,46 @@ export function pared(img, r) {
 }
 
 /**
+ * Balance de blancos por «parche blanco»: lo más claro y casi sin color de la
+ * foto (techo, luminarias, una pared blanca) se toma como blanco, y se
+ * corrigen R y B contra G en RGB lineal (von Kries). La luz de tienda es
+ * cálida: sin esto, la mezclilla se lee gris y un blanco se lee beige.
+ * Ganancias acotadas a 0.7-1.4, y solo si hay suficiente «blanco» (≥ 0.5 %).
+ * @param {Imagen} img @returns {{img:Imagen, r:number, b:number}|null}
+ */
+export function balanceBlancos(img) {
+  const n = img.width * img.height, d = img.data;
+  /** @type {number[][]} */
+  const claros = [];
+  for (let i = 0; i < n; i++) {
+    const k = i * 4, [L, a, b] = labLineal(LIN[d[k]], LIN[d[k + 1]], LIN[d[k + 2]]);
+    /* Fuera lo quemado (L 99+): ahí la cámara ya recortó un canal. */
+    if (L < 99 && Math.hypot(a, b) < 25) claros.push([L, LIN[d[k]], LIN[d[k + 1]], LIN[d[k + 2]]]);
+  }
+  if (claros.length < n * 0.005) return null;
+  claros.sort((p, q) => q[0] - p[0]);
+  const top = claros.slice(0, Math.max(20, Math.floor(claros.length * 0.03)));
+  if (top[top.length - 1][0] < 60) return null;            // lo más claro es gris: no hay blanco de referencia
+  const [R, G, B] = [1, 2, 3].map(c => mediana(top.map(p => p[c])));
+  if (!R || !B) return null;
+  const kr = Math.min(1.4, Math.max(0.7, G / R)), kb = Math.min(1.4, Math.max(0.7, G / B));
+  if (Math.abs(kr - 1) < 0.03 && Math.abs(kb - 1) < 0.03) return { img, r: 1, b: 1 };
+  /* A sRGB de 8 bits con una tabla: mismo formato que la foto. */
+  const aSrgb = (/** @type {number} */ c) => Math.round(255 * Math.min(1, c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055));
+  const out = new Uint8ClampedArray(d.length);
+  for (let i = 0; i < d.length; i += 4) {
+    out[i] = aSrgb(LIN[d[i]] * kr); out[i + 1] = d[i + 1]; out[i + 2] = aSrgb(LIN[d[i + 2]] * kb); out[i + 3] = d[i + 3];
+  }
+  return { img: { width: img.width, height: img.height, data: out }, r: kr, b: kb };
+}
+
+/**
  * Revisa la colorización de una tringla.
  * @param {Imagen} img  foto ya reducida
  * @param {Object} [op]
  * @param {{x:number,y:number,w:number,h:number}} [op.marco]  lo que encuadró la guía
  * @param {typeof REGLA_COLOR} [op.regla]
+ * @param {boolean} [op.sinBalance]  sin balance de blancos (para comparar)
  * @returns {Resultado}
  */
 export function revisarColor(img, op = {}) {
@@ -293,10 +340,12 @@ export function revisarColor(img, op = {}) {
   const franja = { x: marco.x, y: marco.y + marco.h * 0.32, w: marco.w, h: marco.h * 0.26 };
   const malo = noCalifica(img, franja);
   if (malo) return resultado('colorizacion', 'NO_CALIFICA', malo.motivo, malo.evidencia, { franja });
+  const wb = op.sinBalance ? null : balanceBlancos(img);
+  if (wb) img = wb.img;
   const p = pared(img, marco);
   const { tramos: ts, fondoPct } = tramos(img, franja, p && p.fondo, p && p.luz);
   /** @type {Record<string, string|number|boolean|null>} */
-  const ev = { tramos: ts.length, fondo_pct: redondear(fondoPct * 100), luz_corregida: !!p, direccion: regla.direccion, orden: regla.grupos.map(g => NOMBRE_GRUPO[g]).join(' → ') };
+  const ev = { tramos: ts.length, fondo_pct: redondear(fondoPct * 100), luz_corregida: !!p, balance_blancos: wb ? `R×${redondear(wb.r, 2)} B×${redondear(wb.b, 2)}` : 'sin referencia', direccion: regla.direccion, orden: regla.grupos.map(g => NOMBRE_GRUPO[g]).join(' → ') };
   if (fondoPct > 0.5) return resultado('colorizacion', 'NO_CALIFICA', 'La franja casi no tiene prendas: no se distinguen del fondo.', ev, { franja, tramos: ts });
   if (ts.length < 3) return resultado('colorizacion', 'NO_CALIFICA', `Solo se ven ${ts.length} ${ts.length === 1 ? 'bloque' : 'bloques'} de color: hacen falta 3 para revisar el orden.`, ev, { franja, tramos: ts });
 

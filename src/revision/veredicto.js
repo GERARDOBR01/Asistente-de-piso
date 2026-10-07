@@ -27,7 +27,21 @@ export const NIVELES = ['CUMPLE', 'OBSERVACIÓN', 'GRAVE', 'NO_CALIFICA'];
    la foto reducida a ~640 px de lado; se recalibra con las fotos de casa. */
 /* ladoMinimo 160: una tringla bien encuadrada es una tira ancha (640×226 al
    reducirla) y alcanza de sobra para contar tramos. */
-export const CALIDAD = { brilloMinimo: 40, nitidezMinima: 30, ladoMinimo: 160 };
+/* exposicionMinima: lo claro de la foto COMPLETA (percentil 90 de la luma),
+   no el brillo de la zona. Una tringla de abrigos negros bien fotografiada
+   tiene la zona oscura (brillo 39) y la foto bien expuesta (p90 194); una
+   foto subexpuesta queda oscura entera. Medido el 7-oct: fotos reales de
+   tienda y del manual, p90 ≥ 138; sintéticas oscuras, p90 ≈ 30. */
+export const CALIDAD = { exposicionMinima: 80, nitidezMinima: 30, ladoMinimo: 160 };
+
+/** Percentil 90 de la luma de toda la foto (muestreada). @param {Imagen} img */
+export function exposicion(img) {
+  const n = img.width * img.height, paso = Math.max(1, Math.floor(n / 40000));
+  const v = [];
+  for (let i = 0; i < n; i += paso) v.push(luma(img, i));
+  v.sort((a, b) => a - b);
+  return v.length ? v[Math.floor(v.length * 0.9)] : 0;
+}
 
 /**
  * @param {string} basico @param {Nivel} nivel @param {string} motivo
@@ -92,9 +106,10 @@ export function calidad(img, r = { x: 0, y: 0, w: img.width, h: img.height }) {
 export function noCalifica(img, r) {
   const lado = Math.min(img.width, img.height);
   const { brillo, nitidez } = calidad(img, r);
-  const evidencia = { brillo: redondear(brillo), nitidez: redondear(nitidez), lado };
+  const expo = exposicion(img);
+  const evidencia = { brillo: redondear(brillo), exposicion: redondear(expo, 0), nitidez: redondear(nitidez), lado };
   if (lado < CALIDAD.ladoMinimo) return { motivo: `La foto es muy chica (${lado} px de lado).`, evidencia };
-  if (brillo < CALIDAD.brilloMinimo) return { motivo: `Está muy oscura (brillo ${redondear(brillo)}, mínimo ${CALIDAD.brilloMinimo}).`, evidencia };
+  if (expo < CALIDAD.exposicionMinima) return { motivo: `La foto está muy oscura (exposición ${redondear(expo, 0)}, mínimo ${CALIDAD.exposicionMinima}). Busca más luz y vuelve a tomarla.`, evidencia };
   if (nitidez < CALIDAD.nitidezMinima) return { motivo: `Está movida o fuera de foco (nitidez ${redondear(nitidez)}, mínimo ${CALIDAD.nitidezMinima}).`, evidencia };
   return null;
 }
