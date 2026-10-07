@@ -25,7 +25,9 @@ export const NIVELES = ['CUMPLE', 'OBSERVACIÓN', 'GRAVE', 'NO_CALIFICA'];
 /* Punto de partida: los umbrales de mandatory_engine.py de Veristack (brillo
    medio 0-255 y nitidez). La nitidez aquí es la varianza del laplaciano sobre
    la foto reducida a ~640 px de lado; se recalibra con las fotos de casa. */
-export const CALIDAD = { brilloMinimo: 40, nitidezMinima: 30, ladoMinimo: 240 };
+/* ladoMinimo 160: una tringla bien encuadrada es una tira ancha (640×226 al
+   reducirla) y alcanza de sobra para contar tramos. */
+export const CALIDAD = { brilloMinimo: 40, nitidezMinima: 30, ladoMinimo: 160 };
 
 /**
  * @param {string} basico @param {Nivel} nivel @param {string} motivo

@@ -89,7 +89,7 @@ export function revisarSurtido(img, op = {}) {
   /* El aire arriba de las pilas no es un hueco: es parte del mueble. Un hueco
      de verdad es vacío de arriba abajo del entrepaño, así que solo cuentan las
      celdas que forman una corrida vertical de al menos 15 % del alto. */
-  const corrida = Math.max(2, Math.ceil(filas * 0.15));
+  const corrida = Math.max(2, Math.ceil(filas * 0.12));
   const reales = new Set();
   for (let c = 0; c < cols; c++) {
     let ini = -1;
@@ -121,6 +121,21 @@ export function revisarSurtido(img, op = {}) {
     }
     huecos.push(comp);
   }
+  /* La guía pide encuadrar el mueble COMPLETO: lo vacío que toca el borde del
+     encuadre es piso, pared o techo alrededor del mueble, no un hueco. Con
+     fotos reales del manual era la única fuente de huecos falsos. */
+  /* Abajo siempre es piso. A los lados, solo si es una franja alta (una pared:
+     una casilla vacía mide a lo más un entrepaño). Arriba, solo si es ancha
+     (techo o pared): una casilla vacía del entrepaño de arriba es angosta. */
+  const filasDe = (/** @type {number[]} */ h) => new Set(h.map(i => Math.floor(i / cols))).size;
+  const columnasDe = (/** @type {number[]} */ h) => new Set(h.map(i => i % cols)).size;
+  const enBorde = (/** @type {number[]} */ h) =>
+    h.some(i => i >= cs.length - cols) ||
+    (h.some(i => i % cols === 0 || i % cols === cols - 1) && filasDe(h) >= filas * 0.4) ||
+    (h.some(i => i < cols) && columnasDe(h) >= cols / 2);
+  const fuera = huecos.filter(h => enBorde(h) || columnasDe(h) < 2);
+  for (const h of fuera) for (const i of h) reales.delete(i);
+  huecos.splice(0, huecos.length, ...huecos.filter(h => !enBorde(h) && columnasDe(h) >= 2));
   huecos.sort((a, b) => b.length - a.length);
   const pct = (reales.size / cs.length) * 100;
   const mayor = huecos.length ? (huecos[0].length / cs.length) * 100 : 0;

@@ -146,18 +146,22 @@ test('colorización: un frío entre cálidos → GRAVE y señala el tramo', () =
   const c = [P.calido[0], P.calido[1], P.frio[2], P.calido[3], P.calido[4], P.frio[0], P.frio[3], P.neutro[2]];
   const r = revisarColor(tringla(c, { ...SUCIA, semilla: 3 }));
   assert.equal(r.nivel, 'GRAVE');
-  assert.match(r.motivo, /frío entre cálidos, tramo 3/);
+  assert.match(r.motivo, /Colores revueltos: frío entre cálidos, tramo 3/);
   assert.equal(r.marcas.tramos.filter(t => t.fueraGrupo).length, 1);
 });
 
-test('colorización: fuera de la rueda dentro de su grupo → OBSERVACIÓN', () => {
-  const r = revisarColor(tringla([P.calido[3], P.calido[0], P.calido[1], P.frio[0], P.frio[2], P.neutro[2]], { ...SUCIA, semilla: 4 }));
-  assert.equal(r.nivel, 'OBSERVACIÓN');
+test('colorización: fuera de la rueda dentro de su grupo → OBSERVACIÓN solo si se pide (apagado por defecto)', () => {
+  const img = tringla([P.calido[3], P.calido[0], P.calido[1], P.frio[0], P.frio[2], P.neutro[2]], { ...SUCIA, semilla: 4 });
+  assert.equal(revisarColor(img).nivel, 'CUMPLE');
+  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, revisarRueda: true } }).nivel, 'OBSERVACIÓN');
 });
 
-test('colorización: la dirección es configurable (supuesto por confirmar)', () => {
+test('colorización: bloques limpios en otro orden → OBSERVACIÓN; la dirección y el rigor son configurables', () => {
   const img = tringla(BIEN.slice().reverse());
-  assert.equal(revisarColor(img).nivel, 'GRAVE');
+  const r = revisarColor(img);
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /bien formados, pero van neutros → fríos → cálidos/);
+  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, ordenEstricto: true } }).nivel, 'GRAVE');
   assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, direccion: 'der-izq' } }).nivel, 'CUMPLE');
 });
 
@@ -234,6 +238,16 @@ test('triangulación: cajas del detector → puntos altos, sin repetidos ni basu
     { x: 500, y: 200, w: 60, h: 60, categoria: 'person', score: 0.1 },    // poca confianza
   ];
   assert.deepEqual(puntosDeCajas(cajas), [{ x: 140, y: 50 }, { x: 330, y: 150 }]);
+});
+
+test('triangulación: sin muebles ni personas del fondo entre las sugerencias', () => {
+  const cajas = [
+    { x: 100, y: 50, w: 80, h: 300, categoria: 'person', score: 0.9 },
+    { x: 400, y: 200, w: 30, h: 90, categoria: 'person', score: 0.6 },    // al fondo: 30 % de alto
+    { x: 50, y: 300, w: 500, h: 120, categoria: 'dining table', score: 0.7 },
+    { x: 300, y: 260, w: 120, h: 60, categoria: 'bench', score: 0.6 },
+  ];
+  assert.deepEqual(puntosDeCajas(cajas), [{ x: 140, y: 50 }]);
 });
 
 /* ── Veredicto ─────────────────────────────────────────────────────────── */

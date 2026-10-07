@@ -23,13 +23,21 @@ import { resultado, noCalifica, redondear } from './veredicto.js';
  */
 
 /* SUPUESTO POR CONFIRMAR con Gerardo (ADR 0007): el orden de los grupos, la
-   dirección y si se revisa el orden de la rueda dentro de cada grupo. */
+   dirección y si se revisa el orden de la rueda dentro de cada grupo.
+   Lo que no es supuesto: cada grupo va en UN bloque. En las fotos del propio
+   manual los colores van juntos por bloques, pero no siempre en el orden
+   cálidos → fríos → neutros (una tringla de ejemplo va fríos → cálido →
+   neutro). Por eso un bloque partido es GRAVE y un orden distinto entre
+   bloques es OBSERVACIÓN, salvo con `ordenEstricto`. */
 export const REGLA_COLOR = {
   /** @type {Grupo[]} */
   grupos: ['calido', 'frio', 'neutro'],
   /** @type {'izq-der'|'der-izq'} */
   direccion: 'izq-der',
-  revisarRueda: true,
+  ordenEstricto: false,
+  /* Apagado: en las fotos reales del manual marcaba tringlas bien montadas
+     (trajes negro → gris con una camisa clara, mezclilla y caqui). */
+  revisarRueda: false,
   /* Cuánto puede retroceder un tramo en la rueda sin contar como fuera de
      orden: dos rojos casi iguales no deben pelearse por 5°. */
   toleranciaTono: 28,
@@ -294,9 +302,19 @@ export function revisarColor(img, op = {}) {
 
   const sec = regla.direccion === 'der-izq' ? ts.slice().reverse() : ts;
   const pesos = sec.map(t => t.x1 - t.x0);
-  const idx = sec.map(t => regla.grupos.indexOf(t.grupo));
-  const dentroGrupo = enOrden(idx, pesos);
-  sec.forEach((t, i) => { t.fueraGrupo = !dentroGrupo[i]; });
+  /* Bloques: de todos los órdenes posibles de los grupos presentes, el que
+     deja más ancho de prendas en bloques limpios. Lo que queda fuera parte un
+     bloque. A igual ancho gana el orden de la regla. */
+  const presentes = regla.grupos.filter(g => sec.some(t => t.grupo === g));
+  const regla_ = presentes.join();
+  let mejor = { peso: -1, orden: presentes, dentro: /** @type {boolean[]} */ ([]) };
+  for (const orden of permutaciones(presentes)) {
+    const dentro = enOrden(sec.map(t => orden.indexOf(t.grupo)), pesos);
+    const peso = pesos.reduce((s, p, i) => s + (dentro[i] ? p : 0), 0);
+    if (peso > mejor.peso || (peso === mejor.peso && orden.join() === regla_)) mejor = { peso, orden, dentro };
+  }
+  sec.forEach((t, i) => { t.fueraGrupo = !mejor.dentro[i]; });
+  const ordenVisto = mejor.orden;
   for (const g of regla.grupos) {
     if (!regla.revisarRueda) break;
     const miembros = sec.filter(t => t.grupo === g && !t.fueraGrupo);
@@ -308,19 +326,31 @@ export function revisarColor(img, op = {}) {
   ev.fuera_de_grupo = malos.length;
   ev.fuera_de_rueda = rueda.length;
   ev.grupos = ts.map(t => NOMBRE_GRUPO[t.grupo][0].toUpperCase()).join('');
+  ev.bloques = ordenVisto.map(g => NOMBRE_GRUPO[g]).join(' → ');
   const marcas = { franja, tramos: ts };
   if (malos.length) {
     const t = malos[0], i = ts.indexOf(t);
     const vecino = (ts[i - 1] && !ts[i - 1].fueraGrupo ? ts[i - 1] : ts[i + 1]) || ts[0];
     const donde = vecino.grupo !== t.grupo ? `${NOMBRE_GRUPO[t.grupo]} entre ${plural(vecino.grupo)}` : `${NOMBRE_GRUPO[t.grupo]} fuera de su grupo`;
     const extra = malos.length > 1 ? ` (y ${malos.length - 1} más)` : '';
-    return resultado('colorizacion', 'GRAVE', `Rompe el orden de color: ${donde}, tramo ${i + 1} de ${ts.length}${extra}.`, ev, marcas);
+    return resultado('colorizacion', 'GRAVE', `Colores revueltos: ${donde}, tramo ${i + 1} de ${ts.length}${extra}. Cada grupo va en un solo bloque.`, ev, marcas);
+  }
+  if (ordenVisto.join() !== regla_) {
+    const visto = ordenVisto.map(plural).join(' → '), pide = presentes.map(plural).join(' → ');
+    return resultado('colorizacion', regla.ordenEstricto ? 'GRAVE' : 'OBSERVACIÓN',
+      `Los bloques de color están bien formados, pero van ${visto}; la guía (supuesto por confirmar) pide ${pide}.`, ev, marcas);
   }
   if (rueda.length) {
     const t = rueda[0], i = ts.indexOf(t);
     return resultado('colorizacion', 'OBSERVACIÓN', `Los grupos van bien, pero dentro de los ${plural(t.grupo)} el tramo ${i + 1} de ${ts.length} no sigue la rueda de color.`, ev, marcas);
   }
   return resultado('colorizacion', 'CUMPLE', `${ts.length} tramos en orden: ${regla.grupos.filter(g => ts.some(t => t.grupo === g)).map(plural).join(' → ')}.`, ev, marcas);
+}
+
+/** @template T @param {T[]} xs @returns {T[][]} */
+function permutaciones(xs) {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => permutaciones([...xs.slice(0, i), ...xs.slice(i + 1)]).map(r => [x, ...r]));
 }
 
 /** @param {Grupo} g */

@@ -285,7 +285,9 @@ export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(
   if (meta.xmpFuente) ev.iptc = meta.xmpFuente;
   if (ia) {
     ev.declara = ia;
-    return resultado('origen', 'GRAVE', `La foto declara en sus metadatos que se hizo con IA (${ia}).`, ev);
+    const que = ia === 'trainedAlgorithmicMedia' ? 'generada con IA' : ia === 'algorithmicMedia' ? 'generada por computadora' : 'compuesta o editada con IA';
+    const donde = meta.c2pa.presente && FUENTES_IA.includes(meta.c2pa.fuente || '') ? 'su credencial de contenido (C2PA)' : 'sus metadatos (IPTC)';
+    return resultado('origen', 'GRAVE', `La propia imagen declara en ${donde} que fue ${que}. No sirve como evidencia de montaje.`, ev);
   }
   if (via === 'app') {
     const t = tomada || ahora;

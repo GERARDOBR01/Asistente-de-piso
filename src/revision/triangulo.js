@@ -78,8 +78,14 @@ export function revisarTriangulo(puntos, tam, op = {}) {
  */
 export function puntosDeCajas(cajas, op = {}) {
   const min = op.minScore ?? 0.3;
-  const cats = op.categorias || ['person', 'potted plant', 'handbag', 'vase', 'chair', 'backpack', 'suitcase', 'umbrella', 'bench', 'teddy bear', 'bottle', 'tie'];
-  const buenas = cajas.filter(c => c.score >= min && cats.includes(c.categoria)).sort((a, b) => b.score - a.score);
+  /* Sin muebles (mesa, banca, silla): son la base del focal, no un elemento.
+     Medido con los focales del manual: el detector marcaba la mesa entera. */
+  const cats = op.categorias || ['person', 'potted plant', 'handbag', 'vase', 'backpack', 'suitcase', 'umbrella', 'teddy bear', 'bottle', 'tie'];
+  let buenas = cajas.filter(c => c.score >= min && cats.includes(c.categoria)).sort((a, b) => b.score - a.score);
+  /* Una «persona» mucho más chica que la más alta está al fondo (clientes o
+     maniquíes de otro departamento), no en el focal. */
+  const altoMax = Math.max(0, ...buenas.filter(c => c.categoria === 'person').map(c => c.h));
+  buenas = buenas.filter(c => c.categoria !== 'person' || c.h >= 0.45 * altoMax);
   /** @type {typeof buenas} */
   const quedan = [];
   for (const c of buenas) {
