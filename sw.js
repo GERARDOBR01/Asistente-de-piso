@@ -13,10 +13,10 @@
    - El código de la app (src/) va igual que la página: si se sirviera primero
      de la caché, un index.html nuevo podría arrancar con un app.js viejo.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.9.0';
+const VERSION='ap-v1.10.0';
 /* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
    eval/arnes.mjs. */
-const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js','src/revision/veredicto.js','src/revision/procedencia.js','src/revision/color.js','src/revision/surtido.js','src/revision/triangulo.js','src/revision/demo.js','src/revision/ui.js','src/revision/detector.js'];
+const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js','src/revision/veredicto.js','src/revision/procedencia.js','src/revision/color.js','src/revision/surtido.js','src/revision/triangulo.js','src/revision/demo.js','src/revision/ui.js','src/revision/detector.js','src/revision/c2pa.js'];
 const PAGINA=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','docs/manual-demo.pdf',...CODIGO];
 const CDN=[
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -29,6 +29,10 @@ const CDN=[
    para que una versión nueva de la app no obligue a bajarlo otra vez. */
 const DETECTOR='ap-detector-mp-0.10.21';
 const esDetector=u=>(u.origin==='https://cdn.jsdelivr.net'&&u.pathname.startsWith('/npm/@mediapipe/tasks-vision@0.10.21/'))||(u.origin==='https://storage.googleapis.com'&&u.pathname.startsWith('/mediapipe-models/'));
+/* El lector de credenciales C2PA (src/revision/c2pa.js, ~9 MB) va igual: se
+   baja la primera vez que una foto trae credencial y vive en su caché. */
+const C2PA='ap-c2pa-web-0.15.3';
+const esC2pa=u=>u.origin==='https://cdn.jsdelivr.net'&&(u.pathname.startsWith('/npm/@contentauth/c2pa-web@0.15.3/')||u.pathname.startsWith('/npm/highgain@0.1.0/'));
 const FUENTES='https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap';
 
 async function guardarFuentes(cache){
@@ -56,7 +60,7 @@ self.addEventListener('install',e=>{
 
 self.addEventListener('activate',e=>{
   e.waitUntil((async()=>{
-    for(const k of await caches.keys())if(k!==VERSION&&k!==DETECTOR)await caches.delete(k);
+    for(const k of await caches.keys())if(k!==VERSION&&k!==DETECTOR&&k!==C2PA)await caches.delete(k);
     await self.clients.claim();
   })());
 });
@@ -73,9 +77,9 @@ self.addEventListener('fetch',e=>{
   if(req.method!=='GET')return;
   const url=new URL(req.url);
   const propia=url.origin===self.location.origin;
-  if(esDetector(url)){
+  if(esDetector(url)||esC2pa(url)){
     e.respondWith((async()=>{
-      const cache=await caches.open(DETECTOR);
+      const cache=await caches.open(esC2pa(url)?C2PA:DETECTOR);
       const guardada=await cache.match(req);
       if(guardada)return guardada;
       const r=await fetch(req);

@@ -51,10 +51,15 @@ engaña, y un falso positivo equivale a acusar a un compañero. Por eso no se us
   | Tomada en la app | CUMPLE |
   | Galería con EXIF de cámara coherente (fecha y modelo, sin editor) | OBSERVACIÓN |
   | Galería con un editor en `Software` | OBSERVACIÓN, con el nombre del editor |
-  | Sin metadatos (reenviada por WhatsApp, captura de pantalla) | NO_CALIFICA: «revisar en persona» |
-  | Declaración explícita de IA en C2PA o IPTC | GRAVE |
+  | Sin metadatos (reenviada por WhatsApp, captura de pantalla) | NO_CALIFICA, que en pantalla se lee «SIN DATOS» |
+  | Generada con IA, según la credencial C2PA **verificada** o el IPTC | GRAVE |
+  | Retocada con IA (borrador mágico, inpainting), según C2PA o IPTC | OBSERVACIÓN (7-oct; antes GRAVE) |
+  | Credencial que no coincide con la imagen (alterada después de firmar) | OBSERVACIÓN |
+  | Credencial que menciona IA pero no se pudo verificar (sin señal la primera vez) | OBSERVACIÓN: «ábrela con señal antes de concluir» |
+  | Credencial de cámara con firma de emisor confiable | CUMPLE (falta cargar la lista de confianza: hoy sale OBSERVACIÓN con el emisor) |
 
-  Nunca sale «es IA» por un detector. GRAVE solo sale cuando la propia foto lo declara.
+  Nunca sale «es IA» por un detector. GRAVE solo sale cuando la propia foto declara que **se generó**
+  con IA. Ver «Origen: falsos positivos de IA (7-oct)».
 
 ### 2. Colorización
 
@@ -300,6 +305,48 @@ En todas: 0 CUMPLE falsos y 0 GRAVE falsos de origen.
   zapato ni las pampas, y suma un maniquí del fondo. Sigue siendo solo sugerencia.
 - **Siguiente:** un lote de confirmación (fotos nuevas, con defectos puestos a propósito),
   corrido una sola vez sin tocar el código antes.
+
+## Origen: falsos positivos de IA (7-oct)
+
+Gerardo reportó que la detección de IA marca IA cuando no la hay. Se reprodujo con 7 muestras
+controladas (en `eval-revision/origen/`):
+- firmadas con el certificado de **prueba** de c2pa-rs;
+- lo que el SDK lee de ellas está en `lab/fixtures/c2pa/`.
+
+| Muestra | Antes | Ahora |
+|---|---|---|
+| Foto real con una imagen de IA solo como referencia (`inputTo`) | **GRAVE «generada con IA»** | OBSERVACIÓN (cámara) |
+| Foto real retocada con IA, C2PA | GRAVE | OBSERVACIÓN «retocada con IA» |
+| Foto real retocada con IA, IPTC (como el borrador mágico de Google Fotos) | GRAVE | OBSERVACIÓN |
+| Foto alterada después de firmar | OBSERVACIÓN como de cámara | OBSERVACIÓN «no coincide con su firma» |
+| Generada con IA (C2PA o IPTC) | GRAVE | GRAVE |
+
+**Causas:**
+1. La búsqueda **por bytes** en todo el manifiesto encontraba «trainedAlgorithmicMedia» en la
+   historia de un ingrediente, no en la foto. La guía técnica de C2PA lo advierte: hay que leer
+   el manifiesto **activo** y la cadena `parentOf`.
+2. «Retocada con IA» (`compositeWithTrainedAlgorithmicMedia`) se trataba igual que «generada».
+   Galaxy AI y Google Fotos marcan así las fotos reales en las que se borró algo.
+
+**Decisión:**
+- La credencial se lee y se valida con el **SDK oficial** `@contentauth/c2pa-web` 0.15.3 (MIT;
+  c2pa-rs en WASM, 9 MB).
+- Se baja solo cuando la foto trae credencial (`src/revision/c2pa.js`). Vive en su caché del
+  service worker (`ap-c2pa-web-0.15.3`), y el CSP abre solo esa ruta y `highgain@0.1.0`.
+- La interpretación es pura y tiene pruebas: `interpretarC2pa` en `procedencia.js`.
+- Sin el SDK, una palabra en los bytes ya no acusa a nadie.
+
+**Detectores de píxeles, descartados otra vez con datos:**
+- un estudio con un millón de fotos de celular midió hasta 98 % de falsos positivos en fotos
+  reales;
+- una auditoría de NewsGuard (mayo de 2026) encontró que llamaron IA a fotos auténticas 13 % de
+  las veces;
+- SynthID (Google) no tiene detector abierto ni API pública: solo el portal y la app Gemini.
+
+**Pendiente:**
+- cargar la lista de confianza de C2PA, para que una foto firmada por la cámara (Pixel 10 firma
+  todas las suyas) salga CUMPLE;
+- probarlo con fotos reales de Pixel y Galaxy.
 
 ## Consecuencias
 
