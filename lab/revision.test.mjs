@@ -184,7 +184,33 @@ test('origen C2PA: imagen alterada después de firmar → no coincide; cámara c
   const cam = interpretarC2pa(C2PA('a-camara'));
   assert.equal(cam?.firma, 'valida', 'certificado de prueba: firma válida, emisor no confiable');
   assert.equal(origenCon(cam).nivel, 'OBSERVACIÓN');
-  assert.equal(origenCon({ ...cam, firma: 'confiable' }).nivel, 'CUMPLE');
+  assert.equal(origenCon({ ...cam, firma: 'confiable', hora: new Date(AHORA.getTime() - 3600000).toISOString() }).nivel, 'CUMPLE');
+});
+
+test('origen C2PA confiable: firmada por la cámara hoy → CUMPLE; vieja o sin hora → OBSERVACIÓN', () => {
+  /* Misma muestra validada con la raíz de prueba como ancla: validation_state «Trusted». */
+  const st = C2PA('a-camara-confiable');
+  assert.equal(st.validation_state, 'Trusted');
+  const conHora = (/** @type {string|undefined} */ h) => {
+    const copia = JSON.parse(JSON.stringify(st));
+    if (h) copia.manifests[copia.active_manifest].signature_info.time = h;
+    return interpretarC2pa(copia);
+  };
+  const hoy = conHora(new Date(AHORA.getTime() - 2 * 3600000).toISOString());
+  assert.equal(hoy?.firma, 'confiable');
+  const r = origenCon(hoy);
+  assert.equal(r.nivel, 'CUMPLE');
+  assert.match(r.motivo, /original firmada por la cámara/);
+  const vieja = origenCon(conHora(new Date(AHORA.getTime() - 10 * 86400000).toISOString()));
+  assert.equal(vieja.nivel, 'OBSERVACIÓN');
+  assert.match(vieja.motivo, /hace 10 días/);
+  assert.match(origenCon(conHora()).motivo, /no dice cuándo/);
+  /* La hora del EXIF sirve si la firma no trae sello de tiempo. */
+  const exifHoy = { formato: 'jpeg', xmpFuente: null, c2pa: { presente: true, fuente: null }, exif: { marca: 'M', modelo: 'X', software: null, fecha: null, fechaOriginal: '2026:10:06 13:30:00' } };
+  assert.equal(origenCon(conHora(), exifHoy).nivel, 'CUMPLE');
+  /* Generada con IA por un emisor confiable sigue siendo GRAVE. */
+  const gen = interpretarC2pa(C2PA('b-ia-generada'));
+  assert.equal(origenCon(gen && { ...gen, firma: 'confiable' }).nivel, 'GRAVE');
 });
 
 test('origen IPTC: retocada con IA → OBSERVACIÓN; generada con IA → GRAVE', () => {

@@ -352,6 +352,7 @@ export function editorEn(s) {
  * @typedef {Object} Credencial  Lo que dice una credencial C2PA leída con el SDK oficial.
  * @property {'valida'|'confiable'|'invalida'} firma  invalida = la imagen no coincide con lo firmado
  * @property {string|null} emisor        quien firmó (signature_info.issuer)
+ * @property {string|null} hora          cuándo se firmó, si trae sello de tiempo (signature_info.time, ISO)
  * @property {null|{herramienta:string|null}} generada  se creó con IA (manifiesto activo o su cadena de padres)
  * @property {null|{herramienta:string|null}} retocada  foto o imagen editada con IA (inpainting, borrador)
  * @property {null|{herramienta:string|null}} captura   creada por una cámara
@@ -385,8 +386,9 @@ export function interpretarC2pa(store) {
     || (m.claim_generator_info && m.claim_generator_info[0] && m.claim_generator_info[0].name) || null;
   /** @param {any} a */
   const fuente = a => String(a.digitalSourceType || '').split('/').pop() || '';
+  const si = ms[store.active_manifest].signature_info || {};
   /** @type {Credencial} */
-  const c = { firma, emisor: (ms[store.active_manifest].signature_info || {}).issuer || null, generada: null, retocada: null, captura: null, fallas };
+  const c = { firma, emisor: si.issuer || null, hora: si.time || null, generada: null, retocada: null, captura: null, fallas };
   /** @param {string} label @param {Set<string>} visto @returns {boolean} se generó con IA */
   const recorrer = (label, visto) => {
     const m = ms[label];
@@ -482,8 +484,20 @@ export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(
   const camara = !!(ex && ex.marca && ex.modelo);
   const t = fechaExif(ex?.fechaOriginal || null);
   const camaraC2pa = credencial ? !!credencial.captura : meta.c2pa.presente && !!meta.c2pa.fuente && FUENTES_CAMARA.includes(meta.c2pa.fuente);
-  if (credencial && credencial.captura && credencial.firma === 'confiable')
-    return resultado('origen', 'CUMPLE', `Firmada por la cámara al tomarla${con(credencial.emisor)}, con firma válida: es la foto original.`, ev);
+  /* Firmada por una cámara de la lista de confianza de C2PA: es la foto
+     original. Cuenta como evidencia de HOY solo si se firmó (o se tomó) en
+     las últimas 24 horas; una original vieja sigue siendo vieja. */
+  if (credencial && credencial.captura && credencial.firma === 'confiable') {
+    const cuando = credencial.hora ? new Date(credencial.hora) : t;
+    if (cuando && !isNaN(cuando.getTime())) {
+      const horas = (ahora.getTime() - cuando.getTime()) / 3600000;
+      ev.edad_horas = Math.round(horas * 10) / 10;
+      if (horas >= -1 && horas <= 24)
+        return resultado('origen', 'CUMPLE', `Foto original firmada por la cámara${con(credencial.emisor)} a las ${hora(cuando)}: no se editó después.`, ev);
+      return resultado('origen', 'OBSERVACIÓN', `Foto original firmada por la cámara${con(credencial.emisor)}, pero ${horas > 24 ? `de hace ${Math.round(horas / 24)} días` : 'con fecha en el futuro'}: no prueba el montaje de hoy.`, ev);
+    }
+    return resultado('origen', 'OBSERVACIÓN', `Foto original firmada por la cámara${con(credencial.emisor)}, pero no dice cuándo se tomó. Para evidencia de hoy, tómala en la app.`, ev);
+  }
   if ((camara && t) || camaraC2pa) {
     let motivo = camara ? `De galería: ${ev.camara}` : 'De galería, con manifiesto C2PA de cámara';
     if (credencial && credencial.captura) motivo += `, firmado${con(credencial.emisor)}`;
