@@ -23,13 +23,21 @@ import { resultado, noCalifica, redondear } from './veredicto.js';
  */
 
 /* SUPUESTO POR CONFIRMAR con Gerardo (ADR 0007): el orden de los grupos, la
-   dirección y si se revisa el orden de la rueda dentro de cada grupo. */
+   dirección y si se revisa el orden de la rueda dentro de cada grupo.
+   Lo que no es supuesto: cada grupo va en UN bloque. En las fotos del propio
+   manual los colores van juntos por bloques, pero no siempre en el orden
+   cálidos → fríos → neutros (una tringla de ejemplo va fríos → cálido →
+   neutro). Por eso un bloque partido es GRAVE y un orden distinto entre
+   bloques es OBSERVACIÓN, salvo con `ordenEstricto`. */
 export const REGLA_COLOR = {
   /** @type {Grupo[]} */
   grupos: ['calido', 'frio', 'neutro'],
   /** @type {'izq-der'|'der-izq'} */
   direccion: 'izq-der',
-  revisarRueda: true,
+  ordenEstricto: false,
+  /* Apagado: en las fotos reales del manual marcaba tringlas bien montadas
+     (trajes negro → gris con una camisa clara, mezclilla y caqui). */
+  revisarRueda: false,
   /* Cuánto puede retroceder un tramo en la rueda sin contar como fuera de
      orden: dos rojos casi iguales no deben pelearse por 5°. */
   toleranciaTono: 28,
@@ -41,6 +49,17 @@ export const REGLA_COLOR = {
    cierra; el morado y el violeta (~315-325°) van en fríos. */
 export const TONO = { calidoDesde: 335, calidoHasta: 102 };
 export const CROMA_NEUTRO = 15;
+/* La mezclilla es fría (lo confirmó Gerardo), pero en una foto de tienda
+   mide croma 4-6: casi gris para la cámara. Un azul apagado (tono 200-300°,
+   croma ≥ 4) cuenta como frío si es claro o medio. El azul marino, igual de
+   apagado pero oscuro, se queda en neutros: en una foto del propio manual una
+   tringla marino → caqui → marino está bien montada. Medido el 7-oct, ya con
+   balance de blancos: mezclilla L≈30 C≈5 h≈260; marino L 19-23 C 5-9.
+   Un gris frío también tiene croma 4-5, pero es más claro: lo que separa la
+   mezclilla es la saturación (C/L): mezclilla 0.17, gris frío 0.08. Los
+   cortes (L 26, C/L 0.12) tienen poco margen: se confirman con el siguiente
+   lote de fotos. */
+export const AZUL = { desde: 200, hasta: 300, croma: 3, claridad: 26, saturacion: 0.12 };
 
 export const NOMBRE_GRUPO = { calido: 'cálido', frio: 'frío', neutro: 'neutro' };
 
@@ -87,7 +106,8 @@ export function clasificar(L, C, h) {
      Límite físico: un naranja en sombra fuerte ES café para la cámara; la
      corrección de luz con la pared (pared()) es lo que evita confundirlos. */
   const tierra = h >= 45 && h <= 95 && (C < 32 || (L < 50 && C < 62) || (L >= 60 && C < 48));
-  if (C < CROMA_NEUTRO || tierra) {
+  const azulApagado = h >= AZUL.desde && h <= AZUL.hasta && C >= AZUL.croma && L >= AZUL.claridad && C / L >= AZUL.saturacion;
+  if ((C < CROMA_NEUTRO && !azulApagado) || tierra) {
     /* Neutros en el orden de la guía: tierras (café → beige), luego negro →
        gris → blanco. */
     return { grupo: 'neutro', rueda: (tierra && C >= CROMA_NEUTRO ? 0 : 100) + L, tierra };
@@ -270,11 +290,46 @@ export function pared(img, r) {
 }
 
 /**
+ * Balance de blancos por «parche blanco»: lo más claro y casi sin color de la
+ * foto (techo, luminarias, una pared blanca) se toma como blanco, y se
+ * corrigen R y B contra G en RGB lineal (von Kries). La luz de tienda es
+ * cálida: sin esto, la mezclilla se lee gris y un blanco se lee beige.
+ * Ganancias acotadas a 0.7-1.4, y solo si hay suficiente «blanco» (≥ 0.5 %).
+ * @param {Imagen} img @returns {{img:Imagen, r:number, b:number}|null}
+ */
+export function balanceBlancos(img) {
+  const n = img.width * img.height, d = img.data;
+  /** @type {number[][]} */
+  const claros = [];
+  for (let i = 0; i < n; i++) {
+    const k = i * 4, [L, a, b] = labLineal(LIN[d[k]], LIN[d[k + 1]], LIN[d[k + 2]]);
+    /* Fuera lo quemado (L 99+): ahí la cámara ya recortó un canal. */
+    if (L < 99 && Math.hypot(a, b) < 25) claros.push([L, LIN[d[k]], LIN[d[k + 1]], LIN[d[k + 2]]]);
+  }
+  if (claros.length < n * 0.005) return null;
+  claros.sort((p, q) => q[0] - p[0]);
+  const top = claros.slice(0, Math.max(20, Math.floor(claros.length * 0.03)));
+  if (top[top.length - 1][0] < 60) return null;            // lo más claro es gris: no hay blanco de referencia
+  const [R, G, B] = [1, 2, 3].map(c => mediana(top.map(p => p[c])));
+  if (!R || !B) return null;
+  const kr = Math.min(1.4, Math.max(0.7, G / R)), kb = Math.min(1.4, Math.max(0.7, G / B));
+  if (Math.abs(kr - 1) < 0.03 && Math.abs(kb - 1) < 0.03) return { img, r: 1, b: 1 };
+  /* A sRGB de 8 bits con una tabla: mismo formato que la foto. */
+  const aSrgb = (/** @type {number} */ c) => Math.round(255 * Math.min(1, c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055));
+  const out = new Uint8ClampedArray(d.length);
+  for (let i = 0; i < d.length; i += 4) {
+    out[i] = aSrgb(LIN[d[i]] * kr); out[i + 1] = d[i + 1]; out[i + 2] = aSrgb(LIN[d[i + 2]] * kb); out[i + 3] = d[i + 3];
+  }
+  return { img: { width: img.width, height: img.height, data: out }, r: kr, b: kb };
+}
+
+/**
  * Revisa la colorización de una tringla.
  * @param {Imagen} img  foto ya reducida
  * @param {Object} [op]
  * @param {{x:number,y:number,w:number,h:number}} [op.marco]  lo que encuadró la guía
  * @param {typeof REGLA_COLOR} [op.regla]
+ * @param {boolean} [op.sinBalance]  sin balance de blancos (para comparar)
  * @returns {Resultado}
  */
 export function revisarColor(img, op = {}) {
@@ -284,19 +339,31 @@ export function revisarColor(img, op = {}) {
      y los hombros, arriba del borde de abajo. */
   const franja = { x: marco.x, y: marco.y + marco.h * 0.32, w: marco.w, h: marco.h * 0.26 };
   const malo = noCalifica(img, franja);
-  if (malo) return resultado('colorizacion', 'NO_CALIFICA', malo.motivo, malo.evidencia, { franja });
+  if (malo) return resultado('colorizacion', 'NO_CALIFICA', malo.motivo, malo.evidencia, { marco, franja });
+  const wb = op.sinBalance ? null : balanceBlancos(img);
+  if (wb) img = wb.img;
   const p = pared(img, marco);
   const { tramos: ts, fondoPct } = tramos(img, franja, p && p.fondo, p && p.luz);
   /** @type {Record<string, string|number|boolean|null>} */
-  const ev = { tramos: ts.length, fondo_pct: redondear(fondoPct * 100), luz_corregida: !!p, direccion: regla.direccion, orden: regla.grupos.map(g => NOMBRE_GRUPO[g]).join(' → ') };
-  if (fondoPct > 0.5) return resultado('colorizacion', 'NO_CALIFICA', 'La franja casi no tiene prendas: no se distinguen del fondo.', ev, { franja, tramos: ts });
-  if (ts.length < 3) return resultado('colorizacion', 'NO_CALIFICA', `Solo se ven ${ts.length} ${ts.length === 1 ? 'bloque' : 'bloques'} de color: hacen falta 3 para revisar el orden.`, ev, { franja, tramos: ts });
+  const ev = { tramos: ts.length, fondo_pct: redondear(fondoPct * 100), luz_corregida: !!p, balance_blancos: wb ? `R×${redondear(wb.r, 2)} B×${redondear(wb.b, 2)}` : 'sin referencia', direccion: regla.direccion, orden: regla.grupos.map(g => NOMBRE_GRUPO[g]).join(' → ') };
+  if (fondoPct > 0.5) return resultado('colorizacion', 'NO_CALIFICA', 'La franja casi no tiene prendas: no se distinguen del fondo.', ev, { marco, franja, tramos: ts });
+  if (ts.length < 3) return resultado('colorizacion', 'NO_CALIFICA', `Solo se ven ${ts.length} ${ts.length === 1 ? 'bloque' : 'bloques'} de color: hacen falta 3 para revisar el orden.`, ev, { marco, franja, tramos: ts });
 
   const sec = regla.direccion === 'der-izq' ? ts.slice().reverse() : ts;
   const pesos = sec.map(t => t.x1 - t.x0);
-  const idx = sec.map(t => regla.grupos.indexOf(t.grupo));
-  const dentroGrupo = enOrden(idx, pesos);
-  sec.forEach((t, i) => { t.fueraGrupo = !dentroGrupo[i]; });
+  /* Bloques: de todos los órdenes posibles de los grupos presentes, el que
+     deja más ancho de prendas en bloques limpios. Lo que queda fuera parte un
+     bloque. A igual ancho gana el orden de la regla. */
+  const presentes = regla.grupos.filter(g => sec.some(t => t.grupo === g));
+  const regla_ = presentes.join();
+  let mejor = { peso: -1, orden: presentes, dentro: /** @type {boolean[]} */ ([]) };
+  for (const orden of permutaciones(presentes)) {
+    const dentro = enOrden(sec.map(t => orden.indexOf(t.grupo)), pesos);
+    const peso = pesos.reduce((s, p, i) => s + (dentro[i] ? p : 0), 0);
+    if (peso > mejor.peso || (peso === mejor.peso && orden.join() === regla_)) mejor = { peso, orden, dentro };
+  }
+  sec.forEach((t, i) => { t.fueraGrupo = !mejor.dentro[i]; });
+  const ordenVisto = mejor.orden;
   for (const g of regla.grupos) {
     if (!regla.revisarRueda) break;
     const miembros = sec.filter(t => t.grupo === g && !t.fueraGrupo);
@@ -308,19 +375,31 @@ export function revisarColor(img, op = {}) {
   ev.fuera_de_grupo = malos.length;
   ev.fuera_de_rueda = rueda.length;
   ev.grupos = ts.map(t => NOMBRE_GRUPO[t.grupo][0].toUpperCase()).join('');
-  const marcas = { franja, tramos: ts };
+  ev.bloques = ordenVisto.map(g => NOMBRE_GRUPO[g]).join(' → ');
+  const marcas = { marco, franja, tramos: ts };
   if (malos.length) {
     const t = malos[0], i = ts.indexOf(t);
     const vecino = (ts[i - 1] && !ts[i - 1].fueraGrupo ? ts[i - 1] : ts[i + 1]) || ts[0];
     const donde = vecino.grupo !== t.grupo ? `${NOMBRE_GRUPO[t.grupo]} entre ${plural(vecino.grupo)}` : `${NOMBRE_GRUPO[t.grupo]} fuera de su grupo`;
     const extra = malos.length > 1 ? ` (y ${malos.length - 1} más)` : '';
-    return resultado('colorizacion', 'GRAVE', `Rompe el orden de color: ${donde}, tramo ${i + 1} de ${ts.length}${extra}.`, ev, marcas);
+    return resultado('colorizacion', 'GRAVE', `Colores revueltos: ${donde}, tramo ${i + 1} de ${ts.length}${extra}. Cada grupo va en un solo bloque.`, ev, marcas);
+  }
+  if (ordenVisto.join() !== regla_) {
+    const visto = ordenVisto.map(plural).join(' → '), pide = presentes.map(plural).join(' → ');
+    return resultado('colorizacion', regla.ordenEstricto ? 'GRAVE' : 'OBSERVACIÓN',
+      `Los bloques de color están bien formados, pero van ${visto}; la guía (supuesto por confirmar) pide ${pide}.`, ev, marcas);
   }
   if (rueda.length) {
     const t = rueda[0], i = ts.indexOf(t);
     return resultado('colorizacion', 'OBSERVACIÓN', `Los grupos van bien, pero dentro de los ${plural(t.grupo)} el tramo ${i + 1} de ${ts.length} no sigue la rueda de color.`, ev, marcas);
   }
   return resultado('colorizacion', 'CUMPLE', `${ts.length} tramos en orden: ${regla.grupos.filter(g => ts.some(t => t.grupo === g)).map(plural).join(' → ')}.`, ev, marcas);
+}
+
+/** @template T @param {T[]} xs @returns {T[][]} */
+function permutaciones(xs) {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => permutaciones([...xs.slice(0, i), ...xs.slice(i + 1)]).map(r => [x, ...r]));
 }
 
 /** @param {Grupo} g */

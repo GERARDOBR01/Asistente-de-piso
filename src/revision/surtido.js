@@ -18,6 +18,14 @@ import { lab } from './color.js';
    encuadrada; una casilla vacía de un anaquel de 3×6 mide ~2-3 %, porque el
    aire de arriba de las pilas no cuenta. */
 export const UMBRAL_SURTIDO = { observacion: 2, grave: 6, huecoGrande: 6 };
+/* pesoClaridad: cuánto pesa la claridad al comparar una celda con el fondo.
+   Poco, para que una sombra no esconda un hueco; pero no tan poco que unos
+   pantalones cafés lisos sobre una mesa beige cuenten como vacío (7-oct).
+   Barrido 0.25-0.6: de 0.4 a 0.6 aciertan las 2 mesas de tienda y las 12
+   fotos del manual, sin cambio en las sintéticas; se toma el centro.
+   oscuroMinimo: una celda casi negra (L < 15) no prueba nada: es sombra o
+   producto negro. Un hueco de verdad deja ver el mueble. */
+export const FONDO_SURTIDO = { pesoClaridad: 0.5, oscuroMinimo: 15 };
 
 /**
  * Densidad de bordes (Sobel sobre la imagen suavizada) por celda, y color medio.
@@ -61,7 +69,7 @@ function cuantil(v, q) {
 /**
  * Revisa el surtido de un anaquel o una mesa.
  * @param {Imagen} img foto ya reducida
- * @param {{marco?:{x:number,y:number,w:number,h:number}, cols?:number, filas?:number}} [op]
+ * @param {{marco?:{x:number,y:number,w:number,h:number}, cols?:number, filas?:number, fondo?:typeof FONDO_SURTIDO}} [op]
  * @returns {Resultado}
  */
 export function revisarSurtido(img, op = {}) {
@@ -85,11 +93,12 @@ export function revisarSurtido(img, op = {}) {
      lisa de otro color es producto liso (una caja), no un hueco. */
   const fondo = [0, 1, 2].map(k => cuantil(lisas.map(c => c.lab[k]), 0.5));
   /* La claridad pesa poco: una sombra oscurece el fondo sin cambiar su color. */
-  const vacia = new Set(lisas.filter(c => Math.hypot((c.lab[0] - fondo[0]) * 0.25, c.lab[1] - fondo[1], c.lab[2] - fondo[2]) < 10).map(c => c.f * cols + c.c));
+  const F = op.fondo || FONDO_SURTIDO;
+  const vacia = new Set(lisas.filter(c => c.lab[0] >= F.oscuroMinimo && Math.hypot((c.lab[0] - fondo[0]) * F.pesoClaridad, c.lab[1] - fondo[1], c.lab[2] - fondo[2]) < 10).map(c => c.f * cols + c.c));
   /* El aire arriba de las pilas no es un hueco: es parte del mueble. Un hueco
      de verdad es vacío de arriba abajo del entrepaño, así que solo cuentan las
      celdas que forman una corrida vertical de al menos 15 % del alto. */
-  const corrida = Math.max(2, Math.ceil(filas * 0.15));
+  const corrida = Math.max(2, Math.ceil(filas * 0.12));
   const reales = new Set();
   for (let c = 0; c < cols; c++) {
     let ini = -1;
@@ -121,6 +130,21 @@ export function revisarSurtido(img, op = {}) {
     }
     huecos.push(comp);
   }
+  /* La guía pide encuadrar el mueble COMPLETO: lo vacío que toca el borde del
+     encuadre es piso, pared o techo alrededor del mueble, no un hueco. Con
+     fotos reales del manual era la única fuente de huecos falsos. */
+  /* Abajo siempre es piso. A los lados, solo si es una franja alta (una pared:
+     una casilla vacía mide a lo más un entrepaño). Arriba, solo si es ancha
+     (techo o pared): una casilla vacía del entrepaño de arriba es angosta. */
+  const filasDe = (/** @type {number[]} */ h) => new Set(h.map(i => Math.floor(i / cols))).size;
+  const columnasDe = (/** @type {number[]} */ h) => new Set(h.map(i => i % cols)).size;
+  const enBorde = (/** @type {number[]} */ h) =>
+    h.some(i => i >= cs.length - cols) ||
+    (h.some(i => i % cols === 0 || i % cols === cols - 1) && filasDe(h) >= filas * 0.4) ||
+    (h.some(i => i < cols) && columnasDe(h) >= cols / 2);
+  const fuera = huecos.filter(h => enBorde(h) || columnasDe(h) < 2);
+  for (const h of fuera) for (const i of h) reales.delete(i);
+  huecos.splice(0, huecos.length, ...huecos.filter(h => !enBorde(h) && columnasDe(h) >= 2));
   huecos.sort((a, b) => b.length - a.length);
   const pct = (reales.size / cs.length) * 100;
   const mayor = huecos.length ? (huecos[0].length / cs.length) * 100 : 0;

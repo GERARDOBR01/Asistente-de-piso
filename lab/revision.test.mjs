@@ -11,10 +11,10 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
-import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif } from '../src/revision/procedencia.js';
-import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR } from '../src/revision/color.js';
+import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto } from '../src/revision/procedencia.js';
+import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
-import { revisarTriangulo, puntosDeCajas } from '../src/revision/triangulo.js';
+import { revisarTriangulo, revisarNiveles, puntosDeCajas } from '../src/revision/triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,7 +58,7 @@ test('origen: tomada en la app → CUMPLE, con huella y hora', async () => {
 test('origen: galería sin metadatos (WhatsApp, captura) → NO_CALIFICA, nunca GRAVE', async () => {
   const r = await origen(JPEG_MINIMO);
   assert.equal(r.nivel, 'NO_CALIFICA');
-  assert.match(r.motivo, /revisar en persona/);
+  assert.match(r.motivo, /no prueba cuándo ni dónde/);
 });
 
 test('origen: galería con EXIF de cámara coherente → OBSERVACIÓN, con la cámara y la edad', async () => {
@@ -113,6 +113,41 @@ test('origen: bytes al azar con cabecera JPEG nunca truenan ni salen GRAVE', () 
   }));
 });
 
+/* ── Carga de la foto (el «No se pudo leer» del teléfono) ───────────────── */
+const FIN = new Uint8Array([0xFF, 0xD9]);
+const unir = (/** @type {Uint8Array[]} */ ...xs) => { const o = new Uint8Array(xs.reduce((s, x) => s + x.length, 0)); let i = 0; for (const x of xs) { o.set(x, i); i += x.length; } return o; };
+/** TIFF mínimo con la orientación EXIF (0x0112). @param {number} o */
+const tiffOrientacion = o => new Uint8Array([0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, o, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+test('carga: tamaño de la cabecera, girado cuando el EXIF dice 5-8', () => {
+  const jpeg = unir(JPEG_MINIMO, FIN);
+  assert.deepEqual(dimensiones(jpeg), { width: 1, height: 1 });
+  assert.equal(dimensiones(new Uint8Array([1, 2, 3])), null);
+  /* Un SOF de 3000×4000 con orientación 6 se ve de 4000×3000. */
+  const sof = new Uint8Array([0xFF, 0xC0, 0, 11, 8, 0x0B, 0xB8, 0x0F, 0xA0, 1, 1, 0x11, 0]);
+  const base = unir(new Uint8Array([0xFF, 0xD8]), sof, new Uint8Array([0xFF, 0xDA, 0, 2]), FIN);
+  assert.deepEqual(dimensiones(base), { width: 4000, height: 3000 });
+  assert.deepEqual(dimensiones(conMetadatos(base, { exif: tiffOrientacion(6) })), { width: 3000, height: 4000 });
+  assert.deepEqual(dimensiones(conMetadatos(base, { exif: tiffOrientacion(3) })), { width: 4000, height: 3000 });
+});
+
+test('carga: JPEG cortada → incompleta; con video pegado al final (foto en movimiento) → completa', () => {
+  const jpeg = unir(JPEG_MINIMO, FIN);
+  assert.equal(jpegCompleto(jpeg), true);
+  assert.equal(jpegCompleto(JPEG_MINIMO), false);
+  assert.equal(jpegCompleto(unir(jpeg, new TextEncoder().encode('....ftypmp42'), new Uint8Array(500).fill(7))), true);
+  assert.equal(jpegCompleto(new Uint8Array([0x89, 0x50, 0x4E, 0x47])), true, 'no es JPEG: no se juzga aquí');
+});
+
+test('carga: los metadatos rotos nunca truenan', () => {
+  fc.assert(fc.property(fc.uint8Array({ maxLength: 200 }), cola => {
+    const b = conMetadatos(unir(JPEG_MINIMO, FIN), { exif: cola });
+    const m = leerMetadatos(b);
+    dimensiones(b); jpegCompleto(b);
+    return m.formato === 'jpeg';
+  }));
+});
+
 test('origen: fecha EXIF', () => {
   assert.equal(fechaExif('2026:10:06 14:03:11')?.getHours(), 14);
   assert.equal(fechaExif('basura'), null);
@@ -142,22 +177,48 @@ test('colorización: en orden → CUMPLE, limpia y con sombra y ruido', () => {
   }
 });
 
+test('colorización: mezclilla apagada → fría; marino, gris frío y café → neutros (fotos de tienda, 7-oct)', () => {
+  assert.equal(clasificar(30, 5, 260).grupo, 'frio', 'mezclilla lavada en luz de tienda');
+  assert.equal(clasificar(45, 11, 250).grupo, 'frio', 'mezclilla clara');
+  assert.equal(clasificar(21, 8, 262).grupo, 'neutro', 'azul marino');
+  assert.equal(clasificar(59, 4.6, 280).grupo, 'neutro', 'gris frío');
+  assert.equal(clasificar(21, 5.5, 45).grupo, 'neutro', 'café');
+  assert.equal(clasificar(6, 1, 270).grupo, 'neutro', 'negro');
+});
+
+test('colorización: rojo → mezclilla → café → negro bajo luz cálida → CUMPLE', () => {
+  const VINO = '#7A2328', MEZCLILLA = '#5E6E84', CAFE = '#4A3427', NEGRO = '#1C1C1E';
+  const img = tringla([VINO, VINO, MEZCLILLA, MEZCLILLA, MEZCLILLA, CAFE, CAFE, NEGRO, NEGRO], { ...SUCIA, semilla: 7, pared: '#EFE2CF' });
+  const r = revisarColor(img);
+  assert.equal(r.nivel, 'CUMPLE', r.motivo);
+  assert.match(String(r.evidencia.grupos), /^C+F+N+$/);
+});
+
+test('colorización: el balance de blancos no inventa color si no hay blanco de referencia', () => {
+  const gris = { width: 40, height: 30, data: new Uint8ClampedArray(40 * 30 * 4).fill(90) };
+  assert.equal(balanceBlancos(gris), null);
+});
+
 test('colorización: un frío entre cálidos → GRAVE y señala el tramo', () => {
   const c = [P.calido[0], P.calido[1], P.frio[2], P.calido[3], P.calido[4], P.frio[0], P.frio[3], P.neutro[2]];
   const r = revisarColor(tringla(c, { ...SUCIA, semilla: 3 }));
   assert.equal(r.nivel, 'GRAVE');
-  assert.match(r.motivo, /frío entre cálidos, tramo 3/);
+  assert.match(r.motivo, /Colores revueltos: frío entre cálidos, tramo 3/);
   assert.equal(r.marcas.tramos.filter(t => t.fueraGrupo).length, 1);
 });
 
-test('colorización: fuera de la rueda dentro de su grupo → OBSERVACIÓN', () => {
-  const r = revisarColor(tringla([P.calido[3], P.calido[0], P.calido[1], P.frio[0], P.frio[2], P.neutro[2]], { ...SUCIA, semilla: 4 }));
-  assert.equal(r.nivel, 'OBSERVACIÓN');
+test('colorización: fuera de la rueda dentro de su grupo → OBSERVACIÓN solo si se pide (apagado por defecto)', () => {
+  const img = tringla([P.calido[3], P.calido[0], P.calido[1], P.frio[0], P.frio[2], P.neutro[2]], { ...SUCIA, semilla: 4 });
+  assert.equal(revisarColor(img).nivel, 'CUMPLE');
+  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, revisarRueda: true } }).nivel, 'OBSERVACIÓN');
 });
 
-test('colorización: la dirección es configurable (supuesto por confirmar)', () => {
+test('colorización: bloques limpios en otro orden → OBSERVACIÓN; la dirección y el rigor son configurables', () => {
   const img = tringla(BIEN.slice().reverse());
-  assert.equal(revisarColor(img).nivel, 'GRAVE');
+  const r = revisarColor(img);
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /bien formados, pero van neutros → fríos → cálidos/);
+  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, ordenEstricto: true } }).nivel, 'GRAVE');
   assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, direccion: 'der-izq' } }).nivel, 'CUMPLE');
 });
 
@@ -209,13 +270,28 @@ test('surtido: oscura → NO_CALIFICA', () => {
 
 /* ── Triangulación ─────────────────────────────────────────────────────── */
 const TAM = { width: 640, height: 480 };
-test('triangulación: pirámide → CUMPLE; plano o escalera → GRAVE; corrida → OBSERVACIÓN', () => {
+test('triangulación: una sola cima → CUMPLE (al centro o a un lado); plano → GRAVE; cima empatada → OBSERVACIÓN', () => {
   const pir = [{ x: 100, y: 330 }, { x: 220, y: 230 }, { x: 320, y: 120 }, { x: 420, y: 240 }, { x: 540, y: 340 }];
   assert.equal(revisarTriangulo(pir, TAM).nivel, 'CUMPLE');
+  assert.equal(revisarTriangulo(pir, TAM).evidencia.forma, 'simétrico');
   assert.equal(revisarTriangulo([{ x: 100, y: 200 }, { x: 300, y: 205 }, { x: 500, y: 198 }], TAM).nivel, 'GRAVE');
-  assert.equal(revisarTriangulo([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM).nivel, 'GRAVE');
-  assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 160, y: 120 }, { x: 300, y: 240 }, { x: 540, y: 340 }], TAM).nivel, 'OBSERVACIÓN');
+  /* Asimétrico (confirmado por Gerardo, 7-oct): la cima a un lado, bajando. */
+  const esc = revisarTriangulo([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM);
+  assert.equal(esc.nivel, 'CUMPLE');
+  assert.equal(esc.evidencia.forma, 'asimétrico');
+  assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 160, y: 120 }, { x: 300, y: 240 }, { x: 540, y: 340 }], TAM).nivel, 'CUMPLE');
+  /* Alto, bajo, medio (maniquí en tarima, zapato en base, maniquí en piso). */
+  assert.equal(revisarTriangulo([{ x: 180, y: 25 }, { x: 300, y: 215 }, { x: 420, y: 95 }], TAM).nivel, 'CUMPLE');
   assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 200, y: 200 }], TAM).nivel, 'NO_CALIFICA');
+});
+
+test('niveles: tres alturas o más → CUMPLE; dos → OBSERVACIÓN; plano → GRAVE', () => {
+  assert.equal(revisarNiveles([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM).nivel, 'CUMPLE');
+  const dos = revisarNiveles([{ x: 100, y: 330 }, { x: 300, y: 120 }, { x: 500, y: 335 }], TAM);
+  assert.equal(dos.nivel, 'OBSERVACIÓN');
+  assert.match(dos.motivo, /nivel medio/);
+  assert.equal(revisarNiveles([{ x: 100, y: 200 }, { x: 300, y: 205 }, { x: 500, y: 198 }], TAM).nivel, 'GRAVE');
+  assert.equal(revisarNiveles([{ x: 100, y: 200 }], TAM).nivel, 'NO_CALIFICA');
 });
 
 test('triangulación: el focal sintético en pirámide y en fila', () => {
@@ -234,6 +310,28 @@ test('triangulación: cajas del detector → puntos altos, sin repetidos ni basu
     { x: 500, y: 200, w: 60, h: 60, categoria: 'person', score: 0.1 },    // poca confianza
   ];
   assert.deepEqual(puntosDeCajas(cajas), [{ x: 140, y: 50 }, { x: 330, y: 150 }]);
+});
+
+test('triangulación: sin muebles ni personas del fondo entre las sugerencias', () => {
+  const cajas = [
+    { x: 100, y: 50, w: 80, h: 300, categoria: 'person', score: 0.9 },
+    { x: 400, y: 200, w: 30, h: 90, categoria: 'person', score: 0.6 },    // al fondo: 30 % de alto
+    { x: 50, y: 300, w: 500, h: 120, categoria: 'dining table', score: 0.7 },
+    { x: 300, y: 260, w: 120, h: 60, categoria: 'bench', score: 0.6 },
+  ];
+  assert.deepEqual(puntosDeCajas(cajas), [{ x: 140, y: 50 }]);
+});
+
+test('surtido: lo casi negro (sombra o producto negro) no cuenta como hueco', () => {
+  const img = anaquel({ semilla: 5, ruido: 3, huecos: [[1, 2]] });
+  const antes = revisarSurtido(img);
+  assert.notEqual(antes.nivel, 'CUMPLE', 'la casilla vacía se ve');
+  /* La misma casilla, pintada de negro liso: ya no se puede afirmar que esté vacía. */
+  const d = Uint8ClampedArray.from(img.data);
+  for (const c of antes.marcas.huecos.flat()) for (let y = c.y; y < c.y + c.h; y++) for (let x = c.x; x < c.x + c.w; x++) {
+    const k = (y * img.width + x) * 4; d[k] = d[k + 1] = d[k + 2] = 4;
+  }
+  assert.equal(revisarSurtido({ width: img.width, height: img.height, data: d }).nivel, 'CUMPLE');
 });
 
 /* ── Veredicto ─────────────────────────────────────────────────────────── */
@@ -258,10 +356,10 @@ test('colorización: una prenda blanca contra pared clara no desaparece como fon
   assert.equal(r.nivel, 'GRAVE', r.evidencia.grupos);
 });
 
-test('triangulación: escalera con dos alturas iguales arriba → GRAVE (un lado no baja)', () => {
+test('triangulación: dos alturas iguales arriba → OBSERVACIÓN (no hay cima que guíe la vista)', () => {
   const r = revisarTriangulo([{ x: 100, y: 120 }, { x: 250, y: 118 }, { x: 400, y: 300 }, { x: 550, y: 320 }], TAM);
-  assert.equal(r.nivel, 'GRAVE');
-  assert.match(r.motivo, /no baja/);
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /misma altura arriba/);
   /* Con 4 elementos, la cima en el segundo sí es triángulo. */
   assert.equal(revisarTriangulo([{ x: 100, y: 300 }, { x: 250, y: 120 }, { x: 400, y: 220 }, { x: 550, y: 320 }], TAM).nivel, 'CUMPLE');
 });

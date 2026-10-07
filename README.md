@@ -400,7 +400,9 @@ con ella, medir cuánto suma lo aprendido del piso.
 ## Revisar con foto: el mini Veristack en el teléfono
 
 La pestaña **Revisar** apunta la cámara a una tringla, un anaquel o un focal y en un segundo
-regresa la foto marcada, con un veredicto por básico y su porqué. Todo corre en el teléfono:
+regresa la foto marcada, con un veredicto por básico y su porqué. Una foto de área se revisa
+por **zonas**: con «＋ Zona» se encierra la mesa, la tringla y el focal de la misma foto, y
+cada zona trae sus básicos y un resultado general. Todo corre en el teléfono:
 **sin red, sin costo, sin subir la foto a nadie y sin IA que juzgue la foto.** El código mide
 y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para calificar
 (oscura, movida o sin suficientes elementos), sale `NO_CALIFICA`: nunca se inventa un
@@ -409,22 +411,29 @@ y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para c
 
 | Básico | Qué mide el código | Qué marca en la foto |
 |---|---|---|
-| **Colorización** | Una franja a la altura del pecho, por columna en CIELAB; la corta en tramos de color y los clasifica en cálido, frío o neutro (los cafés y beiges son neutros, como en la guía). Corrige la luz con la pared y revisa el orden. | Una barra por tramo y el tramo que rompe el orden («frío entre cálidos, tramo 4 de 12») |
-| **Surtido** | Celdas con bordes de Sobel contra el color del fondo del mueble; un hueco es vacío de arriba abajo, no el aire de encima de una pila. | Los huecos rayados y el **% vacío medido** |
-| **Triangulación** | Los puntos altos de cada elemento: la cima al centro, los dos lados bajando y desnivel suficiente. Un detector en el teléfono (MediaPipe, EfficientDet-Lite0) **sugiere** los puntos y la persona los confirma. | El triángulo, o la línea de alturas cuando no lo hay |
-| **Origen de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con una declaración de IA en IPTC/C2PA. | `GRAVE` solo si la propia foto dice que es IA |
+| **Colorización** | Una franja a la altura del pecho, por columna en CIELAB; la corta en tramos de color y los clasifica en cálido, frío o neutro (los cafés, beiges y el azul marino son neutros; la mezclilla es fría). Antes, un balance de blancos quita el tinte de la luz de tienda. Cada grupo va en un solo bloque. | Una barra por tramo y el tramo que rompe el orden («frío entre cálidos, tramo 4 de 12») |
+| **Surtido** | Celdas con bordes de Sobel contra el color del fondo del mueble; un hueco es vacío de arriba abajo, no el aire de encima de una pila, y deja ver el mueble (lo casi negro es sombra o producto negro, no hueco). | Los huecos rayados y el **% vacío medido** |
+| **Triangulación** | Los puntos altos de cada elemento: una sola cima y desnivel suficiente. Vale el simétrico y el asimétrico (la cima a un lado, bajando por bases y bolsas). Un detector en el teléfono (MediaPipe, EfficientDet-Lite0) **sugiere** los puntos dentro de la zona y la persona los confirma. | El triángulo, o la línea de alturas cuando no lo hay |
+| **Alturas y niveles** | Con los mismos puntos: cuántas alturas distintas hay (alto, medio y bajo). | La cifra de alturas |
+| **Evidencia de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con una declaración de IA en IPTC/C2PA. Va aparte del veredicto del montaje: una foto reenviada por WhatsApp sale «sin datos», sirve para revisar el montaje pero no prueba cuándo se tomó. | `GRAVE` solo si la propia foto dice que es IA |
 
-Lo que una foto no puede probar (planchado, limpieza, sensores, entallado, el pasillo de
-90 cm) va en una lista para marcar a mano. La foto marcada y el resumen se comparten por
+Lo que una foto no puede probar (planchado, limpieza, alineación, enganchado, sensores,
+entallado, el pasillo de 90 cm y, en el focal, composición, equilibrio y simetría) va en una
+lista para marcar a mano. La foto marcada y el resumen se comparten por
 WhatsApp con la Web Share API.
 
-**Medido hasta hoy, con honestidad:** con 160 imágenes sintéticas en tres niveles de
-suciedad (`node eval/revision.mjs --sinteticas`), la triangulación va 48/48, el surtido 53/56
-y la colorización 52/56. Casi todos los fallos están en el nivel «duro», donde un naranja en
-sombra fuerte *es* café para la cámara. Esas cifras prueban el método, **no** el criterio del
-ADR: ese se mide con fotos reales (`node eval/revision.mjs --fotos <carpeta>`), que todavía
-faltan. La regla de colorización (orden de los grupos y dirección) es un supuesto por
-confirmar, y se puede configurar en `REGLA_COLOR`.
+**Medido hasta hoy, con honestidad:**
+- **Imágenes sintéticas** (`node eval/revision.mjs --sinteticas`, tres niveles de suciedad):
+  triangulación 72/72, niveles 36/36, surtido 54/56 y colorización 52/56. Casi todos los
+  fallos están en el nivel «duro», donde un naranja en sombra fuerte *es* café para la cámara.
+  Prueban el método, **no** el criterio del ADR.
+- **Fotos reales** (`node eval/revision.mjs --fotos <carpeta>`, fuera del repo):
+  - 5 fotos de piso (15 básicos en 7 zonas): todos aciertan;
+  - 20 fotos de exhibición de referencia (40 básicos): todos aciertan.
+  - **Pero esas fotos se usaron para calibrar**: son desarrollo, no evidencia. La confirmación
+    es el siguiente lote de fotos, corrido una sola vez.
+- La regla de colorización (orden de los grupos y dirección) sigue siendo un supuesto por
+  confirmar, y se configura en `REGLA_COLOR`.
 
 Sin cámara se puede probar con **Ejemplo** (una tringla, un anaquel y un focal dibujados por
 código, con y sin defecto) y con tres muestras de origen armadas en la app (foto de cámara,
