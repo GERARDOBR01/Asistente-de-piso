@@ -56,7 +56,7 @@ engaña, y un falso positivo equivale a acusar a un compañero. Por eso no se us
   | Retocada con IA (borrador mágico, inpainting), según C2PA o IPTC | OBSERVACIÓN (7-oct; antes GRAVE) |
   | Credencial que no coincide con la imagen (alterada después de firmar) | OBSERVACIÓN |
   | Credencial que menciona IA pero no se pudo verificar (sin señal la primera vez) | OBSERVACIÓN: «ábrela con señal antes de concluir» |
-  | Original firmada por una cámara de la lista de confianza de C2PA, de las últimas 24 h | CUMPLE (8-oct) |
+  | Original firmada por una cámara de la lista de confianza de C2PA, de las últimas 24 h | CUMPLE (7-oct) |
   | Original firmada por cámara confiable, pero vieja o sin hora | OBSERVACIÓN: «original, pero de hace N días» |
   | Credencial de cámara con emisor fuera de la lista | OBSERVACIÓN, con el nombre del emisor |
 
