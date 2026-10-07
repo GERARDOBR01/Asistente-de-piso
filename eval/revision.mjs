@@ -9,6 +9,11 @@
 //     que corre en el teléfono (window.__revision). Las fotos nunca entran al
 //     repo.
 //
+//   node eval/revision.mjs --siluetas C:/Users/gerar/eval-revision/tienda [--salida informe.md]
+//     Toque inteligente del focal (Magic Touch): con toques.json
+//     [{ foto, elementos: [{ nombre, toque:{x,y}, cima:{x,y} }] }], en Chrome,
+//     qué tan lejos de la cima real queda la que sale de la silueta.
+//
 //   node eval/revision.mjs --plantilla C:/Users/gerar/eval-revision
 //     Escribe un etiquetas.json de ejemplo para llenar.
 //
@@ -177,6 +182,63 @@ async function fotos(dir) {
   return filas;
 }
 
+/* ── Toque inteligente (siluetas), en Chrome ───────────────────────────── */
+
+/* Criterio: la cima a ≤ 3 % del alto de la foto de la real. */
+const TOLERANCIA_CIMA = 0.03;
+
+async function siluetas(dir) {
+  const { abrirApp } = await import('./navegador.mjs');
+  const casos = JSON.parse(fs.readFileSync(path.join(dir, 'toques.json'), 'utf8'));
+  /* Si la foto tiene focal etiquetado en etiquetas.json, también se compara el veredicto. */
+  const etiq = fs.existsSync(path.join(dir, 'etiquetas.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'etiquetas.json'), 'utf8')) : [];
+  const { p, cerrar } = await abrirApp([], { log: () => {} });
+  /** @type {{foto:string, nombre:string, dy:number|null, dx:number|null, ms:number}[]} */
+  const filas = [];
+  /** @type {string[]} */
+  const veredictos = [];
+  try {
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision, null, { timeout: 30000 });
+    for (const c of casos) {
+      const b64 = fs.readFileSync(path.join(dir, c.foto)).toString('base64');
+      const r = await p.evaluate(async ({ b64, elementos }) => {
+        const bytes = Uint8Array.from(atob(b64), x => x.charCodeAt(0));
+        const a = await /** @type {any} */ (window).__revision.analizarArchivo(new Blob([bytes]), 'focal');
+        const { siluetaEn } = await import('/src/revision/silueta.js');
+        const out = [];
+        for (const el of elementos) {
+          const t0 = performance.now();
+          const s = await siluetaEn(a.base, el.toque);
+          out.push({ s, ms: Math.round(performance.now() - t0) });
+        }
+        return out;
+      }, { b64, elementos: c.elementos });
+      c.elementos.forEach((/** @type {any} */ el, /** @type {number} */ i) => {
+        const s = r[i].s;
+        filas.push({ foto: c.foto, nombre: el.nombre, dy: s ? s.cima.y - el.cima.y : null, dx: s ? s.cima.x - el.cima.x : null, ms: r[i].ms });
+      });
+      const e = etiq.find((/** @type {any} */ x) => x.foto === c.foto && x.tipo === 'focal');
+      if (e) {
+        /* Los puntos que daría el toque (si la silueta se descarta, el punto tocado). */
+        const tam = { width: 1000, height: 1000 };
+        const pts = c.elementos.map((/** @type {any} */ el, /** @type {number} */ i) => { const q = r[i].s ? r[i].s.cima : el.toque; return { x: q.x * 1000, y: q.y * 1000 }; });
+        const t = revisarTriangulo(pts, tam), n = revisarNiveles(pts, tam);
+        veredictos.push(`| ${c.foto} | ${e.esperado} | ${t.nivel} | ${n.nivel} | ${t.motivo} |`);
+      }
+    }
+  } finally { await cerrar(); }
+  const n = filas.length, conSil = filas.filter(f => f.dy !== null);
+  const bien = conSil.filter(f => Math.abs(/** @type {number} */ (f.dy)) <= TOLERANCIA_CIMA).length;
+  const l = [`# Toque inteligente (Magic Touch) · cimas`, '', `Fotos de \`${dir}\` (fuera del repo), en Chrome. Fecha: ${new Date().toISOString().slice(0, 10)}.`, '',
+    `- **${bien}/${n}** cimas a ≤ ${TOLERANCIA_CIMA * 100} % del alto de la real.`,
+    `- ${n - conSil.length}/${n} siluetas descartadas (derramadas): queda el punto tocado.`,
+    `- Error mediano |Δy|: ${(conSil.map(f => Math.abs(/** @type {number} */ (f.dy))).sort((a, b) => a - b)[conSil.length >> 1] * 100 || 0).toFixed(1)} % del alto.`, '',
+    '| Foto | Elemento | Δy (% alto) | Δx (% ancho) | ms |', '|---|---|---|---|---|',
+    ...filas.map(f => `| ${f.foto} | ${f.nombre} | ${f.dy === null ? 'descartada' : (f.dy * 100).toFixed(1)} | ${f.dx === null ? '—' : (f.dx * 100).toFixed(1)} | ${f.ms} |`)];
+  if (veredictos.length) l.push('', '## Veredicto del focal con los puntos del toque', '', '| Foto | Esperado | Triangulación | Niveles | Motivo |', '|---|---|---|---|---|', ...veredictos);
+  return l.join('\n');
+}
+
 /* ── Main ──────────────────────────────────────────────────────────────── */
 
 if (opt('--plantilla')) {
@@ -200,11 +262,13 @@ if (args.includes('--sinteticas')) {
   const t = calificar(sinteticas());
   texto = informe(t, 'Revisión con foto · batería sintética',
     `Generada por código con ruido, sombra y desenfoque en tres niveles (limpia, media, dura). Prueba el método; **no es evidencia del criterio del ADR 0007**, que se mide con fotos reales. Fecha: ${new Date().toISOString().slice(0, 10)}.`, true);
+} else if (opt('--siluetas')) {
+  texto = await siluetas(/** @type {string} */ (opt('--siluetas')));
 } else if (opt('--fotos')) {
   const t = calificar(await fotos(/** @type {string} */ (opt('--fotos'))));
   texto = informe(t, 'Revisión con foto · fotos reales', `Fotos de \`${opt('--fotos')}\` (fuera del repo), medidas en Chrome con el código del teléfono. Criterio del ADR 0007. Fecha: ${new Date().toISOString().slice(0, 10)}.`);
 } else {
-  console.error('Uso: node eval/revision.mjs --sinteticas | --fotos <dir> | --plantilla <dir>  [--salida informe.md]');
+  console.error('Uso: node eval/revision.mjs --sinteticas | --fotos <dir> | --siluetas <dir> | --plantilla <dir>  [--salida informe.md]');
   process.exit(2);
 }
 console.log(texto);
