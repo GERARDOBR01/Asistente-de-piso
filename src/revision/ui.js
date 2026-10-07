@@ -2,14 +2,16 @@
 // Licencia PolyForm Noncommercial 1.0.0: uso comercial solo con licencia escrita (LICENCIA-COMERCIAL.md).
 //
 // Pestaña «Revisar» (ADR 0007): cámara, foto marcada, veredictos y compartir.
-// Es la única pieza de src/revision/ que toca el DOM; las mediciones viven en
-// los módulos puros y aquí solo se dibujan.
+// Una foto puede tener varias zonas (la mesa, la tringla y el focal de una
+// foto de área), cada una con su básico. Es la única pieza de src/revision/
+// que toca el DOM; las mediciones viven en los módulos puros y aquí solo se
+// dibujan.
 
-import { reducir, peor } from './veredicto.js';
+import { peor } from './veredicto.js';
 import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto } from './procedencia.js';
 import { revisarColor, NOMBRE_GRUPO } from './color.js';
 import { revisarSurtido } from './surtido.js';
-import { revisarTriangulo, puntosDeCajas } from './triangulo.js';
+import { revisarTriangulo, revisarNiveles, puntosDeCajas } from './triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
@@ -29,7 +31,8 @@ const TEXTOS = {
   anaquel: { vacia: 'Apunta al anaquel o a la mesa', guia: 'Encuadra el mueble completo', basico: 'Surtido' },
   focal: { vacia: 'Apunta al focal', guia: 'Encuadra el focal completo', basico: 'Triangulación' },
 };
-const MANUAL = ['Planchado', 'Limpieza del departamento', 'Sensores en costura', 'Entallado: una prenda por talla', 'Pasillo de 90 cm', 'Doblado de chica a grande'];
+const NOMBRE_TIPO = { tringla: 'Tringla', anaquel: 'Mesa o anaquel', focal: 'Focal' };
+const ARTICULO = { tringla: 'la tringla', anaquel: 'la mesa o el anaquel', focal: 'el focal' };
 const COLOR_NIVEL = { CUMPLE: '#3ECF8E', 'OBSERVACIÓN': '#F5B942', GRAVE: '#FF5A6E', NO_CALIFICA: '#A9BFE0', DEMO: '#A9BFE0' };
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
@@ -38,9 +41,12 @@ const st = {
   /** @type {Tipo} */ tipo: 'tringla',
   /** @type {MediaStream|null} */ stream: null,
   /** @type {null|{img:Imagen, base:HTMLCanvasElement, via:'app'|'galeria'|'demo', bytes:Uint8Array|null, tomada:Date|null}} */ foto: null,
-  /** @type {{x:number,y:number}[]} */ puntos: [],
-  /** @type {'manual'|'detector'|'detector+manual'} */ origenPuntos: 'manual',
-  /** @type {Resultado|null} */ res: null,
+  /** @type {Zona[]} */ zonas: [],
+  /** zona que se mira o se edita */ activa: -1,
+  /** @type {'ver'|'dibujar'|'tocar'} */ modo: 'ver',
+  /** @type {null|{x0:number,y0:number,x1:number,y1:number}} recuadro que se está dibujando */ trazo: null,
+  /** @type {{x:number,y:number}[]} puntos del ejemplo de focal */ puntosDemo: [],
+  /** cuándo se soltó el último recuadro (ms) */ soltado: 0,
   /** @type {any} */ origen: null,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
   anim: 0,
@@ -222,20 +228,10 @@ export async function analizarArchivo(blob, tipo, op = {}) {
   const img = pixeles(base);
   const h = await huella(bytes);
   const origen = veredictoOrigen({ via: op.via || 'galeria', meta: leerMetadatos(bytes), huella: h, bytes: bytes.length, tomada: op.tomada });
-  let resultado;
-  try { resultado = medir(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco); }
+  let resultados;
+  try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco); }
   catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }
-  return { bytes, base, img, origen, huella: h, resultado };
-}
-
-/** @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
- * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara */
-function medir(img, tipo, puntos = null, zona) {
-  const m = zona || MARCOS[tipo];
-  const marco = { x: m.x * img.width, y: m.y * img.height, w: m.w * img.width, h: m.h * img.height };
-  if (tipo === 'tringla') return revisarColor(img, { marco });
-  if (tipo === 'anaquel') return revisarSurtido(img, { marco });
-  return puntos ? revisarTriangulo(puntos, img, { origen: st.origenPuntos }) : null;
+  return { bytes, base, img, origen, huella: h, resultado: resultados[0] || null, resultados };
 }
 
 /** @param {Blob} blob @param {'app'|'galeria'} via @param {Date|null} tomada */
@@ -249,7 +245,7 @@ async function cargarArchivo(blob, via, tomada) {
     aviso(e instanceof ErrorFoto ? e.message : `No se pudo leer esa imagen (${/** @type {any} */ (e)?.name || 'error'}: ${/** @type {any} */ (e)?.message || e}).`, 'warn');
     return;
   }
-  st.puntos = []; st.origenPuntos = 'manual';
+  st.puntosDemo = [];
   empezarRevision();
 }
 
@@ -261,71 +257,163 @@ function cargarDemo(imgDemo, puntos) {
   st.foto = { img: pixeles(c), base: c, via: 'demo', bytes: null, tomada: null };
   st.origen = { basico: 'origen', nivel: 'DEMO', motivo: 'Imagen de ejemplo dibujada por la app: no hay origen que probar. Con una foto real aquí sale si se tomó en la app, si viene de galería o si declara IA.', evidencia: {}, fuente: 'CÓDIGO' };
   const k = st.foto.img.width / imgDemo.width;
-  st.puntos = puntos ? puntos.map(p => ({ x: p.x * k, y: p.y * k })) : [];
-  st.origenPuntos = 'manual';
+  st.puntosDemo = puntos ? puntos.map(p => ({ x: p.x * k, y: p.y * k })) : [];
   empezarRevision(!!puntos);
 }
 
-/** @param {boolean} [puntosListos] */
+/**
+ * Los básicos que se miden en una zona: colorización en la tringla, surtido en
+ * el mueble, y triangulación + alturas y niveles en el focal.
+ * @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
+ * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara
+ * @param {'manual'|'detector'|'detector+manual'} [origenPuntos]
+ * @returns {Resultado[]}
+ */
+function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
+  const m = zona || MARCOS[tipo];
+  const marco = { x: m.x * img.width, y: m.y * img.height, w: m.w * img.width, h: m.h * img.height };
+  if (tipo === 'tringla') return [revisarColor(img, { marco })];
+  if (tipo === 'anaquel') return [revisarSurtido(img, { marco })];
+  if (!puntos) return [];
+  return [revisarTriangulo(puntos, img, { origen: origenPuntos }), revisarNiveles(puntos, img, { origen: origenPuntos })];
+}
+
+/* ── Zonas: una foto de área, varias cosas que revisar ──────────────────── */
+
+/**
+ * @typedef {Object} Zona
+ * @property {Tipo} tipo
+ * @property {Marco} marco          en fracción de la foto
+ * @property {boolean} guia         true = la de la guía (sin dibujar a mano)
+ * @property {{x:number,y:number}[]} puntos  focal, en píxeles de la imagen analizada
+ * @property {'manual'|'detector'|'detector+manual'} origenPuntos
+ * @property {Resultado[]|null} res null = el focal espera sus puntos
+ */
+
+/** @param {Tipo} tipo @param {Marco} marco @param {boolean} guia @returns {Zona} */
+const nuevaZona = (tipo, marco, guia) => ({ tipo, marco, guia, puntos: [], origenPuntos: 'manual', res: null });
+
+/** @param {Zona} z */
+function medirZona(z) {
+  const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
+  z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos);
+}
+
+const activa = () => (st.activa >= 0 ? st.zonas[st.activa] : null);
+
+/** Empieza la revisión de una foto recién cargada con una zona de la guía. @param {boolean} [puntosListos] */
 function empezarRevision(puntosListos = false) {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
   const lz = $('rv-lienzo');
   lz.width = f.base.width; lz.height = f.base.height;
   proporcion(f.base.width, f.base.height);
   mostrar('foto');
-  if (st.tipo === 'focal' && !puntosListos) {
-    st.res = null;
-    modoTocar();
-    dibujar(1);
-    $('rv-res').innerHTML = '';
-    return;
-  }
-  st.res = medir(f.img, st.tipo, st.puntos);
-  animar(st.tipo === 'focal' ? 1100 : 900);
-  pintarResultados();
+  const z = nuevaZona(st.tipo, MARCOS[st.tipo], true);
+  if (puntosListos) z.puntos = st.puntosDemo;
+  st.zonas = [z]; st.activa = 0; st.modo = 'ver';
+  if (z.tipo === 'focal' && !puntosListos) { tocarZona(0); return; }
+  medirZona(z);
+  animar(z.tipo === 'focal' ? 1100 : 900);
+  pintarZonas(); pintarResultados(true);
+}
+
+/** El focal espera sus puntos. @param {number} i */
+function tocarZona(i) {
+  st.activa = i; st.modo = 'tocar';
+  st.zonas[i].res = null;
+  $('rv-ayuda').hidden = false;
+  actualizarAyuda(); dibujar(1); pintarZonas(); pintarResultados();
+}
+
+/** Lista de zonas y el botón para agregar otra. */
+function pintarZonas() {
+  const caja = $('rv-zonas');
+  if (!st.foto) { caja.hidden = true; return; }
+  caja.hidden = false;
+  const dibujando = st.modo === 'dibujar';
+  $('rv-zonas-lista').innerHTML = st.zonas.map((z, i) => {
+    const n = z.res && z.res.length ? peor(z.res.map(r => r.nivel)) : null;
+    return `<span class="rv-zona${i === st.activa ? ' on' : ''}" data-n="${esc(n || 'PENDIENTE')}"><button type="button" data-zona="${i}"><i></i>${i + 1} · ${esc(NOMBRE_TIPO[z.tipo])}</button>${st.zonas.length > 1 || !z.guia ? `<button type="button" class="rv-zona-x" data-quitar="${i}" aria-label="Quitar la zona ${i + 1}">×</button>` : ''}</span>`;
+  }).join('');
+  const nueva = $('rv-zona-nueva');
+  nueva.textContent = dibujando ? 'Cancelar' : '＋ Zona';
+  nueva.classList.toggle('on', dibujando);
+  $('rv-zonas-t').textContent = dibujando
+    ? `Arrastra sobre la foto para marcar ${ARTICULO[st.tipo]}. Arriba eliges qué es.`
+    : st.zonas.length === 1 && st.zonas[0].guia
+      ? '¿La foto tiene mesa, tringla y focal? Marca cada uno con ＋ Zona.'
+      : 'Toca una zona para verla; la × la quita.';
+  $('rv-lienzo').classList.toggle('dibujando', dibujando);
+}
+
+function empezarDibujo() {
+  if (st.modo === 'dibujar') { st.modo = 'ver'; st.trazo = null; pintarZonas(); dibujar(1); return; }
+  if (st.modo === 'tocar') $('rv-ayuda').hidden = true;
+  st.modo = 'dibujar'; st.trazo = null;
+  pintarZonas(); dibujar(1);
+}
+
+/** Cierra el recuadro dibujado y mide la zona nueva. @param {{x0:number,y0:number,x1:number,y1:number}} t en píxeles de la imagen */
+function terminarDibujo(t) {
+  const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
+  const x = Math.min(t.x0, t.x1) / f.img.width, y = Math.min(t.y0, t.y1) / f.img.height;
+  const w = Math.abs(t.x1 - t.x0) / f.img.width, h = Math.abs(t.y1 - t.y0) / f.img.height;
+  st.trazo = null;
+  if (w < 0.06 || h < 0.06) { aviso('El recuadro quedó muy chico: arrástralo sobre todo el mueble.', 'warn'); dibujar(1); return; }
+  /* Si solo estaba la zona de la guía y nadie la miraba distinto, la nueva la reemplaza. */
+  if (st.zonas.length === 1 && st.zonas[0].guia) st.zonas = [];
+  const z = nuevaZona(st.tipo, { x, y, w, h }, false);
+  st.zonas.push(z);
+  const i = st.zonas.length - 1;
+  if (z.tipo === 'focal') { tocarZona(i); return; }
+  st.activa = i; st.modo = 'ver';
+  medirZona(z);
+  animar(900); pintarZonas(); pintarResultados(true);
 }
 
 /* ── Focal: tocar los puntos (plan B, ADR 0007) ─────────────────────────── */
 
-function modoTocar() {
-  $('rv-ayuda').hidden = false;
-  actualizarAyuda();
-}
 function actualizarAyuda() {
-  const n = st.puntos.length;
-  $('rv-ayuda-t').textContent = st.origenPuntos !== 'manual'
+  const z = activa();
+  if (!z) return;
+  const n = z.puntos.length;
+  $('rv-ayuda-t').textContent = z.origenPuntos !== 'manual'
     ? `${n} ${n === 1 ? 'punto sugerido' : 'puntos sugeridos'} · toca uno para quitarlo o donde falte para agregarlo`
-    : n ? `${n} ${n === 1 ? 'punto' : 'puntos'} · toca lo más alto de cada elemento` : 'Toca lo más alto de cada elemento (maniquí, base, planta) o pide una sugerencia';
+    : n ? `${n} ${n === 1 ? 'punto' : 'puntos'} · toca lo más alto de cada elemento` : 'Toca lo más alto de cada elemento (maniquí, base, bolsa, planta) o pide una sugerencia';
   $('rv-listo').disabled = n < 3;
   $('rv-deshacer').disabled = !n;
 }
 
-/* Plan A como sugerencia: el detector propone, la persona confirma. */
+/* Plan A como sugerencia: el detector propone, la persona confirma. Solo
+   dentro del recuadro de la zona: lo de afuera es otro departamento. */
 async function sugerir() {
-  const f = st.foto, b = $('rv-sugerir');
-  if (!f) return;
+  const f = st.foto, z = activa(), b = $('rv-sugerir');
+  if (!f || !z) return;
   b.disabled = true; b.textContent = 'Buscando…';
   try {
     const { detectar } = await import('./detector.js');
     const cajas = await detectar(f.base);
     const k = f.img.width / f.base.width;
-    const ps = puntosDeCajas(cajas).map(p => ({ x: p.x * k, y: p.y * k }));
-    if (!ps.length) aviso('El detector no encontró maniquíes ni objetos: toca los puntos a mano.', 'warn');
-    else { st.puntos = ps; st.origenPuntos = 'detector'; }
+    const W = f.img.width, H = f.img.height, m = z.marco;
+    const ps = puntosDeCajas(cajas).map(p => ({ x: p.x * k, y: p.y * k }))
+      .filter(p => p.x >= m.x * W && p.x <= (m.x + m.w) * W && p.y >= m.y * H - 0.03 * H && p.y <= (m.y + m.h) * H);
+    if (!ps.length) aviso('El detector no encontró maniquíes ni objetos en la zona: toca los puntos a mano.', 'warn');
+    else { z.puntos = ps; z.origenPuntos = 'detector'; }
     actualizarAyuda(); dibujar(1);
   } catch {
     aviso('No se pudo cargar el detector (la primera vez necesita señal). Toca los puntos a mano.', 'warn');
   } finally { b.disabled = false; b.textContent = 'Sugerir'; }
 }
 
-/** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e */
-function aImagen(e) {
+/** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e @param {boolean} [recortar] */
+function aImagen(e, recortar = false) {
   const lz = $('rv-lienzo'), r = lz.getBoundingClientRect(), f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
   /* object-fit: contain puede dejar franjas: se calcula el área real. */
-  const esc = Math.min(r.width / lz.width, r.height / lz.height);
-  const w = lz.width * esc, h = lz.height * esc, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
-  const x = (e.clientX - r.left - ox) / w, y = (e.clientY - r.top - oy) / h;
-  if (x < 0 || y < 0 || x > 1 || y > 1) return null;
+  const esc_ = Math.min(r.width / lz.width, r.height / lz.height);
+  const w = lz.width * esc_, h = lz.height * esc_, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
+  let x = (e.clientX - r.left - ox) / w, y = (e.clientY - r.top - oy) / h;
+  if (recortar) { x = Math.min(1, Math.max(0, x)); y = Math.min(1, Math.max(0, y)); }
+  else if (x < 0 || y < 0 || x > 1 || y > 1) return null;
   return { x: x * f.img.width, y: y * f.img.height };
 }
 
@@ -373,22 +461,52 @@ function dibujar(p) {
   /* u: tamaño de las marcas. Se ven en un teléfono a ~400 px de ancho, así
      que se escalan contra eso y no contra la resolución de la foto. */
   const k = lz.width / f.img.width, u = lz.width / 400, e = ease(p);
-  const r = st.res;
-  if (st.tipo === 'focal') return dibujarFocal(ctx, k, u, e, r);
-  if (!r || !r.marcas) return;
-  if (r.basico === 'colorizacion') dibujarColor(ctx, r, k, u, e, p);
-  else if (r.basico === 'surtido') dibujarSurtido(ctx, r, k, u, e);
+  const varias = st.zonas.length > 1 || st.zonas.some(z => !z.guia);
+  st.zonas.forEach((z, i) => {
+    /* Solo la zona activa se anima; las demás ya están dibujadas. */
+    const ez = i === st.activa ? e : 1, pz = i === st.activa ? p : 1;
+    if (z.tipo === 'focal') dibujarFocal(ctx, k, u, ez, z);
+    for (const r of z.res || []) {
+      if (!r.marcas) continue;
+      if (r.basico === 'colorizacion') dibujarColor(ctx, r, k, u, ez, pz);
+      else if (r.basico === 'surtido') dibujarSurtido(ctx, r, k, u, ez);
+    }
+    if (varias) dibujarMarcoZona(ctx, z, i, u);
+  });
+  if (st.trazo) {
+    const t = st.trazo;
+    ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#fff';
+    ctx.fillStyle = 'rgba(255,255,255,.12)';
+    const x = Math.min(t.x0, t.x1) * k, y = Math.min(t.y0, t.y1) * k, w = Math.abs(t.x1 - t.x0) * k, h = Math.abs(t.y1 - t.y0) * k;
+    ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
+    pildora(ctx, NOMBRE_TIPO[st.tipo], x + w / 2, Math.max(14 * u, y - 14 * u), '#16171B', u);
+  }
+}
+
+/** El recuadro de una zona con su número, básico y nivel. @param {CanvasRenderingContext2D} ctx @param {Zona} z @param {number} i @param {number} u */
+function dibujarMarcoZona(ctx, z, i, u) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, m = z.marco;
+  const n = z.res && z.res.length ? peor(z.res.map(r => r.nivel)) : null;
+  const color = n ? COLOR_NIVEL[/** @type {'CUMPLE'} */ (n)] : '#FFFFFF';
+  ctx.lineWidth = (i === st.activa ? 2.6 : 1.8) * u; ctx.strokeStyle = color;
+  redondo(ctx, m.x * W, m.y * H, m.w * W, m.h * H, 8 * u); ctx.stroke();
+  const txt = `${i + 1} · ${NOMBRE_TIPO[z.tipo]}${n ? ' · ' + n : ''}`;
+  ctx.font = `600 ${Math.round(12.5 * u)}px Geist, system-ui, sans-serif`;
+  const ancho = ctx.measureText(txt).width + 16 * u;
+  const y = m.y * H > 26 * u ? m.y * H - 14 * u : m.y * H + 14 * u;
+  pildora(ctx, txt, m.x * W + ancho / 2, y, n ? color : '#16171B', u, n === 'OBSERVACIÓN' || n === 'CUMPLE' || n === 'NO_CALIFICA' ? '#16171B' : '#fff');
 }
 
 /** @param {CanvasRenderingContext2D} ctx @param {Resultado} r @param {number} k @param {number} u @param {number} e @param {number} p */
 function dibujarColor(ctx, r, k, u, e, p) {
-  const { franja, tramos } = r.marcas;
+  const { franja, tramos, marco } = r.marcas;
   if (!franja) return;
-  const W = ctx.canvas.width, H = ctx.canvas.height;
   const y0 = franja.y * k, y1 = (franja.y + franja.h) * k;
-  /* Lo que no se mide, apagado. */
+  /* Lo que no se mide, apagado, dentro de la zona. */
+  const zx = (marco ? marco.x : franja.x) * k, zw = (marco ? marco.w : franja.w) * k;
+  const zy0 = marco ? marco.y * k : 0, zy1 = marco ? (marco.y + marco.h) * k : ctx.canvas.height;
   ctx.fillStyle = `rgba(0,0,0,${0.42 * e})`;
-  ctx.fillRect(0, 0, W, y0); ctx.fillRect(0, y1, W, H - y1);
+  ctx.fillRect(zx, zy0, zw, Math.max(0, y0 - zy0)); ctx.fillRect(zx, y1, zw, Math.max(0, zy1 - y1));
   ctx.setLineDash([7 * u, 6 * u]); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = 'rgba(255,255,255,.85)';
   ctx.strokeRect(franja.x * k, y0, franja.w * k, y1 - y0);
   ctx.setLineDash([]);
@@ -451,8 +569,9 @@ function dibujarSurtido(ctx, r, k, u, e) {
   }
 }
 
-/** @param {CanvasRenderingContext2D} ctx @param {number} k @param {number} u @param {number} e @param {Resultado|null} r */
-function dibujarFocal(ctx, k, u, e, r) {
+/** @param {CanvasRenderingContext2D} ctx @param {number} k @param {number} u @param {number} e @param {Zona} z */
+function dibujarFocal(ctx, k, u, e, z) {
+  const r = z.res ? z.res.find(x => x.basico === 'triangulacion') : null;
   const tri = r?.marcas?.triangulo;
   if (tri) {
     const pts = tri.map((/** @type {any} */ q) => ({ x: q.x * k, y: q.y * k }));
@@ -462,13 +581,13 @@ function dibujarFocal(ctx, k, u, e, r) {
     ctx.setLineDash([largo * e, largo]); ctx.lineWidth = 3 * u;
     ctx.strokeStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (r.nivel)] || '#fff'; ctx.stroke();
     ctx.setLineDash([]);
-  } else if (r?.marcas?.puntos && r.nivel === 'GRAVE') {
+  } else if (r?.marcas?.puntos && r.nivel !== 'NO_CALIFICA') {
     /* Sin triángulo: la línea de las alturas, para que se vea por qué. */
     const ps = r.marcas.puntos;
     ctx.beginPath(); ps.forEach((/** @type {any} */ q, /** @type {number} */ i) => (i ? ctx.lineTo(q.x * k, q.y * k) : ctx.moveTo(q.x * k, q.y * k)));
-    ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = COLOR_NIVEL.GRAVE; ctx.globalAlpha = e; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]);
+    ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = COLOR_NIVEL[/** @type {'GRAVE'} */ (r.nivel)]; ctx.globalAlpha = e; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]);
   }
-  const ps = r?.marcas?.puntos || st.puntos.slice().sort((a, b) => a.x - b.x);
+  const ps = r?.marcas?.puntos || z.puntos.slice().sort((a, b) => a.x - b.x);
   ps.forEach((/** @type {any} */ q, /** @type {number} */ i) => {
     const s = Math.min(1, e * ps.length - i * 0.6);
     if (s <= 0) return;
@@ -479,9 +598,9 @@ function dibujarFocal(ctx, k, u, e, r) {
     ctx.fillStyle = '#16171B'; ctx.font = `700 ${Math.round(9 * u)}px Geist Mono, ui-monospace, monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5 * u);
   });
-  if (r?.marcas?.cima && e > 0.7) {
+  if (r?.marcas?.cima && r.nivel === 'CUMPLE' && e > 0.7) {
     const cy = r.marcas.cima.y * k;
-    pildora(ctx, `cima · ${r.evidencia.cima_pos_pct} %`, r.marcas.cima.x * k, cy - 26 * u > 14 * u ? cy - 26 * u : cy + 26 * u, '#16171B', u);
+    pildora(ctx, `cima · ${r.evidencia.forma}`, r.marcas.cima.x * k, cy - 26 * u > 14 * u ? cy - 26 * u : cy + 26 * u, '#16171B', u);
   }
 }
 
@@ -498,15 +617,17 @@ function cifra(r) {
   const ev = r.evidencia;
   if (r.nivel === 'NO_CALIFICA') return { n: null, de: '', txt: 'no se puede calificar con esta foto' };
   if (r.basico === 'colorizacion') {
-    if (r.nivel === 'GRAVE') return { n: Number(ev.fuera_de_grupo), de: `/${ev.tramos}`, txt: 'tramos rompen el orden de color' };
-    if (r.nivel === 'OBSERVACIÓN') return { n: Number(ev.fuera_de_rueda), de: `/${ev.tramos}`, txt: 'tramos fuera de la rueda en su grupo' };
+    if (r.nivel === 'GRAVE') return { n: Number(ev.fuera_de_grupo), de: `/${ev.tramos}`, txt: 'tramos rompen los bloques de color' };
+    if (r.nivel === 'OBSERVACIÓN' && Number(ev.fuera_de_rueda)) return { n: Number(ev.fuera_de_rueda), de: `/${ev.tramos}`, txt: 'tramos fuera de la rueda en su grupo' };
+    if (r.nivel === 'OBSERVACIÓN') return { n: Number(ev.tramos), de: '', txt: 'tramos en bloques, en otro orden' };
     return { n: Number(ev.tramos), de: '', txt: 'tramos de color, todos en orden' };
   }
   if (r.basico === 'surtido') return { n: Number(ev.vacio_pct), de: '%', txt: `del mueble vacío${ev.huecos ? ` · ${ev.huecos} ${ev.huecos === 1 ? 'hueco' : 'huecos'}` : ''}` };
   if (r.basico === 'triangulacion') {
-    if (r.nivel === 'GRAVE' && Number(ev.desnivel_pct) < 12) return { n: Number(ev.desnivel_pct), de: '%', txt: 'de desnivel (se pide 12 % o más)' };
-    return { n: Number(ev.cima_pos_pct), de: '%', txt: 'posición de la cima (50 % es el centro)' };
+    if (r.nivel === 'OBSERVACIÓN') return { n: Number(ev.empatan_arriba) + 1, de: '', txt: 'elementos empatan arriba' };
+    return { n: Number(ev.desnivel_pct), de: '%', txt: r.nivel === 'GRAVE' ? 'de desnivel (se pide 12 % o más)' : `de desnivel · ${ev.forma}` };
   }
+  if (r.basico === 'niveles') return { n: Number(ev.niveles), de: '', txt: Number(ev.niveles) === 1 ? 'altura' : 'alturas distintas' };
   return { n: null, de: '', txt: '' };
 }
 
@@ -527,36 +648,76 @@ function chips(ev) {
     .map(([k, v]) => `<span>${esc(k.replace(/_pct$/, ' %').replace(/_/g, ' '))} ${esc(v === true ? 'sí' : v === false ? 'no' : String(v))}</span>`).join('');
 }
 
-/** @param {any} o @param {string} [titulo] */
-function tarjetaOrigen(o, titulo = 'Origen de la foto') {
-  const ev = o.evidencia || {};
-  const pie = ev.huella ? `<div class="rv-huella">SHA-256 ${esc(ev.huella)}… · ${Math.round(ev.bytes / 1024)} KB${ev.c2pa ? ` · C2PA ${esc(ev.c2pa)} (firma sin validar)` : ''}${ev.iptc ? ` · IPTC ${esc(ev.iptc)}` : ''}</div>` : '';
-  return `<div class="rv-origen" data-n="${esc(o.nivel)}">${ICONO_ORIGEN}<div class="rv-origen-t">${esc(titulo)}<b>${esc(o.nivel === 'DEMO' ? 'EJEMPLO' : o.nivel)}</b></div><p>${esc(o.motivo)}</p>${pie}</div>`;
+/** Cómo se lee el origen en pantalla: sin metadatos no es una falla del montaje. @param {any} o */
+function nivelOrigen(o) {
+  if (o.nivel === 'DEMO') return 'EJEMPLO';
+  if (o.nivel === 'NO_CALIFICA') return 'SIN DATOS';
+  return o.nivel;
 }
 
-function pintarResultados() {
+/** @param {any} o @param {string} [titulo] */
+function tarjetaOrigen(o, titulo = 'Evidencia de la foto') {
+  const ev = o.evidencia || {};
+  const pie = ev.huella ? `<div class="rv-huella">SHA-256 ${esc(ev.huella)}… · ${Math.round(ev.bytes / 1024)} KB${ev.c2pa ? ` · C2PA ${esc(ev.c2pa)} (firma sin validar)` : ''}${ev.iptc ? ` · IPTC ${esc(ev.iptc)}` : ''}</div>` : '';
+  const consejo = o.nivel === 'NO_CALIFICA' || o.nivel === 'OBSERVACIÓN'
+    ? '<p class="rv-consejo">Para que cuente como evidencia: tómala desde aquí, o mándala por WhatsApp como <b>Documento</b> para que conserve sus datos.</p>' : '';
+  return `<div class="rv-origen" data-n="${esc(o.nivel === 'NO_CALIFICA' ? 'SIN_DATOS' : o.nivel)}">${ICONO_ORIGEN}<div class="rv-origen-c"><div class="rv-origen-t">${esc(titulo)}<b>${esc(nivelOrigen(o))}</b></div><p>${esc(o.motivo)}</p>${consejo}${pie}</div></div>`;
+}
+
+/** Lo que se revisa a mano: los básicos de la guía que una foto no mide. */
+function listaManual() {
+  const tipos = new Set(st.zonas.map(z => z.tipo));
+  const l = ['Limpieza', 'Alineación', 'Planchado', 'Enganchado y dirección de ganchos', 'Etiquetas de precio y sensores'];
+  if (tipos.has('anaquel')) l.push('Doblado de chica a grande', 'Rotación');
+  if (tipos.has('tringla')) l.push('Entallado: una prenda por talla');
+  if (tipos.has('focal')) l.push('Composición', 'Equilibrio', 'Simetría', 'Concepto: el look completo');
+  l.push('Pasillo de 90 cm');
+  return l;
+}
+
+const BASICO = { colorizacion: 'Colorización', surtido: 'Surtido', triangulacion: 'Triangulación', niveles: 'Alturas y niveles' };
+
+/** Todos los resultados, con su zona. */
+function todos() {
+  return st.zonas.flatMap((z, i) => (z.res || []).map(r => ({ r, z, i })));
+}
+
+/** @param {boolean} [subir] llevar la vista a la cifra: solo cuando se acaba de medir algo */
+function pintarResultados(subir = false) {
   const caja = $('rv-res');
-  const r = st.res;
-  if (!r) { caja.innerHTML = ''; return; }
-  const c = cifra(r);
-  const nombre = TEXTOS[st.tipo].basico;
-  caja.innerHTML = `
-    <div class="rv-ver" data-n="${esc(r.nivel)}">
-      <div class="rv-ver-top"><span class="rv-basico">${esc(nombre)}</span><span class="rv-nivel"><i></i>${esc(r.nivel)}</span></div>
-      <div class="rv-cifra-fila"><span class="rv-cifra"><b id="rv-num">${c.n === null ? '—' : '0'}</b><small>${esc(c.de)}</small></span><span class="rv-cifra-txt">${esc(c.txt)}</span></div>
+  const lista = todos();
+  if (!lista.length) { caja.innerHTML = st.origen && st.foto ? tarjetaOrigen(st.origen) : ''; return; }
+  const varias = st.zonas.length > 1;
+  const general = peor(lista.map(x => x.r.nivel));
+  const cuenta = (/** @type {string} */ n) => lista.filter(x => x.r.nivel === n).length;
+  const resumen = varias || lista.length > 1
+    ? `<div class="rv-general" data-n="${esc(general)}"><span>Revisión · ${st.zonas.length} ${st.zonas.length === 1 ? 'zona' : 'zonas'} · ${lista.length} básicos</span><b><i></i>${esc(general)}</b><small>${['CUMPLE', 'OBSERVACIÓN', 'GRAVE', 'NO_CALIFICA'].filter(cuenta).map(n => `${cuenta(n)} ${n.toLowerCase().replace('_', ' ')}`).join(' · ')}</small></div>`
+    : '';
+  /* La zona activa primero, para que lo que se acaba de medir quede arriba. */
+  const orden = lista.slice().sort((a, b) => (b.i === st.activa ? 1 : 0) - (a.i === st.activa ? 1 : 0) || a.i - b.i);
+  caja.innerHTML = `${resumen}
+    ${orden.map(({ r, z, i }, j) => {
+      const c = cifra(r);
+      return `<div class="rv-ver" data-n="${esc(r.nivel)}">
+      <div class="rv-ver-top"><span class="rv-basico">${varias ? `Zona ${i + 1} · ` : ''}${esc(BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico)}</span><span class="rv-nivel"><i></i>${esc(r.nivel)}</span></div>
+      <div class="rv-cifra-fila"><span class="rv-cifra"><b data-cifra="${c.n === null ? '' : c.n}">${c.n === null ? '—' : j ? esc(String(c.n)) : '0'}</b><small>${esc(c.de)}</small></span><span class="rv-cifra-txt">${esc(c.txt)}</span></div>
       <p class="rv-motivo">${esc(r.motivo)}</p>
       <div class="rv-ev">${chips(r.evidencia)}</div>
-      <div class="rv-fuente">fuente: CÓDIGO · medido en este teléfono · sin IA</div>
-    </div>
+      <div class="rv-fuente">fuente: CÓDIGO · medido en este teléfono · sin IA${z.tipo === 'tringla' && r.nivel !== 'NO_CALIFICA' ? ' · regla de color por confirmar' : ''}</div>
+    </div>`;
+    }).join('')}
     ${st.origen ? tarjetaOrigen(st.origen) : ''}
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
-      ${MANUAL.map(m => `<label><input type="checkbox"> ${esc(m)}</label>`).join('')}</div>
+      ${listaManual().map(m => `<label><input type="checkbox"> ${esc(m)}</label>`).join('')}</div>
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
     <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>`;
-  if (c.n !== null) contar($('rv-num'), c.n);
-  /* Primero se ven las marcas sobre la foto; luego la cifra sube a la vista. */
-  setTimeout(() => {
-    const v = caja.querySelector('.rv-cifra-fila');
+  const primera = /** @type {HTMLElement|null} */ (caja.querySelector('.rv-ver [data-cifra]'));
+  if (primera && primera.dataset.cifra) contar(primera, Number(primera.dataset.cifra));
+  /* Primero se ven las marcas sobre la foto; luego la cifra sube a la vista.
+     Nunca mientras la persona toca puntos o dibuja: le movería la foto. */
+  if (subir) setTimeout(() => {
+    if (st.modo !== 'ver') return;
+    const v = caja.querySelector('.rv-general, .rv-cifra-fila');
     const r = v?.getBoundingClientRect();
     if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }, 950);
@@ -566,10 +727,11 @@ function pintarResultados() {
 /* ── Compartir ──────────────────────────────────────────────────────────── */
 
 function resumenTexto() {
-  const r = st.res, o = st.origen;
+  const o = st.origen, lista = todos();
   const l = ['Revisión con foto · Asistente de Piso'];
-  if (r) l.push(`${TEXTOS[st.tipo].basico}: ${r.nivel}. ${r.motivo}`);
-  if (o) l.push(`Origen: ${o.nivel === 'DEMO' ? 'imagen de ejemplo' : o.nivel}. ${o.motivo}`);
+  if (lista.length > 1) l.push(`Resultado: ${peor(lista.map(x => x.r.nivel))} (${lista.length} básicos en ${st.zonas.length} ${st.zonas.length === 1 ? 'zona' : 'zonas'})`);
+  for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
+  if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
   if (o?.evidencia?.huella) l.push(`Huella SHA-256 de la foto original: ${o.evidencia.huella}…`);
   l.push('Medido por código en el teléfono, sin IA.');
   return l.join('\n');
@@ -600,7 +762,8 @@ function reporte() {
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   ctx.drawImage(lz, 0, 0);
   ctx.fillStyle = '#111217'; ctx.fillRect(0, lz.height, c.width, alto);
-  ctx.fillStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (st.res?.nivel || 'NO_CALIFICA')];
+  const lista = todos();
+  ctx.fillStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (lista.length ? peor(lista.map(x => x.r.nivel)) : 'NO_CALIFICA')];
   ctx.fillRect(0, lz.height, c.width, 4 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   renglones.forEach((r, i) => {
@@ -616,7 +779,8 @@ async function compartir() {
   const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)));
   const texto = resumenTexto();
   const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
-  const nombre = `revision-${st.tipo}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}-${f2(d.getHours())}${f2(d.getMinutes())}.jpg`;
+  const que = st.zonas.length > 1 ? 'area' : st.zonas[0]?.tipo || st.tipo;
+  const nombre = `revision-${que}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}-${f2(d.getHours())}${f2(d.getMinutes())}.jpg`;
   const archivo = new File([blob], nombre, { type: 'image/jpeg' });
   const nav = /** @type {any} */ (navigator);
   if (nav.canShare?.({ files: [archivo] })) {
@@ -643,7 +807,7 @@ const EJEMPLOS = {
   ],
   focal: [
     () => focal([0.42, 0.6, 0.82, 0.58, 0.4], { w: 960, h: 720, semilla: 3, ruido: 4 }),
-    () => focal([0.8, 0.66, 0.52, 0.4], { w: 960, h: 720, semilla: 5, ruido: 4 }),
+    () => focal([0.62, 0.8, 0.8, 0.45], { w: 960, h: 720, semilla: 5, ruido: 4 }),
   ],
 };
 
@@ -685,9 +849,54 @@ function elegirTipo(t) {
     b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
   });
   $('rv-vacia-t').textContent = TEXTOS[t].vacia;
-  if (st.stream) ponerGuia();
-  else if (st.foto && st.foto.via !== 'demo') { st.puntos = []; empezarRevision(); }
-  else { st.foto = null; st.res = null; $('rv-res').innerHTML = ''; proporcion(4, 3); mostrar('vacia'); }
+  if (st.stream) { ponerGuia(); return; }
+  if (!st.foto) { st.zonas = []; $('rv-res').innerHTML = ''; proporcion(4, 3); mostrar('vacia'); pintarZonas(); return; }
+  /* Con una foto: si solo está la zona de la guía, se revisa la foto entera
+     como el tipo nuevo (lo de antes). Si ya hay zonas dibujadas, el tipo es
+     para la siguiente zona. */
+  if (st.modo === 'dibujar') { pintarZonas(); return; }
+  if (st.foto.via === 'demo') { st.foto = null; st.zonas = []; $('rv-res').innerHTML = ''; proporcion(4, 3); mostrar('vacia'); pintarZonas(); return; }
+  if (st.zonas.length === 1 && st.zonas[0].guia) { st.puntosDemo = []; empezarRevision(); return; }
+  empezarDibujo();
+}
+
+/* Dibujar un recuadro con el dedo o el mouse. */
+function engancharLienzo() {
+  const lz = $('rv-lienzo');
+  lz.addEventListener('pointerdown', (/** @type {PointerEvent} */ e) => {
+    if (st.modo !== 'dibujar' || !st.foto) return;
+    const q = aImagen(e, true);
+    if (!q) return;
+    lz.setPointerCapture(e.pointerId);
+    st.trazo = { x0: q.x, y0: q.y, x1: q.x, y1: q.y };
+    e.preventDefault();
+  });
+  lz.addEventListener('pointermove', (/** @type {PointerEvent} */ e) => {
+    if (!st.trazo) return;
+    const q = aImagen(e, true);
+    if (!q) return;
+    st.trazo.x1 = q.x; st.trazo.y1 = q.y;
+    dibujar(1);
+  });
+  /* Soltar el dedo también dispara un «click»: sin esto, el focal recién
+     dibujado ganaba un punto en la esquina del recuadro. */
+  const soltar = () => { if (st.trazo) { st.soltado = performance.now(); terminarDibujo(st.trazo); } };
+  lz.addEventListener('pointerup', soltar);
+  lz.addEventListener('pointercancel', () => { st.trazo = null; dibujar(1); });
+  lz.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+    const z = activa();
+    if (st.modo !== 'tocar' || !z || !st.foto || performance.now() - st.soltado < 400) return;
+    const q = aImagen(e);
+    if (!q) return;
+    /* Tocar un punto lo quita (para corregir lo que sugirió el detector);
+       tocar en otro lado agrega uno. */
+    const cerca = 22 * st.foto.img.width / lz.getBoundingClientRect().width;
+    const i = z.puntos.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca);
+    if (i >= 0) z.puntos.splice(i, 1);
+    else if (z.puntos.length < 9) z.puntos.push(q);
+    if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
+    actualizarAyuda(); dibujar(1);
+  });
 }
 
 function iniciar() {
@@ -702,22 +911,32 @@ function iniciar() {
   });
   $('rv-demo').addEventListener('click', ejemplo);
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
-  $('rv-lienzo').addEventListener('click', (/** @type {MouseEvent} */ e) => {
-    if (st.tipo !== 'focal' || st.res || !st.foto) return;
-    const q = aImagen(e);
-    if (!q) return;
-    /* Tocar un punto lo quita (para corregir lo que sugirió el detector);
-       tocar en otro lado agrega uno. */
-    const lz = $('rv-lienzo'), cerca = 22 * st.foto.img.width / lz.getBoundingClientRect().width;
-    const i = st.puntos.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca);
-    if (i >= 0) st.puntos.splice(i, 1);
-    else if (st.puntos.length < 9) st.puntos.push(q);
-    if (st.origenPuntos === 'detector') st.origenPuntos = 'detector+manual';
-    actualizarAyuda(); dibujar(1);
+  engancharLienzo();
+  $('rv-zona-nueva').addEventListener('click', empezarDibujo);
+  $('rv-zonas-lista').addEventListener('click', (/** @type {MouseEvent} */ e) => {
+    const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('button'));
+    if (!b) return;
+    if (b.dataset.quitar !== undefined) {
+      st.zonas.splice(Number(b.dataset.quitar), 1);
+      if (!st.zonas.length) { st.puntosDemo = []; empezarRevision(); return; }
+      st.activa = Math.min(st.activa, st.zonas.length - 1);
+      if (st.modo === 'tocar' && activa()?.res) { st.modo = 'ver'; $('rv-ayuda').hidden = true; }
+    } else if (b.dataset.zona !== undefined) {
+      const i = Number(b.dataset.zona), z = st.zonas[i];
+      if (z.tipo === 'focal' && !z.res) { tocarZona(i); return; }
+      st.activa = i;
+    }
+    dibujar(1); pintarZonas(); pintarResultados();
   });
   $('rv-sugerir').addEventListener('click', sugerir);
-  $('rv-deshacer').addEventListener('click', () => { st.puntos.pop(); actualizarAyuda(); dibujar(1); });
-  $('rv-listo').addEventListener('click', () => { $('rv-ayuda').hidden = true; empezarRevision(true); });
+  $('rv-deshacer').addEventListener('click', () => { activa()?.puntos.pop(); actualizarAyuda(); dibujar(1); });
+  $('rv-listo').addEventListener('click', () => {
+    const z = activa();
+    if (!z) return;
+    $('rv-ayuda').hidden = true; st.modo = 'ver';
+    medirZona(z);
+    animar(1100); pintarZonas(); pintarResultados(true);
+  });
   /* La cámara no se queda prendida en otra pestaña. */
   document.querySelector('.tabs')?.addEventListener('click', () => setTimeout(() => {
     if (!$('panel-revisar').classList.contains('active')) { cerrarCamara(); if (!st.foto) mostrar('vacia'); else mostrar('foto'); }
@@ -727,5 +946,5 @@ function iniciar() {
 
 iniciar();
 
-/* Para eval/revision.mjs: el mismo código que corre en el teléfono. */
-/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas };
+/* Para eval/revision.mjs y las capturas: el mismo código que corre en el teléfono. */
+/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st };

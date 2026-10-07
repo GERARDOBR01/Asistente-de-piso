@@ -1213,6 +1213,30 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-escena{position:relative;width:100%;aspect-ratio:4/3;border-radius:var(--rxl);overflow:hidden;background:#07080A;border:1px solid var(--border2);box-shadow:var(--vidrio-sombra)}
 .rv-escena video,.rv-escena canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
 .rv-escena canvas{touch-action:manipulation}
+.rv-escena canvas.dibujando{touch-action:none;cursor:crosshair}
+.rv-zonas{display:flex;flex-direction:column;gap:6px;margin-top:-4px}
+.rv-zonas-fila{display:flex;align-items:center;gap:6px}
+.rv-zonas-lista{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.rv-zona{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--border2);background:var(--s1);--rv-c:var(--text3)}
+.rv-zona[data-n="CUMPLE"]{--rv-c:var(--green)}.rv-zona[data-n="OBSERVACIÓN"]{--rv-c:var(--amber)}.rv-zona[data-n="GRAVE"]{--rv-c:var(--red)}
+.rv-zona.on{border-color:var(--rv-c);background:color-mix(in srgb,var(--rv-c) 12%,var(--s1))}
+.rv-zona button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border:0;background:none;color:var(--text);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-zona button i{width:8px;height:8px;border-radius:50%;background:var(--rv-c)}
+.rv-zona .rv-zona-x{padding:0 10px 0 2px;color:var(--text3);font-size:16px}
+.rv-zona-nueva{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px dashed var(--gold);background:var(--gdim);color:var(--gold);font:700 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-zona-nueva.on{border-style:solid;background:var(--s2);color:var(--text)}
+.rv-zonas-t{font-size:12px;color:var(--text3);line-height:1.4;padding:0 4px}
+.rv-general{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:14px 16px;border-radius:var(--rl);border:1px solid var(--rv-borde,var(--border2));background:var(--s1)}
+.rv-general[data-n="CUMPLE"]{--rv-c:var(--green);--rv-borde:color-mix(in srgb,var(--green) 45%,transparent)}
+.rv-general[data-n="OBSERVACIÓN"]{--rv-c:var(--amber);--rv-borde:color-mix(in srgb,var(--amber) 45%,transparent)}
+.rv-general[data-n="GRAVE"]{--rv-c:var(--red);--rv-borde:color-mix(in srgb,var(--red) 50%,transparent)}
+.rv-general[data-n="NO_CALIFICA"]{--rv-c:var(--gap);--rv-borde:var(--gap-borde)}
+.rv-general span{font-size:12px;color:var(--text3);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.rv-general b{display:inline-flex;align-items:center;gap:7px;color:var(--rv-c);font:700 13px 'Geist Mono',ui-monospace,monospace}
+.rv-general b i{width:8px;height:8px;border-radius:50%;background:var(--rv-c);box-shadow:0 0 10px var(--rv-c)}
+.rv-general small{grid-column:1/-1;font-size:12.5px;color:var(--text2)}
+.rv-origen-c{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rv-consejo{margin:2px 0 0!important;font-size:12.5px!important;color:var(--text2)!important}
 .rv-guia{position:absolute;pointer-events:none;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.38)}
 .rv-guia::before{content:'';position:absolute;inset:-2px;border-radius:16px;border:2px solid rgba(255,255,255,.9);
   -webkit-mask:linear-gradient(#000 0 0) top left/26px 26px no-repeat,linear-gradient(#000 0 0) top right/26px 26px no-repeat,linear-gradient(#000 0 0) bottom left/26px 26px no-repeat,linear-gradient(#000 0 0) bottom right/26px 26px no-repeat;
@@ -1248,7 +1272,7 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-ver[data-n="CUMPLE"],.rv-origen[data-n="CUMPLE"]{--rv-c:var(--green);--rv-borde:color-mix(in srgb,var(--green) 45%,transparent)}
 .rv-ver[data-n="OBSERVACIÓN"],.rv-origen[data-n="OBSERVACIÓN"]{--rv-c:var(--amber);--rv-borde:color-mix(in srgb,var(--amber) 45%,transparent)}
 .rv-ver[data-n="GRAVE"],.rv-origen[data-n="GRAVE"]{--rv-c:var(--red);--rv-borde:color-mix(in srgb,var(--red) 50%,transparent)}
-.rv-ver[data-n="NO_CALIFICA"],.rv-origen[data-n="NO_CALIFICA"],.rv-origen[data-n="DEMO"]{--rv-c:var(--gap);--rv-borde:var(--gap-borde)}
+.rv-ver[data-n="NO_CALIFICA"],.rv-origen[data-n="NO_CALIFICA"],.rv-origen[data-n="DEMO"],.rv-origen[data-n="SIN_DATOS"]{--rv-c:var(--gap);--rv-borde:var(--gap-borde)}
 .rv-ver-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .rv-basico{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);font-weight:600}
 .rv-nivel{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--rv-c) 16%,transparent);color:var(--rv-c);font:700 12.5px 'Geist Mono',ui-monospace,monospace;letter-spacing:.04em}
@@ -1262,7 +1286,7 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-ev span{padding:4px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--border);color:var(--text2);font:500 11px 'Geist Mono',ui-monospace,monospace}
 .rv-fuente{margin-top:10px;font:500 10.5px 'Geist Mono',ui-monospace,monospace;color:var(--text3);letter-spacing:.02em}
 .rv-origen{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;padding:14px 16px;border-radius:var(--rl);border:1px solid var(--rv-borde,var(--border2));background:var(--s1);animation:rv-entra .5s .12s cubic-bezier(.2,.9,.25,1.2) both}
-.rv-origen .ico{grid-row:span 3;width:30px;height:30px;padding:6px;border-radius:10px;color:var(--rv-c);background:color-mix(in srgb,var(--rv-c) 14%,transparent)}
+.rv-origen .ico{grid-row:1;width:30px;height:30px;padding:6px;border-radius:10px;color:var(--rv-c);background:color-mix(in srgb,var(--rv-c) 14%,transparent)}
 .rv-origen-t{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--text3);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .rv-origen-t b{color:var(--rv-c);font:700 11.5px 'Geist Mono',ui-monospace,monospace;letter-spacing:.04em;text-transform:none}
 .rv-origen p{margin:0;font-size:13.5px;line-height:1.45;color:var(--text)}
@@ -1319,7 +1343,7 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
     <div class="rv-tipos" role="tablist" aria-label="Qué vas a revisar">
       <button class="rv-tipo on" data-tipo="tringla" role="tab" aria-selected="true" type="button">Tringla<small>colorización</small></button>
       <button class="rv-tipo" data-tipo="anaquel" role="tab" aria-selected="false" type="button">Anaquel o mesa<small>surtido</small></button>
-      <button class="rv-tipo" data-tipo="focal" role="tab" aria-selected="false" type="button">Focal<small>triangulación</small></button>
+      <button class="rv-tipo" data-tipo="focal" role="tab" aria-selected="false" type="button">Focal<small>triángulo y niveles</small></button>
     </div>
     <div class="rv-escena" id="rv-escena">
       <div class="rv-vacia" id="rv-vacia">
@@ -1330,6 +1354,10 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
       <video id="rv-video" playsinline muted hidden></video>
       <canvas id="rv-lienzo" hidden></canvas>
       <div class="rv-guia" id="rv-guia" hidden><div class="rv-franja" id="rv-franja"></div><span class="rv-guia-txt" id="rv-guia-txt">Encuadra la tringla</span></div>
+    </div>
+    <div class="rv-zonas" id="rv-zonas" hidden>
+      <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button></div>
+      <span class="rv-zonas-t" id="rv-zonas-t"></span>
     </div>
     <div class="rv-ayuda" id="rv-ayuda" hidden><span id="rv-ayuda-t">Toca lo más alto de cada elemento</span><span><button id="rv-sugerir" type="button">Sugerir</button><button id="rv-deshacer" type="button">Deshacer</button><button class="pri" id="rv-listo" type="button" disabled>Revisar</button></span></div>
     <div class="rv-acciones">

@@ -339,15 +339,15 @@ export function revisarColor(img, op = {}) {
      y los hombros, arriba del borde de abajo. */
   const franja = { x: marco.x, y: marco.y + marco.h * 0.32, w: marco.w, h: marco.h * 0.26 };
   const malo = noCalifica(img, franja);
-  if (malo) return resultado('colorizacion', 'NO_CALIFICA', malo.motivo, malo.evidencia, { franja });
+  if (malo) return resultado('colorizacion', 'NO_CALIFICA', malo.motivo, malo.evidencia, { marco, franja });
   const wb = op.sinBalance ? null : balanceBlancos(img);
   if (wb) img = wb.img;
   const p = pared(img, marco);
   const { tramos: ts, fondoPct } = tramos(img, franja, p && p.fondo, p && p.luz);
   /** @type {Record<string, string|number|boolean|null>} */
   const ev = { tramos: ts.length, fondo_pct: redondear(fondoPct * 100), luz_corregida: !!p, balance_blancos: wb ? `R×${redondear(wb.r, 2)} B×${redondear(wb.b, 2)}` : 'sin referencia', direccion: regla.direccion, orden: regla.grupos.map(g => NOMBRE_GRUPO[g]).join(' → ') };
-  if (fondoPct > 0.5) return resultado('colorizacion', 'NO_CALIFICA', 'La franja casi no tiene prendas: no se distinguen del fondo.', ev, { franja, tramos: ts });
-  if (ts.length < 3) return resultado('colorizacion', 'NO_CALIFICA', `Solo se ven ${ts.length} ${ts.length === 1 ? 'bloque' : 'bloques'} de color: hacen falta 3 para revisar el orden.`, ev, { franja, tramos: ts });
+  if (fondoPct > 0.5) return resultado('colorizacion', 'NO_CALIFICA', 'La franja casi no tiene prendas: no se distinguen del fondo.', ev, { marco, franja, tramos: ts });
+  if (ts.length < 3) return resultado('colorizacion', 'NO_CALIFICA', `Solo se ven ${ts.length} ${ts.length === 1 ? 'bloque' : 'bloques'} de color: hacen falta 3 para revisar el orden.`, ev, { marco, franja, tramos: ts });
 
   const sec = regla.direccion === 'der-izq' ? ts.slice().reverse() : ts;
   const pesos = sec.map(t => t.x1 - t.x0);
@@ -376,7 +376,7 @@ export function revisarColor(img, op = {}) {
   ev.fuera_de_rueda = rueda.length;
   ev.grupos = ts.map(t => NOMBRE_GRUPO[t.grupo][0].toUpperCase()).join('');
   ev.bloques = ordenVisto.map(g => NOMBRE_GRUPO[g]).join(' → ');
-  const marcas = { franja, tramos: ts };
+  const marcas = { marco, franja, tramos: ts };
   if (malos.length) {
     const t = malos[0], i = ts.indexOf(t);
     const vecino = (ts[i - 1] && !ts[i - 1].fueraGrupo ? ts[i - 1] : ts[i + 1]) || ts[0];
