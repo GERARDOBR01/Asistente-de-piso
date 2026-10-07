@@ -392,7 +392,7 @@ export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(
     } else motivo += '.';
     return resultado('origen', 'OBSERVACIÓN', motivo + ' Para evidencia, mejor tomarla en la app.', ev);
   }
-  return resultado('origen', 'NO_CALIFICA', 'Sin datos de cámara (reenviada por WhatsApp o captura de pantalla): revisar en persona.', ev);
+  return resultado('origen', 'NO_CALIFICA', 'Sin datos de cámara (reenviada por WhatsApp o captura de pantalla): sirve para revisar el montaje, pero no prueba cuándo ni dónde se tomó.', ev);
 }
 
 /** @param {Date} d */

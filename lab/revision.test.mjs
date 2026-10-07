@@ -14,7 +14,7 @@ import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
 import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto } from '../src/revision/procedencia.js';
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
-import { revisarTriangulo, puntosDeCajas } from '../src/revision/triangulo.js';
+import { revisarTriangulo, revisarNiveles, puntosDeCajas } from '../src/revision/triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,7 +58,7 @@ test('origen: tomada en la app → CUMPLE, con huella y hora', async () => {
 test('origen: galería sin metadatos (WhatsApp, captura) → NO_CALIFICA, nunca GRAVE', async () => {
   const r = await origen(JPEG_MINIMO);
   assert.equal(r.nivel, 'NO_CALIFICA');
-  assert.match(r.motivo, /revisar en persona/);
+  assert.match(r.motivo, /no prueba cuándo ni dónde/);
 });
 
 test('origen: galería con EXIF de cámara coherente → OBSERVACIÓN, con la cámara y la edad', async () => {
@@ -270,13 +270,28 @@ test('surtido: oscura → NO_CALIFICA', () => {
 
 /* ── Triangulación ─────────────────────────────────────────────────────── */
 const TAM = { width: 640, height: 480 };
-test('triangulación: pirámide → CUMPLE; plano o escalera → GRAVE; corrida → OBSERVACIÓN', () => {
+test('triangulación: una sola cima → CUMPLE (al centro o a un lado); plano → GRAVE; cima empatada → OBSERVACIÓN', () => {
   const pir = [{ x: 100, y: 330 }, { x: 220, y: 230 }, { x: 320, y: 120 }, { x: 420, y: 240 }, { x: 540, y: 340 }];
   assert.equal(revisarTriangulo(pir, TAM).nivel, 'CUMPLE');
+  assert.equal(revisarTriangulo(pir, TAM).evidencia.forma, 'simétrico');
   assert.equal(revisarTriangulo([{ x: 100, y: 200 }, { x: 300, y: 205 }, { x: 500, y: 198 }], TAM).nivel, 'GRAVE');
-  assert.equal(revisarTriangulo([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM).nivel, 'GRAVE');
-  assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 160, y: 120 }, { x: 300, y: 240 }, { x: 540, y: 340 }], TAM).nivel, 'OBSERVACIÓN');
+  /* Asimétrico (confirmado por Gerardo, 7-oct): la cima a un lado, bajando. */
+  const esc = revisarTriangulo([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM);
+  assert.equal(esc.nivel, 'CUMPLE');
+  assert.equal(esc.evidencia.forma, 'asimétrico');
+  assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 160, y: 120 }, { x: 300, y: 240 }, { x: 540, y: 340 }], TAM).nivel, 'CUMPLE');
+  /* Alto, bajo, medio (maniquí en tarima, zapato en base, maniquí en piso). */
+  assert.equal(revisarTriangulo([{ x: 180, y: 25 }, { x: 300, y: 215 }, { x: 420, y: 95 }], TAM).nivel, 'CUMPLE');
   assert.equal(revisarTriangulo([{ x: 100, y: 330 }, { x: 200, y: 200 }], TAM).nivel, 'NO_CALIFICA');
+});
+
+test('niveles: tres alturas o más → CUMPLE; dos → OBSERVACIÓN; plano → GRAVE', () => {
+  assert.equal(revisarNiveles([{ x: 100, y: 120 }, { x: 300, y: 220 }, { x: 500, y: 330 }], TAM).nivel, 'CUMPLE');
+  const dos = revisarNiveles([{ x: 100, y: 330 }, { x: 300, y: 120 }, { x: 500, y: 335 }], TAM);
+  assert.equal(dos.nivel, 'OBSERVACIÓN');
+  assert.match(dos.motivo, /nivel medio/);
+  assert.equal(revisarNiveles([{ x: 100, y: 200 }, { x: 300, y: 205 }, { x: 500, y: 198 }], TAM).nivel, 'GRAVE');
+  assert.equal(revisarNiveles([{ x: 100, y: 200 }], TAM).nivel, 'NO_CALIFICA');
 });
 
 test('triangulación: el focal sintético en pirámide y en fila', () => {
@@ -341,10 +356,10 @@ test('colorización: una prenda blanca contra pared clara no desaparece como fon
   assert.equal(r.nivel, 'GRAVE', r.evidencia.grupos);
 });
 
-test('triangulación: escalera con dos alturas iguales arriba → GRAVE (un lado no baja)', () => {
+test('triangulación: dos alturas iguales arriba → OBSERVACIÓN (no hay cima que guíe la vista)', () => {
   const r = revisarTriangulo([{ x: 100, y: 120 }, { x: 250, y: 118 }, { x: 400, y: 300 }, { x: 550, y: 320 }], TAM);
-  assert.equal(r.nivel, 'GRAVE');
-  assert.match(r.motivo, /no baja/);
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /misma altura arriba/);
   /* Con 4 elementos, la cima en el segundo sí es triángulo. */
   assert.equal(revisarTriangulo([{ x: 100, y: 300 }, { x: 250, y: 120 }, { x: 400, y: 220 }, { x: 550, y: 320 }], TAM).nivel, 'CUMPLE');
 });

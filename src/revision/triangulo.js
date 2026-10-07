@@ -1,22 +1,33 @@
 // Asistente de Piso · Copyright (c) 2026 Gerardo Barrera.
 // Licencia PolyForm Noncommercial 1.0.0: uso comercial solo con licencia escrita (LICENCIA-COMERCIAL.md).
 //
-// Triangulación del focal (ADR 0007, punto 4). Recibe los puntos altos de
-// cada elemento del focal —de un detector o tocados por la persona (plan B)—
-// y revisa la geometría: la cima al centro, las alturas bajando hacia los
-// lados y desnivel suficiente. El detector se inyecta; aquí solo hay números.
+// Triangulación y niveles del focal (ADR 0007, punto 4). Recibe los puntos
+// altos de cada elemento del focal —de un detector o tocados por la persona—
+// y revisa la geometría: una sola cima, desnivel suficiente y cuántas alturas
+// distintas hay. El detector se inyecta; aquí solo hay números.
 
 import { resultado, redondear } from './veredicto.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {{x:number,y:number}} Punto */
 
-/* SUPUESTO (ADR 0007): la mitad central del ancho (con 4 elementos la cima
-   cae en el segundo o el tercero, a 1/3 o 2/3), 12 % de desnivel, una
-   tolerancia de 4 % del alto para «baja hacia el lado», y cada lado tiene que
-   bajar al menos 40 % de lo que baja el otro: si uno casi no baja, es una
-   escalera. */
-export const REGLA_TRIANGULO = { centroDesde: 0.25, centroHasta: 0.75, desnivelMinimo: 0.12, tolerancia: 0.04, ladoMinimo: 0.4 };
+/* Regla con las fotos reales de tienda (7-oct, confirmada por Gerardo: «el
+   asimétrico vale»). Un focal hace triángulo si tiene UNA cima: un elemento
+   claramente más alto que todos los demás, esté al centro (simétrico) o a un
+   lado (asimétrico, bajando por bases y bolsas). Los dos focales reales
+   salieron así: uno con la cima al 25 % del ancho y otro con la cima en un
+   extremo (maniquí en tarima, zapato en base, maniquí en piso).
+   - GRAVE: todo casi a la misma altura (desnivel < 12 % del alto).
+   - OBSERVACIÓN: dos o más elementos empatan arriba (a menos de 4 % del
+     alto): no hay un punto alto que guíe la vista.
+   - CUMPLE: una sola cima, con desnivel.
+   La posición de la cima se reporta (simétrico/asimétrico) pero no castiga. */
+export const REGLA_TRIANGULO = { centroDesde: 0.3, centroHasta: 0.7, desnivelMinimo: 0.12, tolerancia: 0.04 };
+
+/* Alturas y niveles (básico de display de la guía). SUPUESTO POR CONFIRMAR:
+   tres alturas o más (alto, medio y bajo) separadas al menos 4 % del alto
+   de la foto; con solo dos alturas, OBSERVACIÓN. */
+export const REGLA_NIVELES = { separacion: 0.04, minimo: 3 };
 
 /**
  * @param {Punto[]} puntos      punto más alto de cada elemento (y crece hacia abajo)
@@ -39,34 +50,53 @@ export function revisarTriangulo(puntos, tam, op = {}) {
   const ys = ps.map(p => p.y);
   const desnivel = (Math.max(...ys) - Math.min(...ys)) / H;
   const tol = regla.tolerancia * H;
-  /* Que baje hacia los lados: de la cima hacia afuera, cada punto igual o más
-     abajo que el anterior (con tolerancia). */
-  let rompen = 0;
-  for (let i = cima; i > 0; i--) if (ps[i - 1].y < ps[i].y - tol) rompen++;
-  for (let i = cima; i < ps.length - 1; i++) if (ps[i + 1].y < ps[i].y - tol) rompen++;
+  /* Los que empatan con la cima: a menos de `tol` de su altura. */
+  const empatan = ps.filter((p, i) => i !== cima && p.y - ps[cima].y < tol);
+  const centrada = rel >= regla.centroDesde && rel <= regla.centroHasta;
   ev.cima_pos_pct = redondear(rel * 100, 0);
   ev.desnivel_pct = redondear(desnivel * 100, 0);
-  ev.rompen_bajada = rompen;
+  ev.empatan_arriba = empatan.length;
+  ev.forma = centrada ? 'simétrico' : 'asimétrico';
   const base = Math.max(...ys);
   const marcas = { puntos: ps, cima: ps[cima], triangulo: [ps[cima], { x: xmin, y: base }, { x: xmax, y: base }] };
 
   if (desnivel < regla.desnivelMinimo)
     return resultado('triangulacion', 'GRAVE', `Todo está casi a la misma altura (desnivel ${redondear(desnivel * 100, 0)} %): no hay triángulo. Usa niveles y desniveles.`, ev, { ...marcas, triangulo: null });
-  if (cima === 0 || cima === ps.length - 1)
-    return resultado('triangulacion', 'GRAVE', `El punto más alto está en un extremo: es una escalera, no un triángulo.`, ev, { ...marcas, triangulo: null });
-  /* Cuánto baja cada lado desde la cima hasta su extremo. */
-  const bajaIzq = ps[0].y - ps[cima].y, bajaDer = ps[ps.length - 1].y - ps[cima].y;
-  const menor = Math.min(bajaIzq, bajaDer), mayor = Math.max(bajaIzq, bajaDer);
-  ev.baja_izq_pct = redondear(bajaIzq / H * 100, 0);
-  ev.baja_der_pct = redondear(bajaDer / H * 100, 0);
-  if (menor <= tol)
-    return resultado('triangulacion', 'GRAVE', `Un lado no baja: ${bajaIzq < bajaDer ? 'a la izquierda' : 'a la derecha'} todo queda a la altura de la cima. Es una escalera, no un triángulo.`, ev, { ...marcas, triangulo: null });
-  const parejo = menor >= regla.ladoMinimo * mayor;
-  const centrada = rel >= regla.centroDesde && rel <= regla.centroHasta;
-  if (centrada && !rompen && parejo)
-    return resultado('triangulacion', 'CUMPLE', `Triángulo: la cima al centro (${redondear(rel * 100, 0)} %) y las alturas bajan hacia los lados (desnivel ${redondear(desnivel * 100, 0)} %).`, ev, marcas);
-  const porque = [!centrada ? `la cima está corrida (${redondear(rel * 100, 0)} % del ancho)` : '', !parejo ? `un lado baja mucho menos que el otro` : '', rompen ? `${rompen} ${rompen === 1 ? 'elemento rompe' : 'elementos rompen'} la bajada` : ''].filter(Boolean).join(' y ');
-  return resultado('triangulacion', 'OBSERVACIÓN', `Hay triángulo, pero ${porque}.`, ev, marcas);
+  if (empatan.length)
+    return resultado('triangulacion', 'OBSERVACIÓN', `${empatan.length + 1} elementos quedan a la misma altura arriba: no hay una cima que guíe la vista. Sube uno o baja los otros.`, ev, { ...marcas, triangulo: null });
+  const donde = centrada ? `la cima al centro (${redondear(rel * 100, 0)} %)` : `la cima a un lado (${redondear(rel * 100, 0)} % del ancho), asimétrico`;
+  return resultado('triangulacion', 'CUMPLE', `Triángulo con ${donde} y desnivel de ${redondear(desnivel * 100, 0)} %.`, ev, marcas);
+}
+
+/**
+ * Alturas y niveles: cuántas alturas distintas hay entre los elementos.
+ * @param {Punto[]} puntos @param {{width:number,height:number}} tam
+ * @param {{origen?:'detector'|'manual'|'detector+manual', regla?:typeof REGLA_NIVELES, desnivelMinimo?:number}} [op]
+ * @returns {Resultado}
+ */
+export function revisarNiveles(puntos, tam, op = {}) {
+  const regla = op.regla || REGLA_NIVELES;
+  /** @type {Record<string, string|number|boolean|null>} */
+  const ev = { puntos: puntos.length, origen_puntos: op.origen || 'manual' };
+  if (puntos.length < 2)
+    return resultado('niveles', 'NO_CALIFICA', `Hacen falta al menos 2 elementos para comparar alturas (hay ${puntos.length}).`, ev, { puntos });
+  const ys = puntos.map(p => p.y / tam.height).sort((a, b) => a - b);
+  /* Alturas que se separan al menos `separacion` de la anterior forman otro nivel. */
+  /** @type {number[][]} */
+  const niveles = [[ys[0]]];
+  for (let i = 1; i < ys.length; i++) {
+    if (ys[i] - ys[i - 1] >= regla.separacion) niveles.push([ys[i]]);
+    else niveles[niveles.length - 1].push(ys[i]);
+  }
+  const desnivel = ys[ys.length - 1] - ys[0];
+  ev.niveles = niveles.length;
+  ev.desnivel_pct = redondear(desnivel * 100, 0);
+  const marcas = { puntos, niveles: niveles.map(n => n.reduce((s, y) => s + y, 0) / n.length * tam.height) };
+  if (desnivel < (op.desnivelMinimo ?? REGLA_TRIANGULO.desnivelMinimo) || niveles.length < 2)
+    return resultado('niveles', 'GRAVE', `Todo a la misma altura (desnivel ${redondear(desnivel * 100, 0)} %). Usa bases, mesas o bustos para crear niveles.`, ev, marcas);
+  if (niveles.length < regla.minimo)
+    return resultado('niveles', 'OBSERVACIÓN', niveles.length === 2 ? 'Solo hay 2 alturas: falta un nivel medio entre lo alto y lo bajo.' : `Solo hay ${niveles.length} alturas; se piden ${regla.minimo}.`, ev, marcas);
+  return resultado('niveles', 'CUMPLE', `${niveles.length} alturas distintas, con ${redondear(desnivel * 100, 0)} % de desnivel.`, ev, marcas);
 }
 
 /**

@@ -29,7 +29,7 @@ import path from 'node:path';
 import { wilson } from '../lab/estadistica.mjs';
 import { revisarColor } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
-import { revisarTriangulo } from '../src/revision/triangulo.js';
+import { revisarTriangulo, revisarNiveles } from '../src/revision/triangulo.js';
 import { tringla, anaquel, focal, azar, PALETA as P } from '../src/revision/demo.js';
 
 const args = process.argv.slice(2);
@@ -115,11 +115,20 @@ function sinteticas(semillas = 8) {
          derecha (o a la izquierda, según la semilla). */
       const pico = n % 2 ? (n - 1) / 2 : n / 2 - (s % 2);
       const pir = Array.from({ length: n }, (_, i) => 0.8 - 0.4 * Math.abs(i - pico) / Math.max(pico, n - 1 - pico));
-      const esc = s % 2 ? pir.slice().sort((x, y) => y - x) : pir.map(() => 0.55 + 0.03 * r());
-      for (const [alturas, esperado, nombre] of [[pir, 'CUMPLE', 'pirámide'], [esc, 'GRAVE', s % 2 ? 'escalera' : 'fila']]) {
+      /* El asimétrico vale (Gerardo, 7-oct): la escalera es CUMPLE. Los
+         defectos son la fila (todo a la misma altura) y la meseta (dos
+         elementos empatan arriba). El pulso de quien toca es ±1 %. */
+      const esc = pir.slice().sort((x, y) => y - x);
+      const defecto = s % 2 ? pir.map(() => 0.55 + 0.03 * r()) : pir.map((a, i) => (i === pico || i === (pico + 1) % n ? 0.82 : 0.4 + 0.1 * r()));
+      for (const [alturas, esperado, nombre] of [[pir, 'CUMPLE', 'pirámide'], [esc, 'CUMPLE', 'escalera'], [defecto, s % 2 ? 'GRAVE' : 'OBSERVACIÓN', s % 2 ? 'fila' : 'meseta']]) {
         const f = focal(/** @type {number[]} */ (alturas), op);
-        const toques = f.puntos.map(q => ({ x: q.x + (r() - 0.5) * 0.04 * f.img.width, y: q.y + (r() - 0.5) * 0.04 * f.img.height }));
+        const toques = f.puntos.map(q => ({ x: q.x + (r() - 0.5) * 0.02 * f.img.width, y: q.y + (r() - 0.5) * 0.02 * f.img.height }));
         filas.push({ basico: 'triangulacion', esperado: /** @type {string} */ (esperado), obtenido: revisarTriangulo(toques, f.img).nivel, caso: `${nivel} s${s} ${nombre}` });
+        /* Lo esperado sale de las alturas construidas: una escalera de 3 hecha
+           de una pirámide simétrica (0.8, 0.4, 0.4) solo tiene 2 alturas. */
+        const distintas = new Set(/** @type {number[]} */ (alturas).map(a => a.toFixed(2))).size;
+        if (nombre === 'escalera' || nombre === 'fila')
+          filas.push({ basico: 'niveles', esperado: nombre === 'fila' ? 'GRAVE' : distintas >= 3 ? 'CUMPLE' : 'OBSERVACIÓN', obtenido: revisarNiveles(toques, f.img).nivel, caso: `${nivel} s${s} ${nombre} (${distintas} alturas)` });
       }
     }
   }
