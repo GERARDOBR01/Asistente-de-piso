@@ -348,6 +348,43 @@ controladas (en `eval-revision/origen/`):
   todas las suyas) salga CUMPLE;
 - probarlo con fotos reales de Pixel y Galaxy.
 
+## Focal: toque inteligente con Magic Touch (7-oct)
+
+Primera de las herramientas que se integran una por una (nota del vault
+«Asistente-de-piso-Revision-foto-Herramientas»). Con el toque de antes había que atinarle a lo más
+alto de cada elemento. Ahora la persona **toca el elemento en cualquier parte** y el segmentador
+interactivo de MediaPipe da su silueta. La cima sale de `cimaDeSilueta` (`triangulo.js`), que es pura
+y tiene pruebas.
+
+- **Modelo:** MagicTouch 512×512 float32, 6.2 MB. La ficha oficial dice **Apache 2.0**.
+- **Carga:** misma librería, CSP y caché del service worker que el detector
+  (`src/revision/silueta.js`).
+- **Silueta derramada:** si toca el borde de arriba o pasa del 35 % de la foto, no se le cree y
+  queda el punto tocado.
+- **Sin modelo** (sin señal la primera vez): queda el punto tocado y la app lo avisa.
+- **En pantalla:** la silueta se pinta encima de la foto y hay una línea del toque a la cima, para
+  notar si se juntó con algo de atrás.
+  - «Punto exacto» vuelve al toque de antes.
+  - Tocar el punto, o donde se tocó para crearlo, lo quita.
+  - Si la cima cae sobre otro elemento ya marcado, no se repite.
+- **Evidencia:** `origen_puntos: silueta | detector+silueta`.
+
+**Medido** con `node eval/revision.mjs --siluetas eval-revision/tienda` (5 focales reales, 17
+elementos, `toques.json`):
+
+| | Resultado |
+|---|---|
+| Cimas a ≤ 3 % del alto de la real | **12/17** (error mediano 1.4 %) |
+| Siluetas descartadas | 0 |
+| Tiempo | ~0.3 s por toque; 1.7 s la primera vez |
+| Uniones con lo de atrás (errores reales) | 2: bolsa con su base de mármol; pampas con un letrero rosa |
+| Ambiguos | 3: el tubo de la tringla, las plantas detrás de una base y el arco del mueble de doblado. Son la parte más alta del mueble, no del producto |
+| Veredicto con los puntos del toque | focal-1 y focal-2 iguales que a mano; en la foto de área, «niveles» sale OBSERVACIÓN porque dos uniones emparejan alturas |
+
+**Conclusión:** en focales despejados acierta. En fotos de área cargadas, la silueta se junta con
+lo de atrás, y por eso se ve en pantalla y existe «Punto exacto». Hay que probarlo en el teléfono
+antes de darlo por bueno.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

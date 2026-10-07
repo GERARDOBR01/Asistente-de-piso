@@ -99,6 +99,53 @@ export function revisarNiveles(puntos, tam, op = {}) {
   return resultado('niveles', 'CUMPLE', `${niveles.length} alturas distintas, con ${redondear(desnivel * 100, 0)} % de desnivel.`, ev, marcas);
 }
 
+/* Silueta de un toque (MediaPipe Magic Touch, en silueta.js). Si el objeto
+   tocado ocupa más de este pedazo de la foto, o su silueta llega al borde de
+   arriba, la silueta se «derramó» (al techo, a la pared) y no se le cree. */
+export const REGLA_SILUETA = { areaMaxima: 0.35, bordeArriba: 0.005 };
+
+/**
+ * La cima del objeto que se tocó, a partir de la máscara del segmentador.
+ * El objeto es la región conexa que contiene el pixel tocado (sea 0 o 255 en
+ * la máscara: se toma el valor que tiene ahí). Su cima es el renglón más alto;
+ * en x, la mediana de ese renglón.
+ * @param {Uint8Array|Uint8ClampedArray} mask  un byte por pixel
+ * @param {number} W @param {number} H
+ * @param {{x:number,y:number}} toque  en fracción de la imagen
+ * @param {typeof REGLA_SILUETA} [regla]
+ * @returns {{cima:{x:number,y:number}, caja:{x0:number,y0:number,x1:number,y1:number}, area:number, objeto:Uint8Array, W:number, H:number}|null}
+ *   cima, caja y área en fracción; `objeto` marca con 1 sus píxeles (para pintarlo); null si no hay objeto creíble
+ */
+export function cimaDeSilueta(mask, W, H, toque, regla = REGLA_SILUETA) {
+  const sx = Math.min(W - 1, Math.max(0, Math.round(toque.x * (W - 1))));
+  const sy = Math.min(H - 1, Math.max(0, Math.round(toque.y * (H - 1))));
+  const valor = mask[sy * W + sx];
+  const visto = new Uint8Array(W * H);
+  const pila = [sy * W + sx];
+  visto[sy * W + sx] = 1;
+  let n = 0, x0 = W, y0 = H, x1 = -1, y1 = -1;
+  /** @type {number[]} */
+  let fila = [];
+  while (pila.length) {
+    const i = /** @type {number} */ (pila.pop());
+    const x = i % W, y = (i - x) / W;
+    n++;
+    if (y < y0) { y0 = y; fila = [x]; } else if (y === y0) fila.push(x);
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y > y1) y1 = y;
+    if (x > 0 && !visto[i - 1] && mask[i - 1] === valor) { visto[i - 1] = 1; pila.push(i - 1); }
+    if (x < W - 1 && !visto[i + 1] && mask[i + 1] === valor) { visto[i + 1] = 1; pila.push(i + 1); }
+    if (y > 0 && !visto[i - W] && mask[i - W] === valor) { visto[i - W] = 1; pila.push(i - W); }
+    if (y < H - 1 && !visto[i + W] && mask[i + W] === valor) { visto[i + W] = 1; pila.push(i + W); }
+  }
+  const area = n / (W * H);
+  if (area > regla.areaMaxima || y0 / H < regla.bordeArriba) return null;
+  fila.sort((a, b) => a - b);
+  const cx = fila[fila.length >> 1];
+  return { cima: { x: cx / W, y: y0 / H }, caja: { x0: x0 / W, y0: y0 / H, x1: (x1 + 1) / W, y1: (y1 + 1) / H }, area, objeto: visto, W, H };
+}
+
 /**
  * Cajas de un detector → puntos altos. Se quedan las categorías que suelen ir
  * en un focal y con confianza suficiente; las cajas casi iguales se funden.

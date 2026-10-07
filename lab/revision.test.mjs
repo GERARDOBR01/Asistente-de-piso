@@ -14,7 +14,7 @@ import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
 import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto, interpretarC2pa } from '../src/revision/procedencia.js';
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
-import { revisarTriangulo, revisarNiveles, puntosDeCajas } from '../src/revision/triangulo.js';
+import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,9 +24,9 @@ const SUCIA = { ruido: 8, desenfoque: 1, sombra: 0.35 };
 const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigator|indexedDB|alert|confirm)\b/;
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
-test('frontera: las piezas de la revisión no usan APIs del navegador (solo ui.js)', () => {
+test('frontera: las piezas de la revisión no usan APIs del navegador (solo ui.js y los cargadores de modelos)', () => {
   const dir = path.join(RAIZ, 'src', 'revision');
-  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && f !== 'ui.js' && f !== 'detector.js')
+  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['ui.js', 'detector.js', 'silueta.js', 'c2pa.js'].includes(f))
     .filter(f => DEL_NAVEGADOR.test(sinComentarios(fs.readFileSync(path.join(dir, f), 'utf8'))));
   assert.deepEqual(malos, []);
 });
@@ -379,6 +379,34 @@ test('surtido: lo casi negro (sombra o producto negro) no cuenta como hueco', ()
     const k = (y * img.width + x) * 4; d[k] = d[k + 1] = d[k + 2] = 4;
   }
   assert.equal(revisarSurtido({ width: img.width, height: img.height, data: d }).nivel, 'CUMPLE');
+});
+
+/* ── Silueta (Magic Touch): la cima del objeto tocado ─────────────────── */
+test('silueta: la cima es el renglón más alto del objeto tocado, sea 0 o 255 en la máscara', () => {
+  const W = 100, H = 80;
+  for (const [obj, fondo] of [[0, 255], [255, 0], [1, 0]]) {
+    const m = new Uint8Array(W * H).fill(fondo);
+    /* Un maniquí: cuerpo de x 40-60, y 30-75, y cabeza de x 46-54 desde y 20. */
+    for (let y = 30; y < 75; y++) for (let x = 40; x < 60; x++) m[y * W + x] = obj;
+    for (let y = 20; y < 30; y++) for (let x = 46; x < 54; x++) m[y * W + x] = obj;
+    /* Otro objeto más alto, sin tocarse: no cuenta. */
+    for (let y = 5; y < 50; y++) for (let x = 80; x < 90; x++) m[y * W + x] = obj;
+    const r = cimaDeSilueta(m, W, H, { x: 0.5, y: 0.6 });
+    assert.ok(r, `obj=${obj}`);
+    assert.equal(r.cima.y, 20 / H);
+    assert.ok(Math.abs(r.cima.x - 0.5) < 0.03);
+    assert.deepEqual(r.caja, { x0: 0.4, y0: 0.25, x1: 0.6, y1: 75 / H });
+    assert.equal(r.objeto.reduce((a, b) => a + b, 0), 20 * 45 + 8 * 10, 'solo el objeto tocado');
+  }
+});
+
+test('silueta: si se derrama (muy grande o hasta el borde de arriba) no se le cree', () => {
+  const W = 50, H = 50;
+  const todo = new Uint8Array(W * H);                          // la «silueta» es la foto entera
+  assert.equal(cimaDeSilueta(todo, W, H, { x: 0.5, y: 0.5 }), null);
+  const m = new Uint8Array(W * H).fill(255);
+  for (let y = 0; y < 30; y++) for (let x = 20; x < 30; x++) m[y * W + x] = 0;   // pega con el techo
+  assert.equal(cimaDeSilueta(m, W, H, { x: 0.5, y: 0.3 }), null);
 });
 
 /* ── Veredicto ─────────────────────────────────────────────────────────── */

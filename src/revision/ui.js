@@ -18,6 +18,9 @@ import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMu
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {'tringla'|'anaquel'|'focal'} Tipo */
 /** @typedef {{x:number,y:number,w:number,h:number}} Marco */
+/** @typedef {'manual'|'detector'|'detector+manual'|'silueta'|'detector+silueta'} OrigenPuntos */
+/** Un punto del focal: la cima de un elemento. `toque`, `caja` y `capa` vienen del toque inteligente.
+ * @typedef {{x:number,y:number,toque?:{x:number,y:number},caja?:{x0:number,y0:number,x1:number,y1:number},capa?:HTMLCanvasElement}} PuntoFocal */
 
 /* Lo que encuadra la guía, en fracción de la foto. Es lo mismo que miden
    color.js y surtido.js: la guía no es decoración. */
@@ -47,6 +50,7 @@ const st = {
   /** @type {null|{x0:number,y0:number,x1:number,y1:number}} recuadro que se está dibujando */ trazo: null,
   /** @type {{x:number,y:number}[]} puntos del ejemplo de focal */ puntosDemo: [],
   /** cuándo se soltó el último recuadro (ms) */ soltado: 0,
+  /** el toque pone el punto justo donde se toca, sin silueta */ exacto: false,
   /** @type {any} */ origen: null,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
   anim: 0,
@@ -284,7 +288,7 @@ function cargarDemo(imgDemo, puntos) {
  * el mueble, y triangulación + alturas y niveles en el focal.
  * @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
  * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara
- * @param {'manual'|'detector'|'detector+manual'} [origenPuntos]
+ * @param {OrigenPuntos} [origenPuntos]
  * @returns {Resultado[]}
  */
 function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
@@ -304,7 +308,7 @@ function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
  * @property {Marco} marco          en fracción de la foto
  * @property {boolean} guia         true = la de la guía (sin dibujar a mano)
  * @property {{x:number,y:number}[]} puntos  focal, en píxeles de la imagen analizada
- * @property {'manual'|'detector'|'detector+manual'} origenPuntos
+ * @property {OrigenPuntos} origenPuntos
  * @property {Resultado[]|null} res null = el focal espera sus puntos
  */
 
@@ -395,11 +399,48 @@ function actualizarAyuda() {
   const z = activa();
   if (!z) return;
   const n = z.puntos.length;
-  $('rv-ayuda-t').textContent = z.origenPuntos !== 'manual'
-    ? `${n} ${n === 1 ? 'punto sugerido' : 'puntos sugeridos'} · toca uno para quitarlo o donde falte para agregarlo`
-    : n ? `${n} ${n === 1 ? 'punto' : 'puntos'} · toca lo más alto de cada elemento` : 'Toca lo más alto de cada elemento (maniquí, base, bolsa, planta) o pide una sugerencia';
+  $('rv-ayuda-t').textContent = z.origenPuntos.startsWith('detector')
+    ? `${n} ${n === 1 ? 'punto sugerido' : 'puntos sugeridos'} · toca uno para quitarlo o un elemento que falte para agregarlo`
+    : st.exacto ? `${n} ${n === 1 ? 'punto' : 'puntos'} · punto exacto: toca justo lo más alto de cada elemento`
+    : n ? `${n} ${n === 1 ? 'elemento' : 'elementos'} · si la silueta agarró algo de atrás, quita el punto y usa «Punto exacto»` : 'Toca cada elemento (maniquí, base, bolsa, planta) en cualquier parte: la app busca su punto más alto. O pide una sugerencia';
   $('rv-listo').disabled = n < 3;
   $('rv-deshacer').disabled = !n;
+  const ex = $('rv-exacto');
+  if (ex) { ex.classList.toggle('on', st.exacto); ex.setAttribute('aria-pressed', String(st.exacto)); }
+}
+
+/**
+ * Toque inteligente: el punto aparece donde se tocó y, cuando llega la
+ * silueta (Magic Touch), sube a la cima del elemento. Sin modelo (sin señal
+ * la primera vez) o con una silueta derramada, se queda el punto tocado.
+ * @param {Zona} z @param {{x:number,y:number}} q en píxeles de la imagen @param {number} cerca
+ */
+async function tocarElemento(z, q, cerca) {
+  const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
+  const W = f.img.width, H = f.img.height;
+  /** @type {PuntoFocal} */
+  const p = { x: q.x, y: q.y, toque: { x: q.x, y: q.y } };
+  z.puntos.push(p);
+  actualizarAyuda(); dibujar(1);
+  try {
+    const { siluetaEn, capaDe } = await import('./silueta.js');
+    const s = await conTope(siluetaEn(f.base, { x: q.x / W, y: q.y / H }), 8000);
+    if (!z.puntos.includes(p)) return;                       // lo quitaron mientras tanto
+    if (!s) { aviso('No se distinguió bien ese elemento: quedó el punto que tocaste. Si no es su parte más alta, quítalo y toca justo arriba.'); return; }
+    const cima = { x: s.cima.x * W, y: s.cima.y * H };
+    /* Si la cima cae sobre un elemento ya marcado, es el mismo: no se repite. */
+    if (z.puntos.some(o => o !== p && Math.hypot(o.x - cima.x, o.y - cima.y) < cerca)) {
+      z.puntos.splice(z.puntos.indexOf(p), 1);
+      aviso('Ese elemento ya está marcado.');
+    } else {
+      p.x = cima.x; p.y = cima.y; p.caja = s.caja; p.capa = capaDe(s.objeto, s.W, s.H);
+      z.origenPuntos = z.origenPuntos.startsWith('detector') ? 'detector+silueta' : 'silueta';
+    }
+  } catch {
+    aviso('El toque inteligente necesita señal la primera vez: quedó el punto que tocaste.', 'warn');
+    if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
+  }
+  actualizarAyuda(); dibujar(1);
 }
 
 /* Plan A como sugerencia: el detector propone, la persona confirma. Solo
@@ -606,6 +647,16 @@ function dibujarFocal(ctx, k, u, e, z) {
     ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = COLOR_NIVEL[/** @type {'GRAVE'} */ (r.nivel)]; ctx.globalAlpha = e; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]);
   }
   const ps = r?.marcas?.puntos || z.puntos.slice().sort((a, b) => a.x - b.x);
+  /* Mientras se tocan: la silueta de cada elemento (su caja) y de dónde se tocó a su cima. */
+  if (st.modo === 'tocar') for (const q of /** @type {PuntoFocal[]} */ (z.puntos)) {
+    if (!q.caja || !q.toque) continue;
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    if (q.capa) ctx.drawImage(q.capa, 0, 0, W, H);
+    ctx.setLineDash([5 * u, 4 * u]); ctx.lineWidth = 1.4 * u; ctx.strokeStyle = 'rgba(255,255,255,.6)';
+    ctx.beginPath(); ctx.moveTo(q.toque.x * k, q.toque.y * k); ctx.lineTo(q.x * k, q.y * k); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(q.toque.x * k, q.toque.y * k, 3 * u, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill();
+  }
   ps.forEach((/** @type {any} */ q, /** @type {number} */ i) => {
     const s = Math.min(1, e * ps.length - i * 0.6);
     if (s <= 0) return;
@@ -906,14 +957,18 @@ function engancharLienzo() {
     if (st.modo !== 'tocar' || !z || !st.foto || performance.now() - st.soltado < 400) return;
     const q = aImagen(e);
     if (!q) return;
-    /* Tocar un punto lo quita (para corregir lo que sugirió el detector);
-       tocar en otro lado agrega uno. */
+    /* Tocar un punto (o donde se tocó para crearlo) lo quita; tocar un
+       elemento nuevo lo agrega en su cima (toque inteligente). */
     const cerca = 22 * st.foto.img.width / lz.getBoundingClientRect().width;
-    const i = z.puntos.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca);
-    if (i >= 0) z.puntos.splice(i, 1);
-    else if (z.puntos.length < 9) z.puntos.push(q);
-    if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
-    actualizarAyuda(); dibujar(1);
+    const ps = /** @type {PuntoFocal[]} */ (z.puntos);
+    const i = ps.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca || (p.toque && Math.hypot(p.toque.x - q.x, p.toque.y - q.y) < cerca));
+    if (i >= 0) { ps.splice(i, 1); actualizarAyuda(); dibujar(1); return; }
+    if (ps.length >= 9) return;
+    if (st.exacto) {
+      ps.push({ x: q.x, y: q.y });
+      if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
+      actualizarAyuda(); dibujar(1);
+    } else tocarElemento(z, q, cerca);
   });
 }
 
@@ -947,6 +1002,8 @@ function iniciar() {
     dibujar(1); pintarZonas(); pintarResultados();
   });
   $('rv-sugerir').addEventListener('click', sugerir);
+  /* «Punto exacto»: para cuando la silueta agarra algo de atrás. */
+  $('rv-exacto').addEventListener('click', () => { st.exacto = !st.exacto; actualizarAyuda(); aviso(st.exacto ? 'Punto exacto: el punto queda justo donde tocas.' : 'Toque inteligente: toca el elemento donde sea y la app busca su cima.'); });
   $('rv-deshacer').addEventListener('click', () => { activa()?.puntos.pop(); actualizarAyuda(); dibujar(1); });
   $('rv-listo').addEventListener('click', () => {
     const z = activa();
