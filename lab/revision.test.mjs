@@ -307,6 +307,18 @@ test('triangulación: sin muebles ni personas del fondo entre las sugerencias', 
   assert.deepEqual(puntosDeCajas(cajas), [{ x: 140, y: 50 }]);
 });
 
+test('surtido: lo casi negro (sombra o producto negro) no cuenta como hueco', () => {
+  const img = anaquel({ semilla: 5, ruido: 3, huecos: [[1, 2]] });
+  const antes = revisarSurtido(img);
+  assert.notEqual(antes.nivel, 'CUMPLE', 'la casilla vacía se ve');
+  /* La misma casilla, pintada de negro liso: ya no se puede afirmar que esté vacía. */
+  const d = Uint8ClampedArray.from(img.data);
+  for (const c of antes.marcas.huecos.flat()) for (let y = c.y; y < c.y + c.h; y++) for (let x = c.x; x < c.x + c.w; x++) {
+    const k = (y * img.width + x) * 4; d[k] = d[k + 1] = d[k + 2] = 4;
+  }
+  assert.equal(revisarSurtido({ width: img.width, height: img.height, data: d }).nivel, 'CUMPLE');
+});
+
 /* ── Veredicto ─────────────────────────────────────────────────────────── */
 test('veredicto: el peor manda; NO_CALIFICA solo si nada calificó', () => {
   assert.equal(peor(['CUMPLE', 'OBSERVACIÓN', 'NO_CALIFICA']), 'OBSERVACIÓN');
