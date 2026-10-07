@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
-import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif } from '../src/revision/procedencia.js';
+import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto } from '../src/revision/procedencia.js';
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, puntosDeCajas } from '../src/revision/triangulo.js';
@@ -110,6 +110,41 @@ test('origen: bytes al azar con cabecera JPEG nunca truenan ni salen GRAVE', () 
     const b = new Uint8Array([0xFF, 0xD8, ...cola]);
     const r = veredictoOrigen({ via: 'galeria', meta: leerMetadatos(b), huella: sha256Puro(b), bytes: b.length, ahora: AHORA });
     return r.nivel !== 'GRAVE' && r.nivel !== 'CUMPLE';
+  }));
+});
+
+/* ── Carga de la foto (el «No se pudo leer» del teléfono) ───────────────── */
+const FIN = new Uint8Array([0xFF, 0xD9]);
+const unir = (/** @type {Uint8Array[]} */ ...xs) => { const o = new Uint8Array(xs.reduce((s, x) => s + x.length, 0)); let i = 0; for (const x of xs) { o.set(x, i); i += x.length; } return o; };
+/** TIFF mínimo con la orientación EXIF (0x0112). @param {number} o */
+const tiffOrientacion = o => new Uint8Array([0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, o, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+test('carga: tamaño de la cabecera, girado cuando el EXIF dice 5-8', () => {
+  const jpeg = unir(JPEG_MINIMO, FIN);
+  assert.deepEqual(dimensiones(jpeg), { width: 1, height: 1 });
+  assert.equal(dimensiones(new Uint8Array([1, 2, 3])), null);
+  /* Un SOF de 3000×4000 con orientación 6 se ve de 4000×3000. */
+  const sof = new Uint8Array([0xFF, 0xC0, 0, 11, 8, 0x0B, 0xB8, 0x0F, 0xA0, 1, 1, 0x11, 0]);
+  const base = unir(new Uint8Array([0xFF, 0xD8]), sof, new Uint8Array([0xFF, 0xDA, 0, 2]), FIN);
+  assert.deepEqual(dimensiones(base), { width: 4000, height: 3000 });
+  assert.deepEqual(dimensiones(conMetadatos(base, { exif: tiffOrientacion(6) })), { width: 3000, height: 4000 });
+  assert.deepEqual(dimensiones(conMetadatos(base, { exif: tiffOrientacion(3) })), { width: 4000, height: 3000 });
+});
+
+test('carga: JPEG cortada → incompleta; con video pegado al final (foto en movimiento) → completa', () => {
+  const jpeg = unir(JPEG_MINIMO, FIN);
+  assert.equal(jpegCompleto(jpeg), true);
+  assert.equal(jpegCompleto(JPEG_MINIMO), false);
+  assert.equal(jpegCompleto(unir(jpeg, new TextEncoder().encode('....ftypmp42'), new Uint8Array(500).fill(7))), true);
+  assert.equal(jpegCompleto(new Uint8Array([0x89, 0x50, 0x4E, 0x47])), true, 'no es JPEG: no se juzga aquí');
+});
+
+test('carga: los metadatos rotos nunca truenan', () => {
+  fc.assert(fc.property(fc.uint8Array({ maxLength: 200 }), cola => {
+    const b = conMetadatos(unir(JPEG_MINIMO, FIN), { exif: cola });
+    const m = leerMetadatos(b);
+    dimensiones(b); jpegCompleto(b);
+    return m.formato === 'jpeg';
   }));
 });
 

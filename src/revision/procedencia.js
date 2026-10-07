@@ -75,6 +75,77 @@ export function formato(b) {
 }
 
 /**
+ * Ancho y alto de la foto ya derecha (con la orientación del EXIF), leídos de
+ * la cabecera sin decodificar la imagen: sirve para pedirle al decodificador
+ * la foto ya reducida cuando es enorme (50-200 MP en algunos teléfonos).
+ * createImageBitmap reduce DESPUÉS de girar, así que con orientación 5-8 el
+ * ancho y el alto se intercambian.
+ * @param {Uint8Array} b @returns {{width:number,height:number}|null}
+ */
+export function dimensiones(b) {
+  const fmt = formato(b);
+  if (fmt === 'png' && b.length >= 24) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { width: dv.getUint32(16), height: dv.getUint32(20) };
+  }
+  if (fmt !== 'jpeg') return null;
+  let p = 2, girada = false;
+  while (p + 9 <= b.length && b[p] === 0xFF) {
+    const mk = b[p + 1];
+    if (mk === 0xD9 || mk === 0xDA) break;
+    if (mk === 0x01 || (mk >= 0xD0 && mk <= 0xD7) || mk === 0xFF) { p += mk === 0xFF ? 1 : 2; continue; }
+    const len = (b[p + 2] << 8) | b[p + 3];
+    if (mk === 0xE1 && latin1.decode(b.subarray(p + 4, p + 10)) === 'Exif\0\0') girada = orientacion(b.subarray(p + 10, p + 2 + len)) >= 5;
+    /* SOF0-SOF15, menos DHT (C4), JPG (C8) y DAC (CC). */
+    if (mk >= 0xC0 && mk <= 0xCF && mk !== 0xC4 && mk !== 0xC8 && mk !== 0xCC) {
+      const h = (b[p + 5] << 8) | b[p + 6], w = (b[p + 7] << 8) | b[p + 8];
+      return girada ? { width: h, height: w } : { width: w, height: h };
+    }
+    p += 2 + len;
+  }
+  return null;
+}
+
+/** Orientación EXIF (etiqueta 0x0112 de la IFD0); 1 si no está. @param {Uint8Array} t bloque TIFF */
+function orientacion(t) {
+  try {
+    if (t.length < 8) return 1;
+    const le = t[0] === 0x49;
+    const dv = new DataView(t.buffer, t.byteOffset, t.byteLength);
+    const off = dv.getUint32(4, le), n = dv.getUint16(off, le);
+    for (let k = 0; k < n; k++) {
+      const e = off + 2 + k * 12;
+      if (dv.getUint16(e, le) === 0x0112) return dv.getUint16(e + 8, le);
+    }
+  } catch { /* EXIF roto: sin girar */ }
+  return 1;
+}
+
+/**
+ * ¿La JPEG llega completa? Después del inicio de la imagen (SOS) tiene que
+ * aparecer el fin (FFD9). Dentro de los datos comprimidos un FF va seguido de
+ * 00, así que FFD9 solo puede ser el fin. No basta con ver los dos últimos
+ * bytes: las «fotos en movimiento» pegan un video después del fin.
+ * @param {Uint8Array} b
+ */
+export function jpegCompleto(b) {
+  if (formato(b) !== 'jpeg') return true;
+  let p = 2;
+  while (p + 4 <= b.length && b[p] === 0xFF) {
+    const mk = b[p + 1];
+    if (mk === 0xD9) return true;
+    if (mk === 0x01 || (mk >= 0xD0 && mk <= 0xD7) || mk === 0xFF) { p += mk === 0xFF ? 1 : 2; continue; }
+    const fin = p + 2 + ((b[p + 2] << 8) | b[p + 3]);
+    if (mk === 0xDA) {
+      for (let i = fin; i + 1 < b.length; i++) if (b[i] === 0xFF && b[i + 1] === 0xD9) return true;
+      return false;
+    }
+    p = fin;
+  }
+  return false;
+}
+
+/**
  * EXIF a partir del bloque TIFF (lo que sigue a «Exif\0\0»).
  * @param {Uint8Array} t @returns {Exif|null}
  */
@@ -133,10 +204,17 @@ function fuenteXmp(xmp) {
 }
 
 /**
- * Lee lo que dice la foto de sí misma.
+ * Lee lo que dice la foto de sí misma. Nunca truena: unos metadatos rotos o
+ * raros (maker notes, fotos de varias capas) no deben impedir revisar la foto.
  * @param {Uint8Array} b bytes del archivo @returns {Metadatos}
  */
 export function leerMetadatos(b) {
+  try { return leer(b); }
+  catch { return { formato: formato(b), exif: null, xmpFuente: null, c2pa: { presente: false, fuente: null } }; }
+}
+
+/** @param {Uint8Array} b @returns {Metadatos} */
+function leer(b) {
   const fmt = formato(b);
   /** @type {Metadatos} */
   const m = { formato: fmt, exif: null, xmpFuente: null, c2pa: { presente: false, fuente: null } };

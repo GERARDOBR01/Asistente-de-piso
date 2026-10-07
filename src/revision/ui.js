@@ -6,7 +6,7 @@
 // los módulos puros y aquí solo se dibujan.
 
 import { reducir, peor } from './veredicto.js';
-import { leerMetadatos, huella, veredictoOrigen } from './procedencia.js';
+import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto } from './procedencia.js';
 import { revisarColor, NOMBRE_GRUPO } from './color.js';
 import { revisarSurtido } from './surtido.js';
 import { revisarTriangulo, puntosDeCajas } from './triangulo.js';
@@ -136,11 +136,12 @@ async function tomar() {
 
 /* ── Cargar y analizar ──────────────────────────────────────────────────── */
 
-/** @param {CanvasImageSource & {width:number,height:number}} fuente @param {number} max */
-function aLienzo(fuente, max) {
-  const f = Math.min(1, max / Math.max(fuente.width, fuente.height));
+/** @param {CanvasImageSource & {width:number,height:number}} fuente @param {number} max
+ * @param {number} [ancho] @param {number} [alto] medidas reales, si `fuente` no las trae */
+function aLienzo(fuente, max, ancho = fuente.width, alto = fuente.height) {
+  const f = Math.min(1, max / Math.max(ancho, alto));
   const c = document.createElement('canvas');
-  c.width = Math.round(fuente.width * f); c.height = Math.round(fuente.height * f);
+  c.width = Math.round(ancho * f); c.height = Math.round(alto * f);
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(fuente, 0, 0, c.width, c.height);
@@ -153,20 +154,76 @@ function pixeles(c) {
   return /** @type {CanvasRenderingContext2D} */ (ch.getContext('2d')).getImageData(0, 0, ch.width, ch.height);
 }
 
+/** Un error al cargar la foto que sabe en qué paso pasó y qué decirle a la persona. */
+class ErrorFoto extends Error {
+  /** @param {'archivo'|'formato'|'analisis'} paso @param {string} msg @param {unknown} [causa] */
+  constructor(paso, msg, causa) { super(msg); this.paso = paso; this.causa = causa; }
+}
+
+/* Lado máximo que se decodifica: la foto de pantalla es de 1600 y el
+   análisis de 640. Una de 50-200 MP no cabe en la memoria de un teléfono. */
+const LADO_DECODIFICADO = 1600;
+
+/**
+ * Del archivo a un lienzo de ≤ 1600 px, con la orientación del EXIF. Primero
+ * createImageBitmap (pidiéndola ya reducida cuando se sabe el tamaño); si el
+ * navegador no puede, un <img>, que en algunos teléfonos sí abre HEIC.
+ * @param {Blob} blob @param {Uint8Array} bytes @returns {Promise<HTMLCanvasElement>}
+ */
+async function decodificar(blob, bytes) {
+  /* Una JPEG cortada se abre, pero con la parte de abajo gris: el surtido la
+     leería como hueco. Mejor no revisarla. */
+  if (!jpegCompleto(bytes))
+    throw new ErrorFoto('formato', 'La foto está incompleta o dañada (se cortó al descargarla o al copiarla). Vuelve a descargarla o tómala de nuevo.');
+  const dim = dimensiones(bytes);
+  const f = dim ? Math.min(1, LADO_DECODIFICADO / Math.max(dim.width, dim.height)) : 1;
+  /** @type {unknown[]} */
+  const fallas = [];
+  const intentos = [
+    () => createImageBitmap(blob, f < 1 && dim
+      ? { imageOrientation: 'from-image', resizeWidth: Math.round(dim.width * f), resizeHeight: Math.round(dim.height * f), resizeQuality: 'high' }
+      : { imageOrientation: 'from-image' }),
+    () => createImageBitmap(blob),
+    async () => {
+      const url = URL.createObjectURL(blob);
+      try { const im = new Image(); im.src = url; await im.decode(); return im; }
+      finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    },
+  ];
+  for (const intento of intentos) {
+    try {
+      const fuente = await intento();
+      const ancho = 'naturalWidth' in fuente ? fuente.naturalWidth : fuente.width, alto = 'naturalHeight' in fuente ? fuente.naturalHeight : fuente.height;
+      if (!ancho || !alto) throw new Error('imagen vacía');
+      const c = aLienzo(fuente, LADO_DECODIFICADO, ancho, alto);
+      if ('close' in fuente) fuente.close();
+      return c;
+    } catch (e) { fallas.push(e); }
+  }
+  console.error('Revisar: no se pudo decodificar la foto', fallas);
+  const fmt = formato(bytes);
+  if (fmt === 'heic') throw new ErrorFoto('formato', 'La foto está en HEIC y este navegador no lo abre. En la cámara elige «Más compatible» (JPG), o mándatela por WhatsApp y súbela desde ahí.', fallas[0]);
+  if (fmt === 'desconocido') throw new ErrorFoto('formato', `Ese archivo no parece una foto (${blob.type || 'tipo desconocido'}). Usa JPG o PNG.`, fallas[0]);
+  throw new ErrorFoto('formato', `El navegador no pudo abrir esta ${fmt.toUpperCase()}${dim ? ` de ${dim.width}×${dim.height}` : ''}. Prueba con una captura de pantalla de la foto o bájale la resolución.`, fallas[0]);
+}
+
 /**
  * Del archivo a resultados, sin pantalla: lo usan la pestaña y eval/revision.mjs.
  * @param {Blob} blob @param {Tipo} tipo
  * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[]}} [op]
  */
 export async function analizarArchivo(blob, tipo, op = {}) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  const bmp = await createImageBitmap(blob);
-  const base = aLienzo(bmp, 1600);
-  bmp.close?.();
+  let bytes;
+  try { bytes = new Uint8Array(await blob.arrayBuffer()); }
+  catch (e) { throw new ErrorFoto('archivo', 'No se pudo abrir el archivo. Si la foto está solo en la nube, descárgala al teléfono primero.', e); }
+  const base = await decodificar(blob, bytes);
   const img = pixeles(base);
   const h = await huella(bytes);
   const origen = veredictoOrigen({ via: op.via || 'galeria', meta: leerMetadatos(bytes), huella: h, bytes: bytes.length, tomada: op.tomada });
-  return { bytes, base, img, origen, huella: h, resultado: medir(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null) };
+  let resultado;
+  try { resultado = medir(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null); }
+  catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }
+  return { bytes, base, img, origen, huella: h, resultado };
 }
 
 /** @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img */
@@ -184,8 +241,9 @@ async function cargarArchivo(blob, via, tomada) {
     const a = await analizarArchivo(blob, st.tipo, { via, tomada: tomada || undefined });
     st.foto = { img: a.img, base: a.base, via, bytes: a.bytes, tomada };
     st.origen = a.origen;
-  } catch {
-    aviso('No se pudo leer esa imagen.', 'warn');
+  } catch (e) {
+    console.error('Revisar: no se pudo cargar la foto', e);
+    aviso(e instanceof ErrorFoto ? e.message : `No se pudo leer esa imagen (${/** @type {any} */ (e)?.name || 'error'}: ${/** @type {any} */ (e)?.message || e}).`, 'warn');
     return;
   }
   st.puntos = []; st.origenPuntos = 'manual';
