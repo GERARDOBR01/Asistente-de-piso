@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
-import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto } from '../src/revision/procedencia.js';
+import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto, interpretarC2pa } from '../src/revision/procedencia.js';
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas } from '../src/revision/triangulo.js';
@@ -85,14 +85,15 @@ test('origen: pasó por un editor → OBSERVACIÓN con su nombre', async () => {
   assert.match(r.motivo, /Photoshop/);
 });
 
-test('origen: declaración de IA en XMP/IPTC o en C2PA → GRAVE', async () => {
-  for (const tipo of ['trainedAlgorithmicMedia', 'compositeWithTrainedAlgorithmicMedia']) {
+test('origen: IPTC generada → GRAVE, retocada → OBSERVACIÓN; C2PA sin verificar nunca acusa', async () => {
+  for (const [tipo, nivel] of [['trainedAlgorithmicMedia', 'GRAVE'], ['compositeWithTrainedAlgorithmicMedia', 'OBSERVACIÓN']]) {
     const x = await origen(conMetadatos(JPEG_MINIMO, { xmp: xmpMuestra(tipo) }));
-    assert.equal(x.nivel, 'GRAVE', `XMP ${tipo}`);
+    assert.equal(x.nivel, nivel, `XMP ${tipo}`);
     assert.equal(x.evidencia.declara, tipo);
+    /* Una credencial que no se pudo verificar con el SDK: se dice, no se acusa. */
     const c = await origen(conMetadatos(JPEG_MINIMO, { c2pa: c2paMuestra(tipo) }));
-    assert.equal(c.nivel, 'GRAVE', `C2PA ${tipo}`);
-    assert.equal(c.evidencia.firma_c2pa, 'sin validar (v1)');
+    assert.equal(c.nivel, 'OBSERVACIÓN', `C2PA ${tipo}`);
+    assert.equal(c.evidencia.firma_c2pa, 'sin verificar');
   }
   /* Aunque traiga EXIF de cámara: la declaración manda. */
   const ambos = conMetadatos(JPEG_MINIMO, { exif: exifMuestra({ marca: 'Marca', modelo: 'Modelo X', fechaOriginal: '2026:10:06 13:30:00' }), xmp: xmpMuestra('trainedAlgorithmicMedia') });
@@ -146,6 +147,52 @@ test('carga: los metadatos rotos nunca truenan', () => {
     dimensiones(b); jpegCompleto(b);
     return m.formato === 'jpeg';
   }));
+});
+
+/* ── Credencial C2PA leída con el SDK oficial (7-oct) ───────────────────────
+   Fixtures: lo que c2pa-node lee de muestras firmadas con el certificado de
+   PRUEBA de c2pa-rs (contenido ficticio): lab/fixtures/c2pa/. */
+const C2PA = n => JSON.parse(fs.readFileSync(path.join(RAIZ, 'lab', 'fixtures', 'c2pa', n + '.json'), 'utf8'));
+const META_VACIA = { formato: 'jpeg', exif: null, xmpFuente: null, c2pa: { presente: true, fuente: null } };
+const origenCon = (/** @type {any} */ credencial, meta = META_VACIA) => veredictoOrigen({ via: 'galeria', meta, huella: 'ab'.repeat(32), bytes: 1000, ahora: AHORA, credencial });
+
+test('origen C2PA: generada con IA → GRAVE; retocada con IA → OBSERVACIÓN, no GRAVE', () => {
+  const gen = interpretarC2pa(C2PA('b-ia-generada'));
+  assert.ok(gen?.generada);
+  assert.equal(origenCon(gen).nivel, 'GRAVE');
+  const ret = interpretarC2pa(C2PA('c-ia-retocada'));
+  assert.ok(ret?.retocada && !ret.generada && ret.captura, 'el padre es de cámara');
+  const r = origenCon(ret);
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /retocada con IA/);
+});
+
+test('origen C2PA: una imagen de IA que solo fue referencia (inputTo) no hace IA a la foto', () => {
+  const c = interpretarC2pa(C2PA('d-real-con-referencia-ia'));
+  assert.ok(c && !c.generada && !c.retocada && c.captura);
+  assert.notEqual(origenCon(c).nivel, 'GRAVE');
+  /* La búsqueda vieja por bytes sí encontraba la palabra: sin el SDK, ya no acusa. */
+  const r = origenCon(null, { ...META_VACIA, c2pa: { presente: true, fuente: 'trainedAlgorithmicMedia' } });
+  assert.equal(r.nivel, 'OBSERVACIÓN');
+  assert.match(r.motivo, /no se pudo leer/);
+});
+
+test('origen C2PA: imagen alterada después de firmar → no coincide; cámara con firma válida → OBSERVACIÓN; confiable → CUMPLE', () => {
+  const alt = interpretarC2pa(C2PA('e-camara-alterada'));
+  assert.equal(alt?.firma, 'invalida');
+  assert.match(origenCon(alt).motivo, /no coincide con la imagen/);
+  const cam = interpretarC2pa(C2PA('a-camara'));
+  assert.equal(cam?.firma, 'valida', 'certificado de prueba: firma válida, emisor no confiable');
+  assert.equal(origenCon(cam).nivel, 'OBSERVACIÓN');
+  assert.equal(origenCon({ ...cam, firma: 'confiable' }).nivel, 'CUMPLE');
+});
+
+test('origen IPTC: retocada con IA → OBSERVACIÓN; generada con IA → GRAVE', () => {
+  const m = (/** @type {string} */ x) => ({ formato: 'jpeg', exif: null, xmpFuente: x, c2pa: { presente: false, fuente: null } });
+  assert.equal(origenCon(null, m('compositeWithTrainedAlgorithmicMedia')).nivel, 'OBSERVACIÓN');
+  assert.equal(origenCon(null, m('trainedAlgorithmicMedia')).nivel, 'GRAVE');
+  assert.equal(interpretarC2pa(null), null);
+  assert.equal(interpretarC2pa({ manifests: {} }), null);
 });
 
 test('origen: fecha EXIF', () => {

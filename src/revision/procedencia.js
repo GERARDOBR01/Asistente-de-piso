@@ -6,7 +6,11 @@
 // - Tomada en la app: hora, tamaño y huella SHA-256 del archivo.
 // - De galería: EXIF (fecha, cámara, editor), XMP/IPTC DigitalSourceType y
 //   si trae un manifiesto C2PA (JUMBF). La firma C2PA no se valida en v1.
-// GRAVE solo cuando la propia foto declara IA. Nunca por un detector.
+// GRAVE solo cuando la propia foto declara que se GENERÓ con IA. Nunca por un
+// detector de píxeles (con fotos de celular dan hasta 98 % de falsos
+// positivos), y nunca por encontrar la palabra en los bytes: un manifiesto
+// C2PA arrastra la historia de sus ingredientes. La credencial se lee con el
+// SDK oficial (c2pa-web, en ui.js) y aquí se interpreta (interpretarC2pa).
 //
 // Sin DOM: recibe los bytes del archivo (Uint8Array).
 
@@ -345,6 +349,73 @@ export function editorEn(s) {
 }
 
 /**
+ * @typedef {Object} Credencial  Lo que dice una credencial C2PA leída con el SDK oficial.
+ * @property {'valida'|'confiable'|'invalida'} firma  invalida = la imagen no coincide con lo firmado
+ * @property {string|null} emisor        quien firmó (signature_info.issuer)
+ * @property {null|{herramienta:string|null}} generada  se creó con IA (manifiesto activo o su cadena de padres)
+ * @property {null|{herramienta:string|null}} retocada  foto o imagen editada con IA (inpainting, borrador)
+ * @property {null|{herramienta:string|null}} captura   creada por una cámara
+ * @property {string[]} fallas          códigos de validación que fallaron
+ */
+
+/* Términos IPTC: el último pedazo del URI de digitalSourceType. */
+const GENERADA = ['trainedAlgorithmicMedia', 'algorithmicMedia'];
+const RETOCADA = ['compositeWithTrainedAlgorithmicMedia', 'compositeSynthetic'];
+
+/**
+ * Interpreta el almacén de manifiestos que devuelve el SDK de C2PA (c2pa-web
+ * o c2pa-node: el mismo JSON de c2pa-rs). Solo cuenta lo que dice el
+ * manifiesto ACTIVO y la cadena de sus padres (`parentOf`): un ingrediente
+ * que solo fue referencia (`inputTo`) no hace IA a la foto. Un ingrediente
+ * pegado (`componentOf`) que se generó con IA la hace «retocada».
+ * @param {any} store @returns {Credencial|null}
+ */
+export function interpretarC2pa(store) {
+  const ms = store && store.manifests;
+  if (!ms || !store.active_manifest || !ms[store.active_manifest]) return null;
+  const fallas = (store.validation_status || []).map((/** @type {any} */ v) => String(v.code))
+    .filter((/** @type {string} */ c) => c !== 'signingCredential.untrusted');
+  const estado = String(store.validation_state || '');
+  const firma = estado === 'Invalid' || fallas.length ? 'invalida' : estado === 'Trusted' ? 'confiable' : 'valida';
+  /** @param {any} m */
+  const acciones = m => (m.assertions || []).filter((/** @type {any} */ a) => /^c2pa\.actions(\.v\d+)?$/.test(a.label))
+    .flatMap((/** @type {any} */ a) => (a.data && a.data.actions) || []);
+  /** @param {any} a @param {any} m */
+  const quien = (a, m) => (a.softwareAgent && (a.softwareAgent.name || (typeof a.softwareAgent === 'string' ? a.softwareAgent : null)))
+    || (m.claim_generator_info && m.claim_generator_info[0] && m.claim_generator_info[0].name) || null;
+  /** @param {any} a */
+  const fuente = a => String(a.digitalSourceType || '').split('/').pop() || '';
+  /** @type {Credencial} */
+  const c = { firma, emisor: (ms[store.active_manifest].signature_info || {}).issuer || null, generada: null, retocada: null, captura: null, fallas };
+  /** @param {string} label @param {Set<string>} visto @returns {boolean} se generó con IA */
+  const recorrer = (label, visto) => {
+    const m = ms[label];
+    if (!m || visto.has(label)) return false;
+    visto.add(label);
+    let gen = false;
+    for (const a of acciones(m)) {
+      const f = fuente(a);
+      if (a.action === 'c2pa.created' && GENERADA.includes(f)) { gen = true; c.generada ||= { herramienta: quien(a, m) }; }
+      else if (RETOCADA.includes(f)) c.retocada ||= { herramienta: quien(a, m) };
+      else if (a.action === 'c2pa.created' && (f === 'digitalCapture' || f === 'computationalCapture')) c.captura ||= { herramienta: quien(a, m) };
+    }
+    for (const ing of m.ingredients || []) {
+      if (!ing.active_manifest) continue;
+      if (ing.relationship === 'parentOf') gen = recorrer(ing.active_manifest, visto) || gen;
+      else if (ing.relationship === 'componentOf') {
+        /* Lo pegado se revisa aparte: si se generó con IA, la foto queda «retocada». */
+        const sub = interpretarC2pa({ ...store, active_manifest: ing.active_manifest, validation_status: [], validation_state: 'Valid' });
+        if (sub && sub.generada) c.retocada ||= { herramienta: sub.generada.herramienta };
+      }
+    }
+    return gen;
+  };
+  recorrer(store.active_manifest, new Set());
+  /* Si el padre se generó con IA y luego solo se editó, sigue siendo generada. */
+  return c;
+}
+
+/**
  * @param {Object} p
  * @param {'app'|'galeria'} p.via
  * @param {Metadatos} p.meta
@@ -352,20 +423,48 @@ export function editorEn(s) {
  * @param {number} p.bytes       tamaño del archivo
  * @param {Date} [p.ahora]
  * @param {Date} [p.tomada]      hora de la captura en la app
+ * @param {Credencial|null} [p.credencial]  la credencial C2PA leída con el SDK; sin ella, nunca se acusa por C2PA
  * @returns {Resultado}
  */
-export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(), tomada }) {
+export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(), tomada, credencial = null }) {
   const corta = h.slice(0, 16);
   /** @type {Record<string, string|number|boolean|null>} */
   const ev = { via, formato: meta.formato, huella: corta, bytes };
-  const ia = [meta.c2pa.fuente, meta.xmpFuente].find(f => f && FUENTES_IA.includes(f));
-  if (meta.c2pa.presente) { ev.c2pa = meta.c2pa.fuente || 'presente'; ev.firma_c2pa = 'sin validar (v1)'; }
   if (meta.xmpFuente) ev.iptc = meta.xmpFuente;
-  if (ia) {
-    ev.declara = ia;
-    const que = ia === 'trainedAlgorithmicMedia' ? 'generada con IA' : ia === 'algorithmicMedia' ? 'generada por computadora' : 'compuesta o editada con IA';
-    const donde = meta.c2pa.presente && FUENTES_IA.includes(meta.c2pa.fuente || '') ? 'su credencial de contenido (C2PA)' : 'sus metadatos (IPTC)';
-    return resultado('origen', 'GRAVE', `La propia imagen declara en ${donde} que fue ${que}. No sirve como evidencia de montaje.`, ev);
+  const con = (/** @type {string|null} */ x) => (x ? ` (${x})` : '');
+  if (credencial) {
+    ev.c2pa = credencial.generada ? 'generada con IA' : credencial.retocada ? 'retocada con IA' : credencial.captura ? 'cámara' : 'presente';
+    ev.firma_c2pa = credencial.firma === 'invalida' ? 'NO coincide con la imagen' : credencial.firma === 'confiable' ? 'válida y de emisor confiable' : 'válida (emisor sin verificar)';
+    if (credencial.emisor) ev.emisor = credencial.emisor;
+    if (credencial.firma === 'invalida') {
+      ev.fallas = credencial.fallas.slice(0, 3).join(', ');
+      return resultado('origen', 'OBSERVACIÓN', 'La credencial de contenido no coincide con la imagen: se modificó después de firmarla, o está dañada. No sirve como prueba de origen.', ev);
+    }
+    if (credencial.generada) {
+      ev.declara = 'trainedAlgorithmicMedia';
+      return resultado('origen', 'GRAVE', `La credencial firmada de la imagen dice que se generó con IA${con(credencial.generada.herramienta)}. No sirve como evidencia de montaje.`, ev);
+    }
+    if (credencial.retocada) {
+      ev.declara = 'compositeWithTrainedAlgorithmicMedia';
+      return resultado('origen', 'OBSERVACIÓN', `Foto real retocada con IA${con(credencial.retocada.herramienta)}, según su credencial firmada. Revisa en persona que no se cambió el montaje.`, ev);
+    }
+  } else if (meta.c2pa.presente) {
+    ev.c2pa = meta.c2pa.fuente || 'presente';
+    ev.firma_c2pa = 'sin verificar';
+  }
+  /* Sin credencial verificada: solo la declaración IPTC (XMP) de la propia imagen. */
+  if (!credencial || !credencial.captura) {
+    const x = meta.xmpFuente;
+    if (x && GENERADA.includes(x)) {
+      ev.declara = x;
+      return resultado('origen', 'GRAVE', `La propia imagen declara en sus metadatos (IPTC) que fue ${x === 'algorithmicMedia' ? 'generada por computadora' : 'generada con IA'}. No sirve como evidencia de montaje.`, ev);
+    }
+    if (x && RETOCADA.includes(x)) {
+      ev.declara = x;
+      return resultado('origen', 'OBSERVACIÓN', 'Foto retocada con IA, según sus metadatos (IPTC), por ejemplo con un borrador mágico. Revisa en persona que no se cambió el montaje.', ev);
+    }
+    if (!credencial && meta.c2pa.presente && meta.c2pa.fuente && FUENTES_IA.includes(meta.c2pa.fuente))
+      return resultado('origen', 'OBSERVACIÓN', 'Trae una credencial de contenido que menciona IA, pero no se pudo leer bien (la primera vez necesita señal). Ábrela de nuevo con señal antes de concluir.', ev);
   }
   if (via === 'app') {
     const t = tomada || ahora;
@@ -382,9 +481,12 @@ export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(
   if (editor) return resultado('origen', 'OBSERVACIÓN', `De galería y pasó por un editor (${editor}).`, ev);
   const camara = !!(ex && ex.marca && ex.modelo);
   const t = fechaExif(ex?.fechaOriginal || null);
-  const camaraC2pa = meta.c2pa.presente && meta.c2pa.fuente && FUENTES_CAMARA.includes(meta.c2pa.fuente);
+  const camaraC2pa = credencial ? !!credencial.captura : meta.c2pa.presente && !!meta.c2pa.fuente && FUENTES_CAMARA.includes(meta.c2pa.fuente);
+  if (credencial && credencial.captura && credencial.firma === 'confiable')
+    return resultado('origen', 'CUMPLE', `Firmada por la cámara al tomarla${con(credencial.emisor)}, con firma válida: es la foto original.`, ev);
   if ((camara && t) || camaraC2pa) {
     let motivo = camara ? `De galería: ${ev.camara}` : 'De galería, con manifiesto C2PA de cámara';
+    if (credencial && credencial.captura) motivo += `, firmado${con(credencial.emisor)}`;
     if (t) {
       const horas = (ahora.getTime() - t.getTime()) / 3600000;
       ev.edad_horas = Math.round(horas * 10) / 10;
