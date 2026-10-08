@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
-import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto, interpretarC2pa } from '../src/revision/procedencia.js';
+import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto, interpretarC2pa, admiteSynthid, conSynthid } from '../src/revision/procedencia.js';
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
@@ -463,4 +463,33 @@ test('triangulación: dos alturas iguales arriba → OBSERVACIÓN (no hay cima q
   assert.match(r.motivo, /misma altura arriba/);
   /* Con 4 elementos, la cima en el segundo sí es triángulo. */
   assert.equal(revisarTriangulo([{ x: 100, y: 300 }, { x: 250, y: 120 }, { x: 400, y: 220 }, { x: 550, y: 320 }], TAM).nivel, 'CUMPLE');
+});
+
+/* ── SynthID revisado a mano (8-oct) ──────────────────────────────────── */
+test('SynthID: se ofrece solo cuando la app no pudo probar el origen', async () => {
+  assert.equal(admiteSynthid(await origen(JPEG_MINIMO)), true, 'reenviada por WhatsApp: sin datos');
+  assert.equal(admiteSynthid(await origen(JPEG_MINIMO, 'app')), false, 'tomada en la app');
+  const camara = conMetadatos(JPEG_MINIMO, { exif: exifMuestra({ marca: 'Marca', modelo: 'Modelo', fechaOriginal: '2026:10:08 10:00:00' }) });
+  assert.equal(admiteSynthid(await origen(camara)), true, 'de galería con EXIF, sin credencial');
+  assert.equal(admiteSynthid(origenCon(interpretarC2pa(C2PA('b-ia-generada')))), false, 'ya es GRAVE por su credencial');
+  assert.equal(admiteSynthid(origenCon(interpretarC2pa(C2PA('c-ia-retocada')))), false, 'credencial válida: ya dice qué es');
+  assert.equal(admiteSynthid({ basico: 'origen', nivel: 'DEMO', motivo: '', evidencia: {}, fuente: 'CÓDIGO' }), false, 'el ejemplo');
+  assert.equal(admiteSynthid(null), false);
+});
+
+test('SynthID: hecha con IA → GRAVE; partes con IA → OBSERVACIÓN; sin marca no sube el nivel', async () => {
+  const sin = await origen(JPEG_MINIMO);
+  const g = conSynthid(sin, 'generada');
+  assert.equal(g.nivel, 'GRAVE');
+  assert.match(g.motivo, /revisado a mano/);
+  assert.equal(g.evidencia.huella, sin.evidencia.huella, 'conserva la huella');
+  assert.equal(conSynthid(sin, 'editada').nivel, 'OBSERVACIÓN');
+  const n = conSynthid(sin, 'no');
+  assert.equal(n.nivel, 'NO_CALIFICA');
+  assert.match(n.motivo, /no prueba que sea real/);
+  assert.match(String(n.evidencia.synthid), /sin marca/);
+  assert.equal(sin.evidencia.synthid, undefined, 'no toca el original');
+  /* Donde no se ofrece, anotar no cambia nada. */
+  const app = await origen(JPEG_MINIMO, 'app');
+  assert.equal(conSynthid(app, 'generada'), app);
 });

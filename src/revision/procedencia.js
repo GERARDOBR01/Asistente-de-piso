@@ -511,6 +511,42 @@ export function veredictoOrigen({ via, meta, huella: h, bytes, ahora = new Date(
   return resultado('origen', 'NO_CALIFICA', 'Sin datos de cámara (reenviada por WhatsApp o captura de pantalla): sirve para revisar el montaje, pero no prueba cuándo ni dónde se tomó.', ev);
 }
 
+/* ── SynthID, revisado a mano (8-oct) ──────────────────────────────────────
+   SynthID es la marca de agua que Google mete en los píxeles de lo que hace
+   su IA (y la de quien la adopte). Resiste el reenvío por WhatsApp, pero no
+   hay API pública: se revisa en la app de Gemini o en el portal, y la persona
+   anota lo que vio. Encontrarla es casi seguro; no encontrarla no prueba nada,
+   porque otras IA no la ponen. Por eso «sin marca» nunca sube el nivel. */
+
+/** @typedef {'generada'|'editada'|'no'} VistoSynthid */
+
+/** Solo cuando la app no pudo probar el origen: sin datos, o una observación
+ *  sin credencial C2PA válida. Nunca en lo tomado en la app ni en el ejemplo.
+ * @param {Resultado|null|undefined} o @returns {boolean} */
+export function admiteSynthid(o) {
+  if (!o || o.basico !== 'origen' || o.evidencia?.via !== 'galeria') return false;
+  if (o.nivel === 'NO_CALIFICA') return true;
+  return o.nivel === 'OBSERVACIÓN' && !/^válida/.test(String(o.evidencia.firma_c2pa || ''));
+}
+
+/** El origen con lo que la persona vio en SynthID. Igual que con C2PA: hecha
+ *  con IA → GRAVE; una foto real con partes editadas con IA → OBSERVACIÓN.
+ * @param {Resultado} o @param {VistoSynthid} visto @returns {Resultado} */
+export function conSynthid(o, visto) {
+  if (!admiteSynthid(o)) return o;
+  const ev = { ...o.evidencia };
+  if (visto === 'generada') {
+    ev.synthid = 'hecha con IA (revisado a mano)';
+    return resultado('origen', 'GRAVE', 'SynthID encontró la marca de agua de IA de Google en toda la imagen (revisado a mano). No sirve como evidencia de montaje.', ev);
+  }
+  if (visto === 'editada') {
+    ev.synthid = 'partes editadas con IA (revisado a mano)';
+    return resultado('origen', 'OBSERVACIÓN', 'SynthID encontró partes editadas con IA de Google (revisado a mano). Revisa en persona que no se cambió el montaje.', ev);
+  }
+  ev.synthid = 'sin marca de Google (revisado a mano)';
+  return resultado('origen', o.nivel, `${o.motivo} SynthID no encontró marca de IA de Google; eso no prueba que sea real, porque otras IA no la ponen.`, ev);
+}
+
 /** @param {Date} d */
 function hora(d) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

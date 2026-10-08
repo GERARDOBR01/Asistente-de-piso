@@ -343,7 +343,8 @@ controladas (en `eval-revision/origen/`):
   reales;
 - una auditoría de NewsGuard (mayo de 2026) encontró que llamaron IA a fotos auténticas 13 % de
   las veces;
-- SynthID (Google) no tiene detector abierto ni API pública: solo el portal y la app Gemini.
+- SynthID (Google) no tiene detector abierto ni API pública: solo el portal y la app Gemini (se
+  revisa a mano desde el 8-oct, ver abajo).
 
 **Lista de confianza (después del #54):** se empaqueta la lista oficial del Conformance Program de
 C2PA.
@@ -398,6 +399,39 @@ elementos, `toques.json`):
 **Conclusión:** en focales despejados acierta. En fotos de área cargadas, la silueta se junta con
 lo de atrás, y por eso se ve en pantalla y existe «Punto exacto». Hay que probarlo en el teléfono
 antes de darlo por bueno.
+
+## Detector de IA: SynthID revisado a mano (8-oct)
+
+Gerardo reportó que el origen «sigue teniendo fallos» con la IA. Antes de integrar nada se midió:
+
+| Medición | Resultado |
+|---|---|
+| 3 detectores abiertos de píxeles, 91 imágenes de IA modernas y 120 de Reddit (7-oct) | Community Forensics detecta 10/91. SigLIP2 marca 57/130 reales. SwinV2-L (haywoodsloan, Apache) detecta 75 % de la IA con 8 % de falsos positivos en fotos reales «bonitas» |
+| SwinV2-L con fotos reales de tienda reenviadas por WhatsApp (29 el 7-oct y 30 nuevas el 8-oct) | **0/59 falsos positivos**, ~0.9 s por foto en CPU |
+| El origen de la app con esas 30 fotos nuevas | 30/30 «sin datos», ninguna GRAVE |
+
+**Decisión:**
+- **Ningún detector de píxeles entra a la app.** El mejor pesa 780 MB, falla con ediciones
+  locales (borrar un hueco del mueble, que es el fraude más probable) y caduca con cada generador
+  nuevo. Lo que se reportaba como fallos venía de los originales del teléfono, probablemente
+  retocados con Galaxy AI, que ya salen OBSERVACIÓN desde el #53.
+- **Tampoco se le pregunta a un modelo de visión «¿esto es IA?».** Sería adivinar, y la foto
+  saldría a un tercero.
+- **SynthID, revisado a mano.** Es la marca de agua que Google mete en los píxeles de lo que hace
+  su IA, y resiste JPEG y el reenvío. No tiene API pública, solo el portal y la app de Gemini.
+  - **Cuándo aparece el botón:** con SIN DATOS o con OBSERVACIÓN sin credencial C2PA válida
+    (`admiteSynthid`).
+  - **Qué hace:** en el teléfono comparte la foto **original** (Gemini sale en el menú de
+    compartir). En la computadora abre `synthid.com`. La foto sale del teléfono solo si la persona
+    toca el botón, y el botón lo dice.
+  - **La persona anota lo que vio** (`conSynthid`):
+    - «Hecha con IA» → GRAVE;
+    - «Partes con IA» → OBSERVACIÓN, igual que lo retocado en C2PA;
+    - «Sin marca» → el nivel no sube, y el motivo aclara que no prueba que sea real, porque otras
+      IA no ponen esa marca.
+  - Todo sale rotulado «revisado a mano», también en el resumen compartido.
+- **La defensa de fondo sigue siendo el proceso:** foto tomada en la app (CUMPLE, con huella) u
+  original firmada por la cámara. Detectar es una carrera que se pierde.
 
 ## Consecuencias
 

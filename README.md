@@ -415,7 +415,7 @@ y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para c
 | **Surtido** | Celdas con bordes de Sobel contra el color del fondo del mueble; un hueco es vacío de arriba abajo, no el aire de encima de una pila, y deja ver el mueble (lo casi negro es sombra o producto negro, no hueco). | Los huecos rayados y el **% vacío medido** |
 | **Triangulación** | Los puntos altos de cada elemento: una sola cima y desnivel suficiente. Vale el simétrico y el asimétrico (la cima a un lado, bajando por bases y bolsas). **Toque inteligente:** tocas cada elemento donde sea y su silueta (MediaPipe Magic Touch) da su punto más alto; la silueta se ve, y «Punto exacto» vuelve al toque a mano. Un detector (EfficientDet-Lite0) **sugiere** los puntos dentro de la zona. | El triángulo, o la línea de alturas cuando no lo hay |
 | **Alturas y niveles** | Con los mismos puntos: cuántas alturas distintas hay (alto, medio y bajo). | La cifra de alturas |
-| **Evidencia de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con su credencial de contenido (C2PA), que se lee y valida con el SDK oficial (`c2pa-web`) contra la lista de confianza oficial de C2PA (CC-BY-4.0, copia del 13-ago-2026): manifiesto activo, cadena de padres y firma. Una original firmada por una cámara de la lista (el Pixel 10 firma todas) y tomada en las últimas 24 h sale `CUMPLE`. Va aparte del veredicto del montaje: una foto reenviada por WhatsApp sale «sin datos». | `GRAVE` solo si la foto declara que **se generó** con IA; retocada con IA o alterada después de firmar, `OBSERVACIÓN` |
+| **Evidencia de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con su credencial de contenido (C2PA), que se lee y valida con el SDK oficial (`c2pa-web`) contra la lista de confianza oficial de C2PA (CC-BY-4.0, copia del 13-ago-2026): manifiesto activo, cadena de padres y firma. Una original firmada por una cámara de la lista (el Pixel 10 firma todas) y tomada en las últimas 24 h sale `CUMPLE`. Va aparte del veredicto del montaje: una foto reenviada por WhatsApp sale «sin datos». Cuando la app no puede probar el origen, un botón opcional manda la foto original a **SynthID** (Gemini en el teléfono, el portal en la computadora) para buscar la marca de agua de la IA de Google, y la persona anota lo que vio. Ningún detector de píxeles juzga la foto. | `GRAVE` solo si la foto declara que **se generó** con IA; retocada con IA o alterada después de firmar, `OBSERVACIÓN` |
 
 Lo que una foto no puede probar (planchado, limpieza, alineación, enganchado, sensores,
 entallado, el pasillo de 90 cm y, en el focal, composición, equilibrio y simetría) va en una
@@ -430,6 +430,9 @@ WhatsApp con la Web Share API.
 - **Fotos reales** (`node eval/revision.mjs --fotos <carpeta>`, fuera del repo):
   - 5 fotos de piso (15 básicos en 7 zonas): todos aciertan;
   - 20 fotos de exhibición de referencia (40 básicos): todos aciertan.
+  - 30 fotos de tienda reenviadas por WhatsApp: el origen sale «sin datos» en todas, ninguna
+    GRAVE. El mejor detector de IA abierto tampoco marcó ninguna (0/59 con las de ayer), pero pesa
+    780 MB y falla con ediciones locales: no entra a la app (ADR 0007).
   - **Pero esas fotos se usaron para calibrar**: son desarrollo, no evidencia. La confirmación
     es el siguiente lote de fotos, corrido una sola vez.
 - La regla de colorización (orden de los grupos y dirección) sigue siendo un supuesto por

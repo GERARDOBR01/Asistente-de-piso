@@ -8,7 +8,7 @@
 // dibujan.
 
 import { peor } from './veredicto.js';
-import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto, interpretarC2pa } from './procedencia.js';
+import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto, interpretarC2pa, admiteSynthid, conSynthid } from './procedencia.js';
 import { revisarColor, NOMBRE_GRUPO } from './color.js';
 import { revisarSurtido } from './surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas } from './triangulo.js';
@@ -52,6 +52,8 @@ const st = {
   /** cuándo se soltó el último recuadro (ms) */ soltado: 0,
   /** el toque pone el punto justo donde se toca, sin silueta */ exacto: false,
   /** @type {any} */ origen: null,
+  /** lo que la persona vio en SynthID @type {null|import('./procedencia.js').VistoSynthid} */ synthid: null,
+  /** ya tocó «Revisar con SynthID»: se ve la pregunta */ synthidAbierto: false,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
   anim: 0,
 };
@@ -262,6 +264,7 @@ async function cargarArchivo(blob, via, tomada) {
     const a = await analizarArchivo(blob, st.tipo, { via, tomada: tomada || undefined });
     st.foto = { img: a.img, base: a.base, via, bytes: a.bytes, tomada };
     st.origen = a.origen;
+    st.synthid = null; st.synthidAbierto = false;
   } catch (e) {
     console.error('Revisar: no se pudo cargar la foto', e);
     aviso(e instanceof ErrorFoto ? e.message : `No se pudo leer esa imagen (${/** @type {any} */ (e)?.name || 'error'}: ${/** @type {any} */ (e)?.message || e}).`, 'warn');
@@ -277,6 +280,7 @@ function cargarDemo(imgDemo, puntos) {
   c.width = imgDemo.width; c.height = imgDemo.height;
   /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).putImageData(new ImageData(Uint8ClampedArray.from(imgDemo.data), imgDemo.width, imgDemo.height), 0, 0);
   st.foto = { img: pixeles(c), base: c, via: 'demo', bytes: null, tomada: null };
+  st.synthid = null; st.synthidAbierto = false;
   st.origen = { basico: 'origen', nivel: 'DEMO', motivo: 'Imagen de ejemplo dibujada por la app: no hay origen que probar. Con una foto real aquí sale si se tomó en la app, si viene de galería o si declara IA.', evidencia: {}, fuente: 'CÓDIGO' };
   const k = st.foto.img.width / imgDemo.width;
   st.puntosDemo = puntos ? puntos.map(p => ({ x: p.x * k, y: p.y * k })) : [];
@@ -679,6 +683,7 @@ function dibujarFocal(ctx, k, u, e, z) {
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c);
 
 const ICONO_ORIGEN = '<svg class="ico" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>';
+const ICONO_LUPA = '<svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
 const ICONO_COMPARTIR = '<svg class="ico" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>';
 
 /** La cifra grande de cada básico. @param {Resultado} r */
@@ -724,13 +729,69 @@ function nivelOrigen(o) {
   return o.nivel;
 }
 
-/** @param {any} o @param {string} [titulo] */
-function tarjetaOrigen(o, titulo = 'Evidencia de la foto') {
+/** El origen con lo que la persona anotó de SynthID, si anotó algo. */
+function origenVisto() {
+  return st.synthid && st.origen ? conSynthid(st.origen, st.synthid) : st.origen;
+}
+
+/** @param {any} o @param {string} [titulo] @param {boolean} [conSynthidBoton] solo con una foto real cargada */
+function tarjetaOrigen(o, titulo = 'Evidencia de la foto', conSynthidBoton = false) {
   const ev = o.evidencia || {};
   const pie = ev.huella ? `<div class="rv-huella">SHA-256 ${esc(ev.huella)}… · ${Math.round(ev.bytes / 1024)} KB${ev.c2pa ? ` · C2PA ${esc(ev.c2pa)} (firma sin validar)` : ''}${ev.iptc ? ` · IPTC ${esc(ev.iptc)}` : ''}</div>` : '';
   const consejo = o.nivel === 'NO_CALIFICA' || o.nivel === 'OBSERVACIÓN'
     ? '<p class="rv-consejo">Para que cuente como evidencia: tómala desde aquí, o mándala por WhatsApp como <b>Documento</b> para que conserve sus datos.</p>' : '';
-  return `<div class="rv-origen" data-n="${esc(o.nivel === 'NO_CALIFICA' ? 'SIN_DATOS' : o.nivel)}">${ICONO_ORIGEN}<div class="rv-origen-c"><div class="rv-origen-t">${esc(titulo)}<b>${esc(nivelOrigen(o))}</b></div><p>${esc(o.motivo)}</p>${consejo}${pie}</div></div>`;
+  const sid = conSynthidBoton && st.foto?.bytes && admiteSynthid(st.origen) ? bloqueSynthid() : '';
+  return `<div class="rv-origen" data-n="${esc(o.nivel === 'NO_CALIFICA' ? 'SIN_DATOS' : o.nivel)}">${ICONO_ORIGEN}<div class="rv-origen-c"><div class="rv-origen-t">${esc(titulo)}<b>${esc(nivelOrigen(o))}</b></div><p>${esc(o.motivo)}</p>${consejo}${sid}${pie}</div></div>`;
+}
+
+/* ── SynthID: la marca de agua de la IA de Google, revisada a mano ─────────
+   No hay API pública: en el teléfono la foto ORIGINAL se comparte a Gemini
+   («¿esto es IA?»); en la computadora se abre el portal. La foto sale del
+   teléfono solo si la persona toca el botón. Lo que vio lo anota aquí. */
+const SYNTHID_PORTAL = 'https://synthid.com';
+const VISTOS = /** @type {const} */ ([['generada', 'Hecha con IA'], ['editada', 'Partes con IA'], ['no', 'Sin marca']]);
+
+function bloqueSynthid() {
+  const red = navigator.onLine;
+  const pregunta = st.synthidAbierto || st.synthid
+    ? `<div class="rv-sid-r" role="group" aria-label="Qué dijo SynthID"><span>¿Qué dijo?</span>${VISTOS.map(([v, t]) =>
+      `<button type="button" data-sid="${v}" aria-pressed="${st.synthid === v}">${t}</button>`).join('')}</div>` : '';
+  return `<div class="rv-sid">
+    <button type="button" class="rv-sid-b" id="rv-synthid"${red ? '' : ' disabled'}>${ICONO_LUPA}${red ? 'Revisar marca de IA con SynthID' : 'SynthID necesita señal'}</button>
+    <p class="rv-sid-n">Manda la foto original a Gemini o al portal de SynthID de Google: la foto sale del teléfono. Solo reconoce la IA de Google y de quien usa su marca.</p>
+    ${pregunta}</div>`;
+}
+
+function conectarSynthid() {
+  const b = $('rv-synthid');
+  if (b) b.onclick = revisarConSynthid;
+  document.querySelectorAll('#rv-res [data-sid]').forEach(x => {
+    /** @type {HTMLElement} */ (x).onclick = () => {
+      const v = /** @type {any} */ (/** @type {HTMLElement} */ (x).dataset.sid);
+      st.synthid = st.synthid === v ? null : v;   // tocar lo mismo otra vez lo quita
+      pintarResultados();
+    };
+  });
+}
+
+async function revisarConSynthid() {
+  const f = st.foto;
+  if (!f?.bytes) return;
+  st.synthidAbierto = true;
+  pintarResultados();
+  const fmt = formato(f.bytes);
+  const ext = fmt === 'jpeg' ? 'jpg' : fmt === 'desconocido' ? 'jpg' : fmt;
+  const archivo = new File([/** @type {BlobPart} */ (f.bytes)], `foto-original.${ext}`, { type: `image/${fmt === 'desconocido' ? 'jpeg' : fmt}` });
+  const nav = /** @type {any} */ (navigator);
+  if (nav.canShare?.({ files: [archivo] })) {
+    try {
+      await nav.share({ files: [archivo], text: '¿Esta imagen se hizo o se editó con IA de Google? Revísala con SynthID.' });
+      aviso('Elige Gemini y pregúntale si es IA. Luego anota aquí lo que dijo.');
+      return;
+    } catch (e) { if (/** @type {any} */ (e)?.name === 'AbortError') return; }
+  }
+  window.open(SYNTHID_PORTAL, '_blank', 'noopener');
+  aviso('Sube ahí la misma foto que elegiste y anota aquí lo que dijo.');
 }
 
 /** Lo que se revisa a mano: los básicos de la guía que una foto no mide. */
@@ -755,7 +816,7 @@ function todos() {
 function pintarResultados(subir = false) {
   const caja = $('rv-res');
   const lista = todos();
-  if (!lista.length) { caja.innerHTML = st.origen && st.foto ? tarjetaOrigen(st.origen) : ''; return; }
+  if (!lista.length) { caja.innerHTML = st.origen && st.foto ? tarjetaOrigen(origenVisto(), undefined, true) : ''; conectarSynthid(); return; }
   const varias = st.zonas.length > 1;
   const general = peor(lista.map(x => x.r.nivel));
   const cuenta = (/** @type {string} */ n) => lista.filter(x => x.r.nivel === n).length;
@@ -775,7 +836,7 @@ function pintarResultados(subir = false) {
       <div class="rv-fuente">fuente: CÓDIGO · medido en este teléfono · sin IA${z.tipo === 'tringla' && r.nivel !== 'NO_CALIFICA' ? ' · regla de color por confirmar' : ''}</div>
     </div>`;
     }).join('')}
-    ${st.origen ? tarjetaOrigen(st.origen) : ''}
+    ${st.origen ? tarjetaOrigen(origenVisto(), undefined, true) : ''}
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
       ${listaManual().map(m => `<label><input type="checkbox"> ${esc(m)}</label>`).join('')}</div>
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
@@ -791,12 +852,13 @@ function pintarResultados(subir = false) {
     if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }, 950);
   $('rv-compartir').onclick = compartir;
+  conectarSynthid();
 }
 
 /* ── Compartir ──────────────────────────────────────────────────────────── */
 
 function resumenTexto() {
-  const o = st.origen, lista = todos();
+  const o = origenVisto(), lista = todos();
   const l = ['Revisión con foto · Asistente de Piso'];
   if (lista.length > 1) l.push(`Resultado: ${peor(lista.map(x => x.r.nivel))} (${lista.length} básicos en ${st.zonas.length} ${st.zonas.length === 1 ? 'zona' : 'zonas'})`);
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
