@@ -100,10 +100,17 @@ y con manuales ficticios. No toca el motor hasta que gane.
 3. Reglas estructuradas revisadas por una persona (objeto, medida, condición y fuente).
 4. Con key: reordenar con Gemini, citas en JSON y red-team con promptfoo.
 5. Buscar láminas por imagen (ColPali) y el modelo local aparcado.
-6. Tareas en piso y revisión con foto. **Revisión con foto: en `main`** (#51,
-   [ADR 0007](adr/0007-revision-con-foto.md)): origen, colorización, surtido, triangulación y
-   niveles en el teléfono, con zonas en una foto. Calibrada con 5 fotos de piso (desarrollo);
-   falta el lote de confirmación, una sola corrida.
+6. Tareas en piso y revisión con foto. **Revisión con foto: terminada** (#51 a #56,
+   [ADR 0007](adr/0007-revision-con-foto.md)):
+   - origen con C2PA validado y lista de confianza, y SynthID revisado a mano;
+   - colorización, surtido, triangulación con toque inteligente, y alturas y niveles en el
+     teléfono, con zonas en una foto;
+   - calibrada con 5 fotos de piso y 20 de referencia (desarrollo).
+
+   Queda abierto:
+   - el lote de confirmación, que se corre una sola vez;
+   - RF-DETR entrenado con fotos propias, que necesita ~200 fotos etiquetadas;
+   - ningún detector de IA por píxeles: medido y descartado.
 
 ## Aparcado: la puerta con modelo local
 

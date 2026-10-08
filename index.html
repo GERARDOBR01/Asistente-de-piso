@@ -1292,6 +1292,14 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-origen-t b{color:var(--rv-c);font:700 11.5px 'Geist Mono',ui-monospace,monospace;letter-spacing:.04em;text-transform:none}
 .rv-origen p{margin:0;font-size:13.5px;line-height:1.45;color:var(--text)}
 .rv-huella{font:500 11px 'Geist Mono',ui-monospace,monospace;color:var(--text3);word-break:break-all}
+.rv-sid{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px;padding-top:10px;border-top:1px solid var(--border)}
+.rv-sid-b{align-self:flex-start;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:600 13px 'Geist',system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px}
+.rv-sid-b:disabled{opacity:.55;cursor:default}
+.rv-origen .rv-sid-b .ico{grid-row:auto;width:16px;height:16px;padding:0;border-radius:0;background:none;color:currentColor}
+.rv-origen p.rv-sid-n{font-size:12px;color:var(--text3)}
+.rv-sid-r{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;color:var(--text2)}
+.rv-sid-r button{min-height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--border2);background:var(--s1);color:var(--text2);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-sid-r button[aria-pressed="true"]{border-color:var(--rv-c,var(--border2));color:var(--text);background:color-mix(in srgb,var(--rv-c,var(--text3)) 16%,transparent)}
 .rv-lista{padding:14px 16px;border-radius:var(--rl);border:1px solid var(--border2);background:var(--s1)}
 .rv-lista h3{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--text)}
 .rv-lista p{margin:0 0 8px;font-size:12px;color:var(--text3)}
