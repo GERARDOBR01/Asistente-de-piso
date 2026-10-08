@@ -20,7 +20,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 296 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20296%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 305 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20305%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -152,13 +152,20 @@ así que las dudas se resuelven preguntando —si hay a quién— o adivinando. 
 pone ese conocimiento a un toque de distancia, en el lenguaje con el que realmente se
 pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de dispositivo EAS"*.
 
+Son dos herramientas en la misma app:
+- **Preguntar.** El manual contesta con su página y su lámina, y dice «no está» cuando no hay
+  evidencia.
+- **[Revisar con foto](#revisar-con-foto-el-mini-veristack-en-el-teléfono).** Le tomas foto a
+  la exhibición y el código mide colorización, surtido, triangulación y alturas, y prueba de
+  dónde salió la foto. Todo en el teléfono, sin red.
+
 ## Dos modos, y el de abajo es el interesante
 
 | | **Modo manual** (sin API key) | **Modo razonado** (con API key) |
 |---|---|---|
 | Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Dos motores, a elegir en Ajustes. **Agente lector**: la IA lee el manual con herramientas —páginas, láminas, búsqueda— y contesta citando lo que leyó. **Clásico**: la búsqueda local elige los fragmentos y el modelo responde en 6 etapas o, en modo rápido, con un solo paso de lectura |
 | Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | Las herramientas corren en tu dispositivo; la lectura y la respuesta, en el proveedor que elijas |
-| Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
+| Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor, 6 páginas por petición. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
 | Qué cuesta | Nada | Tu propia key y tus propios tokens. Preparar un manual de 25 láminas con Gemini Flash-Lite: unos 5 centavos de dólar, una vez |
 
 El modo manual existe porque un demo que primero te pide una API key no es un demo. Pero
@@ -182,6 +189,11 @@ El agente invierte los papeles:
    en el teléfono. La ficha **ubica**, no contesta: en la búsqueda, un acierto en la ficha se
    cambia por los fragmentos reales de esa página. Lo único de la ficha que puede sostener un
    dato es lo que la IA copió literal de la imagen, y va rotulado como tal.
+   **Cuidando la cuota:**
+   - lee 6 páginas por petición, así un manual de 26 páginas gasta unas 5 y no 26;
+   - sola, solo lee la sección activa;
+   - la lectura automática se pausa al llegar a un tope diario (12 peticiones por omisión, se
+     cambia en Ajustes), para que el resto de la cuota gratis quede para preguntar.
 2. **En cada pregunta**, el modelo recibe el mapa del manual (una línea por página, de la
    ficha), el glosario de la sección y dos páginas que la búsqueda local le adelanta. Con
    herramientas que corren en el teléfono decide qué leer: `leer_paginas`, `ver_lamina`
@@ -408,6 +420,10 @@ y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para c
 (oscura, movida o sin suficientes elementos), sale `NO_CALIFICA`: nunca se inventa un
 `CUMPLE`. El diseño y los criterios de éxito, fijados antes de medir, están en el
 [ADR 0007](docs/adr/0007-revision-con-foto.md).
+
+<p align="center">
+  <img src="docs/revisar.png" alt="Pestaña Revisar con el focal de ejemplo: cinco elementos marcados, el triángulo con la cima al centro, triangulación CUMPLE con 42 % de desnivel y tres alturas distintas" width="320">
+</p>
 
 | Básico | Qué mide el código | Qué marca en la foto |
 |---|---|---|

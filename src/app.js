@@ -863,6 +863,7 @@ function loadSaved(){
     document.getElementById('system-prompt').value=appState.system;
     document.getElementById('extra-ctx').value=appState.extra;
     document.getElementById('token-limit-input').value=appState.tokenLimit;
+    const topeIn=document.getElementById('ficha-tope-input');if(topeIn)topeIn.value=topeFichaDia();
     const provBtn=document.querySelector(`.prov-tab:nth-child(${PROV_ORDEN.indexOf(appState.provider)+1})`);
     if(provBtn)selectProvider(appState.provider,provBtn);
     else selectProvider(PROV_ORDEN[0],document.querySelector('.prov-tab'));
@@ -1039,6 +1040,8 @@ function saveConfig(evt){
     localStorage.setItem('ap_aprende_enabled',appState.aprendeEnabled?'1':'0');
     localStorage.setItem('ap_extra_enabled',appState.extraEnabled?'1':'0');
     localStorage.setItem('ap_temperature',appState.temperature);
+    const tope=parseInt(document.getElementById('ficha-tope-input')?.value,10);
+    if(tope>0)localStorage.setItem('ap_ficha_tope',String(tope));
   } catch (e) {
     if (e?.name === 'QuotaExceededError') {
       showToast('Almacenamiento lleno. No se pudo guardar la configuración.', 'error');
@@ -2502,7 +2505,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.13.0';
+const VERSION_APP='ap-v1.14.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2625,7 +2628,9 @@ async function renderAccionesDocs(){
     if(preparandoFicha){btnFicha.style.display='';btnFicha.textContent='■ Detener la lectura con IA'}
     else if(sinLeer&&conKey){
       btnFicha.style.display='';
-      btnFicha.textContent=`📖 Preparar ${sinLeer} manual${sinLeer>1?'es':''} para el modo IA`;
+      btnFicha.textContent=fichaEnPausa()
+        ?`📖 Seguir leyendo ${sinLeer} manual${sinLeer>1?'es':''} con IA (hoy van ${peticionesFichaHoy()} peticiones)`
+        :`📖 Preparar ${sinLeer} manual${sinLeer>1?'es':''} para el modo IA`;
     }else btnFicha.style.display='none';
   }
   const btnMedir=document.getElementById('btn-medir');
@@ -2775,9 +2780,15 @@ let docPaginas=new Map();   // manual → [{page,titulo,imagen}]
 let docFichas=new Map();    // manual → {version,modelo,fecha,paginas:{n:ficha}}
 const FICHA_VERSION=1;
 const FICHA_MAX_TOKENS=1400,FICHA_PAUSA_MS=300,FICHA_TEXTO_MAX=6000;
+/* Una petición por página se acababa la cuota gratis con un solo manual (~26
+   páginas) y ya no quedaba para preguntar. Ahora va por tandas, y la lectura
+   automática tiene un tope por día: lo demás de la cuota es para preguntar. */
+const FICHA_TANDA=6;                 // páginas por petición
+const FICHA_TOPE_DIA=12;             // peticiones de lectura al día, si Ajustes no dice otra cosa (~72 páginas)
 let preparandoFicha=false;
-const FICHA_PROMPT=`Eres el lector de un manual de exhibición de una tienda departamental. Te doy UNA página: su imagen y el texto que se pudo extraer de ella. Devuelve SOLO un objeto JSON, sin nada antes ni después, con esta forma exacta:
-{"titulo":"","resumen":"","temas":[],"marcas":[],"mundos":[],"muebles":[],"productos":[],"texto_visual":"","alias":[],"preguntas":[]}
+const FICHA_PROMPT=`Eres el lector de un manual de exhibición de una tienda departamental. Te doy una o varias páginas, cada una marcada con «PÁGINA n»: su texto extraído y, después, su imagen. Devuelve SOLO un objeto JSON, sin nada antes ni después, con esta forma exacta:
+{"paginas":[{"pagina":1,"titulo":"","resumen":"","temas":[],"marcas":[],"mundos":[],"muebles":[],"productos":[],"texto_visual":"","alias":[],"preguntas":[]}]}
+Una entrada por página, con su número y en el mismo orden. Cada página se describe sola: no pases a una lo que está en otra.
 
 - titulo: el nombre de la lámina tal como lo escribe el manual.
 - resumen: una frase con lo que la página ordena o explica.
@@ -2790,6 +2801,19 @@ const FICHA_PROMPT=`Eres el lector de un manual de exhibición de una tienda dep
 No interpretes reglas que no estén, no inventes marcas ni cifras y no completes con lo que sepas de la tienda o de las marcas por fuera.`;
 
 function hayKeyParaIA(){return!!(appState.apiKey&&appState.apiKey.length>=10&&navigator.onLine)}
+/* El día de la cuota de Google termina a medianoche del Pacífico. */
+function diaDeCuota(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})}
+function peticionesFichaHoy(){
+  try{const o=JSON.parse(localStorage.getItem('ap_ficha_dia')||'{}');return o.dia===diaDeCuota()?Number(o.n)||0:0}catch{return 0}
+}
+function contarPeticionFicha(){
+  try{localStorage.setItem('ap_ficha_dia',JSON.stringify({dia:diaDeCuota(),n:peticionesFichaHoy()+1}))}catch{}
+}
+function topeFichaDia(){
+  try{const v=parseInt(localStorage.getItem('ap_ficha_tope')||'',10);if(v>0)return v}catch{}
+  return FICHA_TOPE_DIA
+}
+function fichaEnPausa(){return peticionesFichaHoy()>=topeFichaDia()}
 /* La ficha la escribe siempre el modelo ligero: es leer y copiar, no razonar,
    y son decenas de páginas. */
 function modeloDeFicha(provider){return provider==='gemini'?GEMINI_RESPALDO:'gpt-4o-mini'}
@@ -2826,35 +2850,51 @@ function limpiarFichaPagina(o){
     marcas:lista(o.marcas,30,50),mundos:lista(o.mundos,10,40),muebles:lista(o.muebles,12,50),
     productos:lista(o.productos,15,50),texto_visual:visual,alias:lista(o.alias,12,80),preguntas:lista(o.preguntas,5,140)}
 }
-async function leerPaginaConIA({docName,page,imagen,provider,key,model,signal}){
-  const texto=textoDePaginaParaFicha(docName,page);
-  const pedido=`${FICHA_PROMPT}\n\nPÁGINA ${page}. TEXTO EXTRAÍDO:\n${texto||'(la página no tiene capa de texto)'}`;
+/* De la respuesta, solo las páginas que se pidieron, cada una limpia. Si el
+   modelo no puso números pero mandó una entrada por página, vale el orden; una
+   sola página puede venir como objeto suelto. */
+function fichasDeRespuesta(o,paginas){
+  const out=new Map();
+  if(!o||typeof o!=='object')return out;
+  const lista=Array.isArray(o)?o:Array.isArray(o.paginas)?o.paginas:paginas.length===1?[o]:[];
+  const porOrden=lista.length===paginas.length&&!lista.some(x=>x&&Number(x.pagina));
+  lista.forEach((x,i)=>{
+    const n=porOrden?paginas[i]:Number(x&&x.pagina)||(paginas.length===1?paginas[0]:NaN);
+    if(!paginas.includes(n)||out.has(n))return;
+    const f=limpiarFichaPagina(x);
+    if(f)out.set(n,f);
+  });
+  return out
+}
+async function leerPaginasConIA({docName,paginas,imagenes,provider,key,model,signal}){
+  const bloques=paginas.map(n=>({texto:`PÁGINA ${n}. TEXTO EXTRAÍDO:\n${textoDePaginaParaFicha(docName,n)||'(la página no tiene capa de texto)'}`,imagen:imagenes.get(n)||null}));
+  const maxTokens=FICHA_MAX_TOKENS*paginas.length;
   let crudo='',tokens=0;
   if(provider==='gemini'){
-    const parts=[{text:pedido}];
-    if(imagen)parts.push({inline_data:{mime_type:'image/jpeg',data:imagen.split(',')[1]}});
+    const parts=[{text:FICHA_PROMPT}];
+    for(const b of bloques){parts.push({text:b.texto});if(b.imagen)parts.push({inline_data:{mime_type:'image/jpeg',data:b.imagen.split(',')[1]}})}
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
       method:'POST',headers:PROVIDERS.gemini._headers(key),signal,
       body:JSON.stringify({contents:[{role:'user',parts}],
-        generationConfig:{maxOutputTokens:FICHA_MAX_TOKENS,temperature:0.1,responseMimeType:'application/json',thinkingConfig:razonamientoGemini(model)}})
+        generationConfig:{maxOutputTokens:maxTokens,temperature:0.1,responseMimeType:'application/json',thinkingConfig:razonamientoGemini(model)}})
     });
     const data=await res.json().catch(()=>({}));
     if(!res.ok)throw errorDeProveedor(res.status,data);
     crudo=textoDeGemini(data);tokens=data.usageMetadata?.totalTokenCount||0;
   }else{
-    const content=[{type:'text',text:pedido}];
-    if(imagen)content.push({type:'image_url',image_url:{url:imagen}});
+    const content=[{type:'text',text:FICHA_PROMPT}];
+    for(const b of bloques){content.push({type:'text',text:b.texto});if(b.imagen)content.push({type:'image_url',image_url:{url:b.imagen}})}
     const res=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},signal,
-      body:JSON.stringify({model,max_tokens:FICHA_MAX_TOKENS,temperature:0.1,response_format:{type:'json_object'},messages:[{role:'user',content}]})
+      body:JSON.stringify({model,max_tokens:maxTokens,temperature:0.1,response_format:{type:'json_object'},messages:[{role:'user',content}]})
     });
     const data=await res.json().catch(()=>({}));
     if(!res.ok)throw errorDeProveedor(res.status,data);
     crudo=data.choices?.[0]?.message?.content||'';tokens=data.usage?.total_tokens||0;
   }
-  const ficha=limpiarFichaPagina(jsonDeTexto(crudo));
-  if(!ficha)throw new Error(`La ficha de la pág. ${page} no vino en JSON`);
-  return{ficha,tokens}
+  const fichas=fichasDeRespuesta(jsonDeTexto(crudo),paginas);
+  if(!fichas.size)throw Object.assign(new Error('La ficha no vino en JSON'),{clase:'sin-json'});
+  return{fichas,tokens}
 }
 /* Dos clases de fragmento por página, y la diferencia es de fondo:
    · «indice»: título, resumen, temas, marcas, alias y preguntas. Lo escribió
@@ -2886,7 +2926,7 @@ function paginasSinFicha(docName){
   const f=docFichas.get(docName);
   return paginasDelManual(docName).filter(n=>!(f&&f.paginas[n]))
 }
-async function prepararFicha(docName,{silencioso=false}={}){
+async function prepararFicha(docName,{silencioso=false,sinTope=false}={}){
   const provider=appState.provider,key=appState.apiKey;
   if(!key||key.length<10)return{hechas:0,fallos:0,total:0,error:'sin key'};
   const ficha=docFichas.get(docName)||{version:FICHA_VERSION,modelo:'',fecha:0,paginas:{}};
@@ -2896,33 +2936,60 @@ async function prepararFicha(docName,{silencioso=false}={}){
   const model=modeloDeFicha(provider);
   const procWrap=document.getElementById('proc-wrap'),procMsg=document.getElementById('proc-msg'),procBar=document.getElementById('proc-bar');
   procWrap.style.display='block';
-  let hechas=0,fallos=0,seguidos=0,tokens=0,cortada=null;
+  let hechas=0,fallos=0,seguidos=0,tokens=0,peticiones=0,cortada=null;
   const seccion=nombreDeSeccion(docName);
+  /* La cola son tandas de FICHA_TANDA páginas. Una tanda que no vuelve en JSON
+     se lee página por página, y si pasa dos veces, todo lo que falta también:
+     partirla en mitades costaba más peticiones que leer de una en una. Una
+     página que el modelo se saltó vuelve una vez más, al final, y si se la
+     vuelve a saltar cuenta como fallo. */
+  const cola=[];
+  for(let i=0;i<pendientes.length;i+=FICHA_TANDA)cola.push(pendientes.slice(i,i+FICHA_TANDA));
+  const otraVez=new Set();
+  let tandasRotas=0;
   /* Llamada suelta (el arnés del modo IA) o dentro de la tanda: el interruptor
      de «detener» es el mismo. */
   const propio=!preparandoFicha;
   if(propio)preparandoFicha=true;
   try{
-    for(const n of pendientes){
+    while(cola.length){
       if(!preparandoFicha)break;
-      procMsg.textContent=`📖 La IA está leyendo ${seccion} · pág. ${n} (${hechas+fallos+1}/${pendientes.length})`;
+      if(!sinTope&&fichaEnPausa()){
+        cortada='tope';
+        if(!silencioso)showToast(`Pausé la lectura de ${seccion} para dejarte cuota para preguntar (${peticionesFichaHoy()} peticiones hoy). Sigue mañana, o toca «Seguir leyendo» en Manuales.`,'info',8000);
+        break;
+      }
+      const tanda=cola.shift();
+      procMsg.textContent=`📖 La IA está leyendo ${seccion} · pág. ${tanda[0]}${tanda.length>1?'–'+tanda[tanda.length-1]:''} (${hechas+fallos}/${pendientes.length})`;
       procBar.style.width=Math.round(((hechas+fallos)/pendientes.length)*100)+'%';
       try{
+        contarPeticionFicha();peticiones++;
         const r=await conReintentos(PROVIDERS[provider],model,
-          m=>leerPaginaConIA({docName,page:n,imagen:imagenes.get(n)||null,provider,key,model:m}));
-        ficha.paginas[n]=r.ficha;tokens+=r.tokens||0;hechas++;seguidos=0;
+          m=>leerPaginasConIA({docName,paginas:tanda,imagenes,provider,key,model:m}));
+        for(const[n,f]of r.fichas){ficha.paginas[n]=f;hechas++}
+        tokens+=r.tokens||0;seguidos=0;
+        const faltan=tanda.filter(n=>!r.fichas.has(n));
+        const vuelven=faltan.filter(n=>!otraVez.has(n));
+        vuelven.forEach(n=>otraVez.add(n));
+        fallos+=faltan.length-vuelven.length;
+        if(vuelven.length)cola.push(vuelven);
       }catch(e){
-        console.warn('ficha pág.',n,e);
-        fallos++;seguidos++;
+        console.warn('ficha págs.',tanda,e);
         /* El límite por minuto ya lo esperó conReintentos. Lo que llega aquí
-           de cuota del día o de key no se arregla con la página siguiente. */
+           de cuota del día o de key no se arregla con la tanda siguiente. */
         if(e.clase==='cuota-dia'||e.clase==='key'){
           cortada=e.clase;
-          if(!silencioso)showToast(e.clase==='key'?'La key no sirve: la lectura con IA se detuvo.':`Se acabó la cuota de hoy: ${seccion} quedó leída hasta la pág. ${n-1}. Mañana sigue donde se quedó.`,'warn',7000);
+          if(!silencioso)showToast(e.clase==='key'?'La key no sirve: la lectura con IA se detuvo.':`Se acabó la cuota de hoy: ${seccion} quedó con ${Object.keys(ficha.paginas).length} de ${paginasDelManual(docName).length} páginas leídas. Mañana sigue donde se quedó.`,'warn',7000);
           break;
         }
-        /* Tres seguidas es cuota o key, no una página rara. */
-        if(seguidos>=3){if(!silencioso)showToast(`La lectura de ${seccion} se detuvo tras 3 errores seguidos: ${e.message}`,'error',6000);break}
+        if(e.clase==='sin-json'&&tanda.length>1){
+          if(++tandasRotas>=2){const resto=cola.flat();cola.length=0;cola.push(...resto.map(n=>[n]))}
+          cola.unshift(...tanda.map(n=>[n]));
+        }else{
+          fallos+=tanda.length;seguidos++;
+          /* Tres seguidas es cuota o key, no una página rara. */
+          if(seguidos>=3){if(!silencioso)showToast(`La lectura de ${seccion} se detuvo tras 3 errores seguidos: ${e.message}`,'error',6000);break}
+        }
       }
       await sleep(FICHA_PAUSA_MS);
     }
@@ -2944,11 +3011,13 @@ async function prepararFicha(docName,{silencioso=false}={}){
        confirmar, nunca se usan solas. Una llamada, y solo si hay qué mirar. */
     if(!cortada&&!silencioso&&palabrasRarasDelTablero(docName).length>=3)proponerConIA(docName,{silencioso:true}).catch(()=>{});
   }
-  return{hechas,fallos,total:pendientes.length,tokens,cortada}
+  return{hechas,fallos,total:pendientes.length,tokens,peticiones,cortada}
 }
-async function prepararFichasPendientes(){
+/* `solo`: la sección que se va a preguntar. Sin `solo`, todos los manuales
+   (el botón de Manuales). `sinTope`: la persona pidió seguir leyendo. */
+async function prepararFichasPendientes({solo=null,sinTope=false}={}){
   if(preparandoFicha||!hayKeyParaIA())return;
-  const pendientes=docs.filter(d=>paginasSinFicha(d.name).length);
+  const pendientes=docs.filter(d=>(!solo||d.name===solo)&&paginasSinFicha(d.name).length);
   if(!pendientes.length)return;
   preparandoFicha=true;renderAccionesDocs();
   let hechas=0;
@@ -2957,7 +3026,9 @@ async function prepararFichasPendientes(){
     pendientes.sort((a,b)=>(b.name===appState.manualActivo)-(a.name===appState.manualActivo));
     for(const d of pendientes){
       if(!preparandoFicha)break;
-      hechas+=(await prepararFicha(d.name)).hechas;
+      const r=await prepararFicha(d.name,{sinTope});
+      hechas+=r.hechas;
+      if(r.cortada)break;          // tope, cuota o key: el manual siguiente no cambia nada
     }
   }finally{
     preparandoFicha=false;
@@ -2976,7 +3047,7 @@ function botonFicha(){
   if(preparandoFicha){preparandoFicha=false;renderAccionesDocs();return}
   try{appState.apiKey=sessionStorage.getItem('ap_api_key_'+appState.provider)||''}catch{}
   if(!hayKeyParaIA()){showToast('Conecta una API key en Ajustes para que la IA lea tus manuales.','warn',4000);return}
-  prepararFichasPendientes().catch(e=>console.warn('ficha',e));
+  prepararFichasPendientes({sinTope:fichaEnPausa()}).catch(e=>console.warn('ficha',e));
 }
 
 /* El mismo manual con otro archivo: «Manual Nuestra casa.pdf» y «Manual
@@ -3141,9 +3212,11 @@ async function handleFiles(fileList){
     showToast(`📕 Cargaste ${nuevos}. Tu sección activa sigue siendo ${nombreDeSeccion(appState.manualActivo)} — cámbiala arriba si vas a preguntar por la nueva.`,'warn',8000);
   }
   renderDocs();
-  /* Con key conectada, la IA lee las láminas nuevas de una vez. Va en segundo
-     plano: el manual ya se puede consultar mientras tanto. */
-  if(hayKeyParaIA())prepararFichasPendientes().catch(e=>console.warn('ficha',e));
+  /* Con key conectada, la IA lee sola la sección activa, en segundo plano: el
+     manual ya se puede consultar mientras tanto. Las otras se leen al elegirlas
+     o con el botón de Manuales, para no gastar la cuota en lo que no se pregunta. */
+  const activa=appState.manualActivo||(docs.length===1?docs[0].name:null);
+  if(hayKeyParaIA()&&activa)prepararFichasPendientes({solo:activa}).catch(e=>console.warn('ficha',e));
 }
 
 function renderDocs(){
@@ -3205,6 +3278,8 @@ function cambiarSeccion(valor){
   try{localStorage.setItem('ap_manual_activo',appState.manualActivo||'')}catch{}
   renderSelectorSeccion();
   renderQuickBtns();
+  if(valor&&hayKeyParaIA()&&!preparandoFicha&&paginasSinFicha(valor).length)
+    prepararFichasPendientes({solo:valor}).catch(e=>console.warn('ficha',e));
   showToast(appState.manualActivo
     ?`📕 Sección activa: ${nombreDeSeccion(appState.manualActivo)}. Solo se consulta ese manual.`
     :'📚 Sin sección fija: cada pregunta busca en la sección que le toca.','info',3500);
@@ -6213,7 +6288,7 @@ async function correrMedicion(){
       for(const d of secciones){
         if(medicionDetener)break;
         m.estado=`preparando la ficha de ${nombreDeSeccion(d)}`;pintarMedicion();
-        const rf=await prepararFicha(d,{silencioso:true});
+        const rf=await prepararFicha(d,{silencioso:true,sinTope:true});
         if(rf.cortada){
           showToast(rf.cortada==='key'?'La key no sirve: revísala en Ajustes.':'Se acabó la cuota de hoy preparando las fichas. Mañana, al volver a abrir el examen, sigue donde se quedó.','warn',9000);
           medicionDetener=true;break;

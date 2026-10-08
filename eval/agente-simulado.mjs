@@ -47,6 +47,10 @@ try {
 
   /* ── Gemini simulado ── */
   let guion = null, vistas = [];
+  /* La ficha va por tandas: cuántas peticiones llegan y cómo contesta el
+     simulado ('bien', 'omite' la pág. 5 la primera vez, 'rompe' el JSON de
+     toda tanda de más de una página). */
+  let fichaPeticiones = 0, modoFicha = 'bien', omitida = false;
   const sse = objs => objs.map(o => 'data: ' + JSON.stringify(o) + '\n\n').join('');
   const parte = t => ({ candidates: [{ content: { parts: [{ text: t }] } }] });
   await p.route('https://generativelanguage.googleapis.com/**', r => {
@@ -57,13 +61,16 @@ try {
       return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parte(JSON.stringify({ pares }))) });
     }
     if (url.includes(':generateContent')) {
-      const n = Number((body.contents[0].parts[0].text.match(/PÁGINA (\d+)\./) || [])[1]);
-      const ficha = n === 8
-        ? { titulo: 'MUNDOS Y MARCAS', resumen: 'Reparte las marcas por mundo.', temas: ['marcas por mundo'], marcas: ['Brastow', 'Ondera', 'Velmira', 'Kalinde', 'Tresvik'],
+      fichaPeticiones++;
+      const paginas = body.contents[0].parts.map(x => Number((x.text?.match(/^PÁGINA (\d+)\./) || [])[1])).filter(Boolean);
+      const ficha = n => n === 8
+        ? { pagina: n, titulo: 'MUNDOS Y MARCAS', resumen: 'Reparte las marcas por mundo.', temas: ['marcas por mundo'], marcas: ['Brastow', 'Ondera', 'Velmira', 'Kalinde', 'Tresvik'],
             mundos: ['Clásico', 'Contempo'], texto_visual: 'CLÁSICO: Brastow, Ondera · CONTEMPO: Velmira, Kalinde, Tresvik', alias: ['Contempo = contemporáneo'], preguntas: ['¿Qué marcas van en Contempo?'] }
-        : { titulo: 'LÁMINA ' + n, resumen: 'Reglas de la lámina ' + n, temas: [], marcas: [], mundos: [], texto_visual: '', alias: [], preguntas: ['¿Qué pide la lámina ' + n + '?'] };
+        : { pagina: n, titulo: 'LÁMINA ' + n, resumen: 'Reglas de la lámina ' + n, temas: [], marcas: [], mundos: [], texto_visual: '', alias: [], preguntas: ['¿Qué pide la lámina ' + n + '?'] };
+      if (modoFicha === 'rompe' && paginas.length > 1) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parte('{"paginas":[{"pagina":1,"titulo":"cort')) });
+      const van = paginas.filter(n => !(modoFicha === 'omite' && n === 5 && !omitida && (omitida = true)));
       /* Envuelta en ```json, como a veces la manda el modelo. */
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parte('```json\n' + JSON.stringify(ficha) + '\n```')) });
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parte('```json\n' + JSON.stringify({ paginas: van.map(ficha) }) + '\n```')) });
     }
     vistas.push(body);
     const res = guion(body, vistas.length);
@@ -89,7 +96,30 @@ try {
   const f = await p.evaluate(async () => ({ r: await prepararFicha(docs[0].name), imagenes: (docPaginas.get(docs[0].name) || []).length,
     llega: retrieve('¿qué marcas van en el mundo contemporáneo?', { source: 'pdf', limit: 4, doc: docs[0].name }).map(x => x.c.page + ':' + (x.c.isFicha || 'manual')) }));
   revisa(f.r.hechas === 9 && f.imagenes === 9, 'la ficha lee las 9 láminas, cada una con su imagen', JSON.stringify(f.r));
+  revisa(f.r.peticiones === 2 && fichaPeticiones === 2, 'en tandas: 9 láminas en 2 peticiones, no 9', JSON.stringify(f.r));
   revisa(f.llega[0]?.startsWith('8') && !f.llega.some(x => x.includes('indice')), '«contemporáneo» llega a la pág. 8 y la ficha índice no sale como resultado', f.llega.join(' '));
+
+  /* 1b · La cuota: tandas, páginas que faltan, JSON roto y el tope del día */
+  const releer = (op = {}) => p.evaluate(async op => {
+    const n = docs[0].name;
+    docFichas.delete(n); docChunks = docChunks.filter(c => !(c.isFicha && c.docName === n));
+    if (op.tope) localStorage.setItem('ap_ficha_tope', String(op.tope)); else localStorage.removeItem('ap_ficha_tope');
+    localStorage.removeItem('ap_ficha_dia');
+    const r = await prepararFicha(n, { silencioso: true });
+    const r2 = op.seguir ? await prepararFicha(n, { silencioso: true, sinTope: true }) : null;
+    return { r, r2, leidas: Object.keys(docFichas.get(n)?.paginas || {}).length, hoy: peticionesFichaHoy() };
+  }, op);
+  modoFicha = 'omite'; omitida = false; fichaPeticiones = 0;
+  let q = await releer();
+  revisa(q.leidas === 9 && q.r.fallos === 0 && fichaPeticiones === 3, 'una página que el modelo se salta se vuelve a pedir', JSON.stringify(q.r));
+  modoFicha = 'rompe'; fichaPeticiones = 0;
+  q = await releer();
+  revisa(q.leidas === 9 && q.r.fallos === 0 && fichaPeticiones <= 11, 'si el modelo no puede con la tanda, lee página por página (2 tandas rotas + 9)', `${JSON.stringify(q.r)} · ${fichaPeticiones} peticiones`);
+  modoFicha = 'bien'; fichaPeticiones = 0;
+  q = await releer({ tope: 1, seguir: true });
+  revisa(q.r.cortada === 'tope' && q.r.hechas === 6 && q.r2.hechas === 3 && q.leidas === 9 && q.hoy === 2,
+    'con el tope del día se pausa; «Seguir leyendo» termina', JSON.stringify(q));
+  await p.evaluate(() => localStorage.removeItem('ap_ficha_tope'));
 
   /* 2 · Pide leer, mira la lámina y contesta */
   const FIRMA = 'firma-simulada';
