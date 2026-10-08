@@ -1225,6 +1225,8 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-zona .rv-zona-x{padding:0 10px 0 2px;color:var(--text3);font-size:16px}
 .rv-zona-nueva{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px dashed var(--gold);background:var(--gdim);color:var(--gold);font:700 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-zona-nueva.on{border-style:solid;background:var(--s2);color:var(--text)}
+.rv-nueva-foto{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--border2);background:var(--s1);color:var(--text2);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-otra{width:100%;min-height:46px;border-radius:16px;border:1px solid var(--border2);background:var(--s1);color:var(--text);font:600 14px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-zonas-t{font-size:12px;color:var(--text3);line-height:1.4;padding:0 4px}
 .rv-general{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:14px 16px;border-radius:var(--rl);border:1px solid var(--rv-borde,var(--border2));background:var(--s1)}
 .rv-general[data-n="CUMPLE"]{--rv-c:var(--green);--rv-borde:color-mix(in srgb,var(--green) 45%,transparent)}
@@ -1295,6 +1297,8 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-sid{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px;padding-top:10px;border-top:1px solid var(--border)}
 .rv-sid-b{align-self:flex-start;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:600 13px 'Geist',system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px}
 .rv-sid-b:disabled{opacity:.55;cursor:default}
+a.rv-sid-b{text-decoration:none}
+.rv-sid-g{align-self:flex-start;padding:0;border:0;background:none;color:var(--text2);font:500 12px 'Geist',system-ui,sans-serif;text-decoration:underline;cursor:pointer}
 .rv-origen .rv-sid-b .ico{grid-row:auto;width:16px;height:16px;padding:0;border-radius:0;background:none;color:currentColor}
 .rv-origen p.rv-sid-n{font-size:12px;color:var(--text3)}
 .rv-sid-r{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;color:var(--text2)}
@@ -1365,7 +1369,7 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
       <div class="rv-guia" id="rv-guia" hidden><div class="rv-franja" id="rv-franja"></div><span class="rv-guia-txt" id="rv-guia-txt">Encuadra la tringla</span></div>
     </div>
     <div class="rv-zonas" id="rv-zonas" hidden>
-      <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button></div>
+      <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button><button class="rv-nueva-foto" id="rv-nueva-foto" type="button" aria-label="Empezar con otra foto">↺ Nueva foto</button></div>
       <span class="rv-zonas-t" id="rv-zonas-t"></span>
     </div>
     <div class="rv-ayuda" id="rv-ayuda" hidden><span id="rv-ayuda-t">Toca lo más alto de cada elemento</span><span><button id="rv-sugerir" type="button">Sugerir</button><button id="rv-exacto" type="button" aria-pressed="false">Punto exacto</button><button id="rv-deshacer" type="button">Deshacer</button><button class="pri" id="rv-listo" type="button" disabled>Revisar</button></span></div>

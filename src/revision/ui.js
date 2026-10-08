@@ -372,6 +372,17 @@ function pintarZonas() {
   $('rv-lienzo').classList.toggle('dibujando', dibujando);
 }
 
+/** Deja la pestaña como recién abierta, lista para otra foto, sin recargar. */
+function nuevaRevision() {
+  cerrarCamara();
+  st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null;
+  st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
+  $('rv-ayuda').hidden = true;
+  $('rv-res').innerHTML = '';
+  proporcion(4, 3); mostrar('vacia'); pintarZonas();
+  $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+}
+
 function empezarDibujo() {
   if (st.modo === 'dibujar') { st.modo = 'ver'; st.trazo = null; pintarZonas(); dibujar(1); return; }
   if (st.modo === 'tocar') $('rv-ayuda').hidden = true;
@@ -756,15 +767,24 @@ function bloqueSynthid() {
   const pregunta = st.synthidAbierto || st.synthid
     ? `<div class="rv-sid-r" role="group" aria-label="Qué dijo SynthID"><span>¿Qué dijo?</span>${VISTOS.map(([v, t]) =>
       `<button type="button" data-sid="${v}" aria-pressed="${st.synthid === v}">${t}</button>`).join('')}</div>` : '';
+  const abrir = red
+    ? `<a class="rv-sid-b" id="rv-synthid" href="${SYNTHID_PORTAL}" target="_blank" rel="noopener">${ICONO_LUPA}Abrir SynthID</a>`
+    : `<button type="button" class="rv-sid-b" disabled>${ICONO_LUPA}SynthID necesita señal</button>`;
   return `<div class="rv-sid">
-    <button type="button" class="rv-sid-b" id="rv-synthid"${red ? '' : ' disabled'}>${ICONO_LUPA}${red ? 'Revisar marca de IA con SynthID' : 'SynthID necesita señal'}</button>
-    <p class="rv-sid-n">Manda la foto original a Gemini o al portal de SynthID de Google: la foto sale del teléfono. Solo reconoce la IA de Google y de quien usa su marca.</p>
+    ${abrir}
+    <p class="rv-sid-n">Revisa si la foto trae la marca de agua de la IA de Google. Inicia sesión con Google, sube la misma foto y anota aquí lo que dijo. La foto sale del teléfono solo si tú la subes.</p>
+    ${red ? '<button type="button" class="rv-sid-g" id="rv-synthid-gemini">o mándala a Gemini (elige Gemini en la lista)</button>' : ''}
     ${pregunta}</div>`;
 }
 
 function conectarSynthid() {
-  const b = $('rv-synthid');
-  if (b) b.onclick = revisarConSynthid;
+  const a = $('rv-synthid');
+  /* El enlace abre el portal solo; aquí únicamente se deja lista la pregunta. */
+  if (a) a.onclick = () => { if (!st.synthidAbierto) { st.synthidAbierto = true; setTimeout(pintarResultados, 0); } };
+  const g = $('rv-synthid-gemini');
+  if (g) g.onclick = mandarAGemini;
+  const otra = $('rv-otra');
+  if (otra) otra.onclick = nuevaRevision;
   document.querySelectorAll('#rv-res [data-sid]').forEach(x => {
     /** @type {HTMLElement} */ (x).onclick = () => {
       const v = /** @type {any} */ (/** @type {HTMLElement} */ (x).dataset.sid);
@@ -774,7 +794,9 @@ function conectarSynthid() {
   });
 }
 
-async function revisarConSynthid() {
+/* Gemini en el teléfono: compartir el archivo original. Si el sistema no
+   puede compartir archivos, queda el portal. */
+async function mandarAGemini() {
   const f = st.foto;
   if (!f?.bytes) return;
   st.synthidAbierto = true;
@@ -840,7 +862,8 @@ function pintarResultados(subir = false) {
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
       ${listaManual().map(m => `<label><input type="checkbox"> ${esc(m)}</label>`).join('')}</div>
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
-    <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>`;
+    <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>
+    <button class="rv-otra" id="rv-otra" type="button">↺ Revisar otra foto</button>`;
   const primera = /** @type {HTMLElement|null} */ (caja.querySelector('.rv-ver [data-cifra]'));
   if (primera && primera.dataset.cifra) contar(primera, Number(primera.dataset.cifra));
   /* Primero se ven las marcas sobre la foto; luego la cifra sube a la vista.
@@ -1048,6 +1071,7 @@ function iniciar() {
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
   engancharLienzo();
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);
+  $('rv-nueva-foto').addEventListener('click', nuevaRevision);
   $('rv-zonas-lista').addEventListener('click', (/** @type {MouseEvent} */ e) => {
     const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('button'));
     if (!b) return;
