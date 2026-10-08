@@ -25,6 +25,7 @@ import * as puerta from './motor/puerta.js';
 import * as ruta from './motor/ruta.js';
 import * as conversacion from './motor/conversacion.js';
 import * as respuesta from './motor/respuesta.js';
+import * as basicos from './motor/basicos.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
 /* La pestaña «Revisar» (ADR 0007) vive aparte del motor del manual: se arma
@@ -32,7 +33,7 @@ import { estado, CLAVES } from './estado.js';
 import './revision/ui.js';
 
 Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
-  secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta);
+  secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos);
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre
