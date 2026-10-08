@@ -20,7 +20,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 296 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20296%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 305 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20305%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -151,6 +151,13 @@ El manual de montaje de una campaña son decenas de páginas en PDF. Nadie las c
 así que las dudas se resuelven preguntando —si hay a quién— o adivinando. Este asistente
 pone ese conocimiento a un toque de distancia, en el lenguaje con el que realmente se
 pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de dispositivo EAS"*.
+
+Son dos herramientas en la misma app:
+- **Preguntar.** El manual contesta con su página y su lámina, y dice «no está» cuando no hay
+  evidencia.
+- **[Revisar con foto](#revisar-con-foto-el-mini-veristack-en-el-teléfono).** Le tomas foto a
+  la exhibición y el código mide colorización, surtido, triangulación y alturas, y prueba de
+  dónde salió la foto. Todo en el teléfono, sin red.
 
 ## Dos modos, y el de abajo es el interesante
 
@@ -413,6 +420,10 @@ y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para c
 (oscura, movida o sin suficientes elementos), sale `NO_CALIFICA`: nunca se inventa un
 `CUMPLE`. El diseño y los criterios de éxito, fijados antes de medir, están en el
 [ADR 0007](docs/adr/0007-revision-con-foto.md).
+
+<p align="center">
+  <img src="docs/revisar.png" alt="Pestaña Revisar con el focal de ejemplo: cinco elementos marcados, el triángulo con la cima al centro, triangulación CUMPLE con 42 % de desnivel y tres alturas distintas" width="320">
+</p>
 
 | Básico | Qué mide el código | Qué marca en la foto |
 |---|---|---|
