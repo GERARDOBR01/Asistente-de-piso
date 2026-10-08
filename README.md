@@ -154,7 +154,10 @@ pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de di
 
 Son dos herramientas en la misma app:
 - **Preguntar.** El manual contesta con su página y su lámina, y dice «no está» cuando no hay
-  evidencia.
+  evidencia. Debajo, **«Sigue en el manual»** propone la lámina que completa la respuesta
+  (la clasificación de una sección lleva a sus estilos) y el siguiente básico del piso
+  (marcas → clasificación → liquidación → etiquetas…). Solo propone lo que el manual trae,
+  comprobado con la búsqueda local.
 - **[Revisar con foto](#revisar-con-foto-el-mini-veristack-en-el-teléfono).** Le tomas foto a
   la exhibición y el código mide colorización, surtido, triangulación y alturas, y prueba de
   dónde salió la foto. Todo en el teléfono, sin red.

@@ -891,7 +891,9 @@ function loadSaved(){
   if (warnEl && appState.apiKey) warnEl.classList.add('show');
   renderDocs();renderQuickBtns();updateTokenBar();
   // v7.0: banner de restore desde sessionStorage
-  try{if(sessionStorage.getItem('ap_chat_history_exists')==='1')document.getElementById('restore-banner').classList.add('show')}catch{}
+  /* La conversación de esta sesión vuelve sola al recargar (dura hasta cerrar
+     la app). Antes se ofrecía con un banner, y se perdía si nadie lo tocaba. */
+  try{if(sessionStorage.getItem('ap_chat_history_v5'))loadChatHistory()}catch{}
   // v7.0 paso 3: sincronizar selector API Experta
   syncExpertSelector();
 }
@@ -984,6 +986,9 @@ function loadChatHistory(){
       if(m.role==='user')body.textContent=m.content;else body.innerHTML=safeMarkdown(m.content);
       div.appendChild(label);div.appendChild(body);box.appendChild(div);
     }
+    const nota=document.createElement('div');nota.className='chat-restaurado';
+    nota.textContent='Conversación restaurada. Las láminas vuelven si repites la pregunta.';
+    box.appendChild(nota);
     scrollToBottom();
     document.getElementById('restore-banner').classList.remove('show');
     sessionStorage.removeItem('ap_chat_history_exists');
@@ -2505,7 +2510,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.15.0';
+const VERSION_APP='ap-v1.16.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -3980,6 +3985,11 @@ function responderSinModelo(q){
      dice con esas palabras y no habla de citas, porque aquí nadie citó nada. */
   const figs=fragmentos&&!avisoAusente?figurasDeFragmentos(tarjetas.map(t=>t.c),null,null):[];
   renderEvidencia(msgEl,figs,figs.origen==='cita'?'manual':'manualPagina');
+  anotarBasico(activo,q);
+  if(fragmentos&&!avisoAusente&&activo){
+    const fila=filaSigue(activo,tarjetas.filter(t=>t.c.docName===activo).map(t=>t.c.page),q);
+    if(fila)msgEl.appendChild(fila);
+  }
   const idConsulta=registrarConsulta(q,!!fragmentos&&!avisoAusente,tarjetas[0]&&tarjetas[0].c,'manual',!!avisoAusente);
   /* «Lo encontré como…»: si era eso, un toque lo confirma, y con dos se
      aprende que en esta sección se dice así. */
@@ -4768,6 +4778,13 @@ async function sendMessage(){
     history.push({role:'assistant',content:sanitizeFinalAnswer(final,q),seccion:ctx.seccionUsada||null});
     renderSourceIndicator(loaderEl.querySelector('.msg-footer'),q,context,aprendidoEn(consultaDeBusqueda(q),ctx.seccionUsada||null),hasPdfs,ctx.ampliada);
     botonesDeRutaAlterna(loaderEl,q);
+    {
+      const doc=ctx.seccionUsada||null;
+      anotarBasico(doc,q);
+      const pags=[...new Set([...final.matchAll(/p[áa]g\.?\s*(\d+)/gi)].map(m=>Number(m[1])))];
+      const fila=doc&&pags.length&&!/no especifica|no est[áa] en el manual/i.test(final)?filaSigue(doc,pags,q):null;
+      if(fila)loaderEl.insertBefore(fila,loaderEl.querySelector('.msg-footer'));
+    }
   }catch(err){
     if(pendingSanitize)clearTimeout(pendingSanitize);
     if(chatDescartado){loaderEl.remove();return}
@@ -4840,6 +4857,17 @@ function accesosDelManual(){
   return[...cuenta.entries()].sort((a,b)=>b[1]-a[1]).slice(0,QUICK_DEL_MANUAL)
     .map(([h])=>({label:h.charAt(0)+h.slice(1).toLowerCase(),q:`¿Qué dice el manual sobre ${h.toLowerCase()}?`}))
 }
+/* Los accesos con la ruta de los básicos delante: los que el manual trae, en
+   el orden en que se pregunta en el piso, y después los de siempre. */
+function accesosConBasicos(){
+  const base=accesosDelManual();
+  const doc=appState.manualActivo||(docs.length===1?docs[0].name:null);
+  if(!doc||!docChunks.length)return base;
+  const cubiertos=coberturaDeBasicos(doc);
+  const deBasicos=BASICOS.filter(b=>cubiertos.has(b.id)).slice(0,Math.ceil(QUICK_DEL_MANUAL/2))
+    .map(b=>({label:b.nombre,q:b.pregunta}));
+  return[...deBasicos,...base].slice(0,QUICK_DEL_MANUAL)
+}
 function preguntasDeFicha(docName){
   const f=docName&&docFichas.get(docName);
   if(!f)return[];
@@ -4867,7 +4895,7 @@ function renderQuickBtns(){
     btn.addEventListener('click',()=>ask(b.q));
     c.appendChild(btn);
   };
-  const delManual=accesosDelManual();
+  const delManual=accesosConBasicos();
   for(const b of delManual)pinta(b,'del-manual');
   /* Con un manual cargado, los accesos de fábrica —«MarcaDemoB en POS»,
      «Entallado Hombres»— son del manual de demostración, no del suyo: se
@@ -4898,7 +4926,7 @@ function renderChatVacio(){
   const conPdf=docChunks.length>0;
   const paginas=conPdf?new Set(docChunks.filter(c=>!appState.manualActivo||c.docName===appState.manualActivo).map(c=>c.docName+'#'+c.page)).size:0;
   const ejemplos=conPdf
-    ?accesosDelManual().slice(0,3).map(a=>({q:a.q,nota:'Una lámina de tu manual'})).concat([{q:'¿a qué hora abre la tienda?',nota:'Si el manual no lo dice, te lo dice'}])
+    ?accesosConBasicos().slice(0,3).map(a=>({q:a.q,nota:'Una lámina de tu manual'})).concat([{q:'¿a qué hora abre la tienda?',nota:'Si el manual no lo dice, te lo dice'}])
     :EJEMPLOS_DEMO;
   el.innerHTML='';
   const t=document.createElement('div');t.className='vacio-titulo';
@@ -5999,7 +6027,10 @@ function presentarRespuestaAgente(loaderEl,r,q){
   if(campos.opciones.length)loaderEl.insertBefore(filaDeChips(esGap?'¿Quisiste decir…?':'También lo puedo entender como:',campos.opciones),footer);
   const citadas=[...new Set([...limpio.matchAll(/p[áa]g\.?\s*(\d+)/gi)].map(m=>Number(m[1])))];
   const sugerencias=sugerenciasDeFicha(r.estado.doc,[...new Set([...citadas,...leidas])],q);
-  if(sugerencias.length)loaderEl.insertBefore(filaDeChips(esGap?'Esto sí lo trae el manual:':'También te puede servir:',sugerencias),footer);
+  anotarBasico(r.estado.doc,q);
+  const sigue=esGap?[]:sigueEnElManual(r.estado.doc,citadas.length?citadas:leidas,q).filter(s=>!sugerencias.includes(s.q));
+  const todas=[...sugerencias,...sigue].slice(0,Math.max(3,sugerencias.length));
+  if(todas.length)loaderEl.insertBefore(filaDeChips(esGap?'Esto sí lo trae el manual:':'También te puede servir:',todas),footer);
   ultimaTrazaAgente={motor:'agente',rondas:r.estado.rondas,cortes:r.estado.cortes||0,paginas:leidas.length,imagenes:r.estado.imagenes,tokens:r.estado.tokens,
     herramientas:r.estado.llamadas,citas:citas.total,citasMalas:citas.malas.length,correcciones:campos.correcciones.length};
   return{texto:limpio,entendi:campos.entendi}
@@ -6009,11 +6040,122 @@ function filaDeChips(titulo,preguntas){
   const t=document.createElement('span');t.className='chips-titulo';t.textContent=titulo;
   wrap.appendChild(t);
   for(const p of preguntas){
-    const b=document.createElement('button');b.className='chip-ia';b.textContent=p;
-    b.onclick=()=>ask(p);
+    const texto=typeof p==='string'?p:p.texto,q=typeof p==='string'?p:p.q;
+    const b=document.createElement('button');b.className='chip-ia';b.textContent=texto;
+    b.onclick=()=>ask(q);
     wrap.appendChild(b);
   }
   return wrap
+}
+/* ════════════════════════════════════════════════
+   «SIGUE EN EL MANUAL»
+
+   Lo que completa una lámina suele estar en las siguientes del mismo capítulo:
+   la clasificación de Muebles enumera «estilos de mobiliario», y cada estilo es
+   una de las láminas que siguen. Y quien pregunta en el piso sigue la ruta de
+   los básicos (src/motor/basicos.js): marcas, clasificación, liquidación…
+   Los botones solo apuntan a lo que el manual trae; nunca a temas de fuera.
+════════════════════════════════════════════════ */
+const basicosPreguntados=new Map();      // sección → básicos preguntados en esta sesión
+let coberturaBasicos=new Map(),firmaCobertura='';
+function anotarBasico(doc,q){
+  const b=basicoDe(q||'');
+  if(!doc||!b)return;
+  if(!basicosPreguntados.has(doc))basicosPreguntados.set(doc,new Set());
+  basicosPreguntados.get(doc).add(b);
+}
+function tituloDePagina(doc,n){
+  const c=docChunks.find(x=>x.docName===doc&&x.page===n&&x.heading&&!x.isFicha&&!x.isFigure);
+  const h=c?c.heading.replace(/^#+\s*/,'').replace(/\s+/g,' ').trim():'';
+  /* Ni códigos, ni rótulos cortados («Vanguardista (2.6%):»), ni el check
+     list, que es un formato para llenar y no algo que aprender. */
+  if(h.length<4||h.length>60||/^\d|:$|%/.test(h)||/^check\s*list/i.test(h))return'';
+  return h===h.toUpperCase()?h.charAt(0)+h.slice(1).toLowerCase():h;
+}
+/* Qué básicos trae la sección y en qué página: la pregunta de cada uno,
+   contestada por el motor local sin red, y solo cuenta si sale con su
+   lámina y sin aviso. Una vez por sección, mientras no cambie el corpus. */
+function coberturaDeBasicos(doc){
+  const firma=docs.map(d=>d.name).join('|')+'#'+docChunks.length+'#'+(appState.manualActivo||'');
+  if(firma!==firmaCobertura){coberturaBasicos=new Map();firmaCobertura=firma}
+  if(coberturaBasicos.has(doc))return coberturaBasicos.get(doc);
+  const m=new Map();
+  if(doc&&(appState.manualActivo===doc||(docs.length===1&&docs[0].name===doc))){
+    const guardada=rutaActual;
+    try{
+      for(const b of BASICOS){
+        rutaActual=null;
+        const r=respuestaSinModelo(b.pregunta,[],rutaDe);
+        const t=r.tarjetas&&r.tarjetas[0];
+        if(r.fragmentos&&t&&t.c.docName===doc&&t.c.page&&!r.avisoAusente&&!r.avisoFlojo&&!r.avisoParecidas)m.set(b.id,t.c.page);
+      }
+    }catch(e){console.warn('básicos',e)}
+    finally{rutaActual=guardada}
+  }
+  coberturaBasicos.set(doc,m);
+  return m
+}
+/* Hasta 3 botones: la lámina que sigue y el siguiente básico, intercalados.
+   `paginas` va en el orden de la respuesta. Se miran las 3 láminas que siguen
+   a CADA una, y van primero las que esas páginas ya mencionan. Pesa más la
+   mención de una página con viñetas o corta, porque esa es un índice:
+   «● Estilos de mobiliario» en la clasificación de Muebles lleva a «Estilo
+   nórdico», la lámina de después. No cuentan las palabras de la pregunta ni
+   las del nombre de la sección: «muebles» sale en todo el manual de Muebles. */
+function sigueEnElManual(doc,paginas,q,max=3){
+  paginas=[...new Set((paginas||[]).filter(n=>Number.isFinite(n)&&n>0))];
+  if(!doc||!paginas.length)return[];
+  const porPagina=paginas.map(n=>docChunks.filter(c=>c.docName===doc&&c.page===n&&!c.isFicha).map(c=>(c.heading||'')+' '+c.text).join('\n'));
+  const vistas=new Set(paginas);
+  const titulos=new Set(paginas.map(n=>normalizeText(tituloDePagina(doc,n))));
+  const propia=new Set(tokenize(q||''));
+  const raiz=(/** @type {string} */ w)=>w.slice(0,5);
+  const comunes=new Set([...tokenize(q||''),...tokenize(nombreDeSeccion(doc)||'')].map(raiz));
+  const menciones=paginas.map((_,i)=>{
+    const crudo=porPagina[i]||'',tk=tokenize(crudo);
+    const vinetas=(crudo.match(/[●•▪■]/g)||[]).length;
+    return{peso:vinetas>=2?3:tk.length<40?2:1,raices:new Set(tk.filter(w=>w.length>3).map(raiz))};
+  });
+  const todas=paginasDelManual(doc);
+  const ficha=docFichas.get(doc);
+  const candidatas=[];
+  paginas.forEach((p,i)=>todas.filter(n=>n>p).slice(0,3).forEach((n,k)=>{
+    if(vistas.has(n)||candidatas.some(c=>c.n===n))return;
+    const t=tituloDePagina(doc,n);
+    if(!t)return;
+    const rs=tokenize(t).filter(w=>w.length>3).map(raiz).filter(r=>!comunes.has(r));
+    const puntos=Math.max(0,...menciones.map(m=>rs.some(r=>m.raices.has(r))?m.peso:0));
+    candidatas.push({n,t,orden:i*3+k,puntos});
+  }));
+  candidatas.sort((a,b)=>b.puntos-a.puntos||a.orden-b.orden);
+  const siguen=[];
+  for(const{n,t}of candidatas){
+    const k=normalizeText(t);
+    if(titulos.has(k))continue;
+    titulos.add(k);
+    const tk=tokenize(t);
+    if(!tk.length||tk.every(w=>propia.has(w)))continue;
+    const p=ficha&&ficha.paginas[n]&&(ficha.paginas[n].preguntas||[])[0];
+    siguen.push({texto:p||`${t} · pág. ${n}`,q:p||`¿Qué dice el manual sobre ${t.toLowerCase()}?`,pagina:n});
+    vistas.add(n);
+    if(siguen.length>=2)break;
+  }
+  const cubiertos=coberturaDeBasicos(doc);
+  const basicos=[];
+  for(const b of siguientesBasicos(basicoDe(q||''),basicosPreguntados.get(doc)||new Set(),cubiertos)){
+    const n=cubiertos.get(b.id);
+    if(vistas.has(n))continue;
+    vistas.add(n);
+    basicos.push({texto:b.pregunta,q:b.pregunta,pagina:n});
+    if(basicos.length>=2)break;
+  }
+  const out=[];
+  for(let i=0;i<2;i++){if(siguen[i])out.push(siguen[i]);if(basicos[i])out.push(basicos[i])}
+  return out.slice(0,max)
+}
+function filaSigue(doc,paginas,q){
+  const s=sigueEnElManual(doc,paginas,q);
+  return s.length?filaDeChips('Sigue en el manual:',s):null;
 }
 /* De la ficha de las páginas que se leyeron: las preguntas que esas láminas
    contestan y que no son la misma que ya se hizo. Una por página. */

@@ -80,6 +80,22 @@ try {
 
   await p.setInputFiles('#file-input', { name: '140 CASUAL HOMBRE.pdf', mimeType: 'application/pdf', buffer: fs.readFileSync(path.join(RAIZ, 'docs/manual-demo.pdf')) });
   await p.waitForFunction(() => docs.length === 1 && document.getElementById('proc-wrap').style.display === 'none', null, { timeout: 120000 });
+  /* 0 · Sin key: «Sigue en el manual» apunta a láminas siguientes y a básicos
+     que el manual trae; nunca a la lámina mostrada, y nada en un «no está». */
+  const sig = await p.evaluate(() => {
+    const preguntar = q => { history = []; rutaActual = null; responderSinModelo(q); return [...document.querySelectorAll('.msg.assistant')].pop(); };
+    const m = preguntar('¿qué marcas hay?');
+    const fila = m.querySelector('.chips-ia');
+    const chips = fila ? [...fila.querySelectorAll('.chip-ia')].map(b => b.textContent) : [];
+    const mostradas = ultimasTarjetas.map(t => t.c.page);
+    const nada = preguntar('¿qué hago si se va la luz?').querySelector('.chips-ia');
+    return { chips, mostradas, nada: !!nada, cubiertos: coberturaDeBasicos(docs[0].name).size, accesos: accesosConBasicos().map(a => a.label) };
+  });
+  revisa(sig.chips.length >= 2 && sig.chips.length <= 3 && sig.chips.some(t => /pág\. \d+/.test(t)) && sig.chips.some(t => /^¿/.test(t))
+    && !sig.chips.some(t => sig.mostradas.some(n => t.endsWith('pág. ' + n))) && !sig.nada,
+    'sin key, «Sigue en el manual» trae la lámina siguiente y el siguiente básico; nada en un «no está»', JSON.stringify(sig));
+  revisa(sig.cubiertos >= 3 && sig.accesos[0] === 'Marcas y mundos', 'los accesos rápidos empiezan por los básicos que el manual trae', JSON.stringify(sig.accesos));
+
   await p.evaluate(() => {
     sessionStorage.setItem('ap_api_key_gemini', 'AIza-simulada-no-es-real-000');
     appState.apiKey = 'AIza-simulada-no-es-real-000'; appState.provider = 'gemini'; appState.chatModel = 'gemini-3.5-flash'; appState.motor = 'agente';
