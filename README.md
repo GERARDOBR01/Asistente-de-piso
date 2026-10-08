@@ -158,7 +158,7 @@ pregunta: *"¿a qué altura va el sensor?"*, no *"criterios de colocación de di
 |---|---|---|
 | Qué hace | Busca en el manual y entrega los fragmentos que coinciden, **tal cual**, con su página y su lámina | Dos motores, a elegir en Ajustes. **Agente lector**: la IA lee el manual con herramientas —páginas, láminas, búsqueda— y contesta citando lo que leyó. **Clásico**: la búsqueda local elige los fragmentos y el modelo responde en 6 etapas o, en modo rápido, con un solo paso de lectura |
 | Dónde corre | Entero en tu dispositivo, incluida la lectura del PDF y el recorte de figuras | Las herramientas corren en tu dispositivo; la lectura y la respuesta, en el proveedor que elijas |
-| Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
+| Sale a la red | **No.** Ni una petición | Sí. Al preparar un manual para el modo IA, cada página (texto e imagen) va una vez al proveedor, 6 páginas por petición. En cada pregunta van el mapa del manual y las páginas que se leen (agente) o los fragmentos que eligió la búsqueda (clásico) |
 | Qué cuesta | Nada | Tu propia key y tus propios tokens. Preparar un manual de 25 láminas con Gemini Flash-Lite: unos 5 centavos de dólar, una vez |
 
 El modo manual existe porque un demo que primero te pide una API key no es un demo. Pero
@@ -182,6 +182,11 @@ El agente invierte los papeles:
    en el teléfono. La ficha **ubica**, no contesta: en la búsqueda, un acierto en la ficha se
    cambia por los fragmentos reales de esa página. Lo único de la ficha que puede sostener un
    dato es lo que la IA copió literal de la imagen, y va rotulado como tal.
+   **Cuidando la cuota:**
+   - lee 6 páginas por petición, así un manual de 26 páginas gasta unas 5 y no 26;
+   - sola, solo lee la sección activa;
+   - la lectura automática se pausa al llegar a un tope diario (12 peticiones por omisión, se
+     cambia en Ajustes), para que el resto de la cuota gratis quede para preguntar.
 2. **En cada pregunta**, el modelo recibe el mapa del manual (una línea por página, de la
    ficha), el glosario de la sección y dos páginas que la búsqueda local le adelanta. Con
    herramientas que corren en el teléfono decide qué leer: `leer_paginas`, `ver_lamina`

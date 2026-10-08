@@ -204,7 +204,7 @@ const PREPARAR = async ({ clave }) => {
   if (clave) sessionStorage.setItem('ap_api_key_gemini', clave);
   appState.provider = 'gemini'; appState.apiKey = sessionStorage.getItem('ap_api_key_gemini') || '';
   const r = [];
-  for (const d of docs) r.push({ doc: d.name, ...(await prepararFicha(d.name, { silencioso: true })) });
+  for (const d of docs) r.push({ doc: d.name, ...(await prepararFicha(d.name, { silencioso: true, sinTope: true })) });
   return r;
 };
 
