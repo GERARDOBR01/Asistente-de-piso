@@ -430,6 +430,7 @@ Gerardo reportó que el origen «sigue teniendo fallos» con la IA. Antes de int
     - «Sin marca» → el nivel no sube, y el motivo aclara que no prueba que sea real, porque otras
       IA no ponen esa marca.
   - Todo sale rotulado «revisado a mano», también en el resumen compartido.
+  - **Probado en el teléfono (8-oct):** compartir no llevaba a SynthID (Gemini no aparecía en la lista). Ahora el botón principal abre `synthid.com` (portal de Google, pide iniciar sesión) y compartir a Gemini queda como opción chica.
 - **La defensa de fondo sigue siendo el proceso:** foto tomada en la app (CUMPLE, con huella) u
   original firmada por la cámara. Detectar es una carrera que se pierde.
 
