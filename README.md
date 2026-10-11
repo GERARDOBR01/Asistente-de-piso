@@ -92,6 +92,35 @@ sí estaba. La regla era no perder más de un acierto a cambio de velocidad, as�
 Los números de los 30 manuales son de antes de cambiar el orden de las láminas (arriba) y de
 los dos arreglos de la búsqueda de abajo. Falta volver a medirlos con esos manuales.
 
+### El modo con API key, con el corpus público (11-oct)
+
+Los números de arriba son de manuales reales que no están en el repo. Para que cualquiera los
+pueda repetir, el modo con API también se midió con los **4 manuales ficticios** y las **99
+preguntas** del gate (`eval/corpus-publico/`):
+
+```
+node eval/modo-ia.mjs --local eval/corpus-publico/manuales.json \
+  --preguntas eval/corpus-publico/bateria.json --clave-en-pagina \
+  --cdp http://127.0.0.1:9333 --pagina 9611 --motor clasico --etiqueta api-clasico
+```
+
+Con `--cdp`, la medición pregunta en una pestaña de Chrome ya abierta (con
+`--remote-debugging-port`) donde la persona pegó su key en Ajustes. La key se queda en el
+`sessionStorage` de esa pestaña: el script no la lee ni la escribe en ningún lado.
+
+| 3.5 Flash-Lite, razonado | Motor clásico | Agente lector |
+|---|---|---|
+| Trae el dato y cita su página | **78/84 (92.9 %)** | 67/73 (cuota agotada en la 74) |
+| Dice «no está» en las que no están | **14/15** | sin medir todavía |
+| Con el dato en el contexto, lo dio bien | 78/78 | — |
+| Primer texto, mediana / 95 % | 1.5 s / 1.9 s | 0.9 s / 4.1 s |
+
+- **Las 6 fallas del clásico son de búsqueda:** el dato no le llegó al modelo. El techo gratis
+  del corpus, medido sin API (el dato llega al contexto), es 77/84.
+- **El agente empata con el clásico en las mismas 73 preguntas (67 y 67).** Gana dos en las que
+  el clásico no encontró la lámina y pierde dos por citar otra página. Gasta ~2,900 tokens por
+  pregunta. El clásico sigue siendo el de fábrica.
+
 ### Dos modos de respuesta, y el modelo de fábrica
 
 Desde el 26-sep, en **Ajustes → Modo de respuesta** hay dos:
@@ -432,7 +461,7 @@ y cada resultado lleva sus números (`fuente: CÓDIGO`). Si la foto no da para c
 |---|---|---|
 | **Colorización** | Una franja a la altura del pecho, por columna en CIELAB; la corta en tramos de color y los clasifica en cálido, frío o neutro (los cafés, beiges y el azul marino son neutros; la mezclilla es fría). Antes, un balance de blancos quita el tinte de la luz de tienda. Cada grupo va en un solo bloque. | Una barra por tramo y el tramo que rompe el orden («frío entre cálidos, tramo 4 de 12») |
 | **Surtido** | Celdas con bordes de Sobel contra el color del fondo del mueble; un hueco es vacío de arriba abajo, no el aire de encima de una pila, y deja ver el mueble (lo casi negro es sombra o producto negro, no hueco). | Los huecos rayados y el **% vacío medido** |
-| **Triangulación** | Los puntos altos de cada elemento: una sola cima y desnivel suficiente. Vale el simétrico y el asimétrico (la cima a un lado, bajando por bases y bolsas). **Toque inteligente:** tocas cada elemento donde sea y su silueta (MediaPipe Magic Touch) da su punto más alto; la silueta se ve, y «Punto exacto» vuelve al toque a mano. Un detector (EfficientDet-Lite0) **sugiere** los puntos dentro de la zona. | El triángulo, o la línea de alturas cuando no lo hay |
+| **Triangulación** | Los puntos altos de cada elemento: una sola cima y desnivel suficiente. Vale el simétrico y el asimétrico (la cima a un lado, bajando por bases y bolsas). **Toque inteligente:** tocas cada elemento donde sea y su silueta (MediaPipe Magic Touch) da su punto más alto; la silueta se ve, y «Punto exacto» vuelve al toque a mano. Un detector (EfficientDet-Lite0) **sugiere** los puntos: busca en el recorte de la zona, quita el fondo y las bases, afina cada uno con la silueta y no pisa lo que ya tocaste. Medido con 5 focales de tienda: encuentra 11 de 17 cimas y 11 de 12 sugerencias caen en un elemento (antes, 8/17 y 8/11). Con «Punto exacto» sale una lupa, y cada punto se arrastra. | El triángulo, las bandas de cada altura y, si dos empatan arriba, «sube este» |
 | **Alturas y niveles** | Con los mismos puntos: cuántas alturas distintas hay (alto, medio y bajo). | La cifra de alturas |
 | **Evidencia de la foto** | No adivina si es IA: prueba de dónde salió. Tomada en la app (con huella SHA-256), de galería (EXIF: cámara, fecha, editor) o con su credencial de contenido (C2PA), que se lee y valida con el SDK oficial (`c2pa-web`) contra la lista de confianza oficial de C2PA (CC-BY-4.0, copia del 13-ago-2026): manifiesto activo, cadena de padres y firma. Una original firmada por una cámara de la lista (el Pixel 10 firma todas) y tomada en las últimas 24 h sale `CUMPLE`. Va aparte del veredicto del montaje: una foto reenviada por WhatsApp sale «sin datos». Cuando la app no puede probar el origen, un botón opcional manda la foto original a **SynthID** (Gemini en el teléfono, el portal en la computadora) para buscar la marca de agua de la IA de Google, y la persona anota lo que vio. Ningún detector de píxeles juzga la foto. | `GRAVE` solo si la foto declara que **se generó** con IA; retocada con IA o alterada después de firmar, `OBSERVACIÓN` |
 
