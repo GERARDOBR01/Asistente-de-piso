@@ -201,7 +201,7 @@ declare class TextEncoder { encode(s?: string): Uint8Array }
 declare class TextDecoder { constructor(etiqueta?: string, opciones?: { fatal?: boolean }); decode(b?: ArrayBufferView, opciones?: { stream?: boolean }): string }
 
 /* La IA (src/ia/): fetch y su respuesta por streaming, como las tienen el
-   navegador y Node â‰¥ 18. Solo lo que se usa. */
+   navegador y Node ≥ 18. Solo lo que se usa. */
 interface AbortSignal { readonly aborted: boolean; addEventListener(tipo: 'abort', fn: () => void, opciones?: { once?: boolean }): void }
 declare class DOMException extends Error { constructor(mensaje?: string, nombre?: string) }
 declare function setTimeout(fn: () => void, ms?: number): number;
@@ -216,16 +216,16 @@ declare function fetch(url: string, init?: { method?: string, headers?: Record<s
 
 /** Un mensaje para el modelo, con el formato de OpenAI. */
 interface MensajeIA { role: string; content: any }
-/** El error de un proveedor, con su cÃ³digo HTTP y su clase (claseDeError). */
+/** El error de un proveedor, con su código HTTP y su clase (claseDeError). */
 interface ErrorDeProveedor extends Error { status?: number; clase?: string; espera?: number | null }
-/** La imagen guardada de una pÃ¡gina al cargar el PDF. */
+/** La imagen guardada de una página al cargar el PDF. */
 interface PaginaGuardada { page: number; titulo?: string; imagen?: string }
-/** Lo que la IA escribiÃ³ de cada pÃ¡gina al leer el manual (la ficha). */
+/** Lo que la IA escribió de cada página al leer el manual (la ficha). */
 interface FichaPagina { titulo?: string; resumen?: string; temas: string[]; marcas: string[]; mundos: string[]; alias?: string[]; texto_visual?: string; [k: string]: unknown }
 interface FichaManual { version?: number; modelo?: string; fecha?: number; paginas: Record<string, FichaPagina> }
-/** Una herramienta que pidiÃ³ el modelo. */
+/** Una herramienta que pidió el modelo. */
 interface LlamadaAgente { id: string; idReal?: boolean; name: string; args: any }
-/** Lo que lleva el agente de una pregunta: quÃ© leyÃ³, quÃ© vio, cuÃ¡nto gastÃ³. */
+/** Lo que lleva el agente de una pregunta: qué leyó, qué vio, cuánto gastó. */
 interface EstadoAgente {
   doc: string;
   paginas: Map<string, PaginaGuardada[]>;
@@ -239,7 +239,7 @@ interface EstadoAgente {
   llamadas: string[];
   cortes?: number;
 }
-/** Un mensaje de la conversaciÃ³n interna del agente, neutral entre proveedores. */
+/** Un mensaje de la conversación interna del agente, neutral entre proveedores. */
 interface MensajeAgente {
   role: string;
   content?: any;

@@ -82,6 +82,36 @@ if (faltan.length || sobran.length || deMas.length) {
   if (deMas.length) console.log(`✗ [sin señal] el arnés no se guarda en el teléfono: ${deMas.join(', ')}`);
   await b.close(); srv.close(); process.exit(1);
 }
+/* La capa de compatibilidad (PUBLICO en src/main.js) publica en globalThis solo
+   lo que app.js, index.html, src/revision y las herramientas de eval/ y lab/
+   usan por su nombre. Si alguno usa un nombre de un módulo que no está en la
+   lista, en el navegador sale «no está definido» justo en esa función, que
+   puede ser una que el arnés no toca: se revisa aquí, sobre el texto. */
+{
+  const lee = f => fs.readFileSync(path.join(RAIZ, f), 'utf8');
+  const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const deFuera = sinComentarios([
+    lee('src/app.js'), lee('index.html'),
+    ...fs.readdirSync(path.join(RAIZ, 'src', 'revision')).filter(f => f.endsWith('.js')).map(f => lee('src/revision/' + f)),
+    ...[...fs.readdirSync(path.join(RAIZ, 'eval')).map(f => 'eval/' + f), ...fs.readdirSync(path.join(RAIZ, 'lab')).map(f => 'lab/' + f)]
+      .filter(f => f.endsWith('.mjs') && !f.endsWith('.test.mjs')).map(lee),
+  ].join('\n'));
+  /* Un punto delante es acceso a propiedad (`x.nombre`), salvo el de `...nombre`. */
+  const usa = n => new RegExp('(?<![\\w$])(?<!(?:^|[^.])\\.)' + n.replace(/\$/g, '\\$') + '(?![\\w$])').test(deFuera);
+  const main = lee('src/main.js');
+  const publico = Function('return ' + ((main.match(/const PUBLICO = (\{[\s\S]*?\n\});/) || [])[1] || '{}'))();
+  const problemas = [];
+  for (const [, ns, f] of main.matchAll(/import \* as (\w+) from '\.\/([^']+)'/g)) {
+    const nombres = Object.keys(await import(pathToFileURL(path.join(RAIZ, 'src', f)).href));
+    const lista = publico[ns] || [];
+    for (const n of lista) if (!nombres.includes(n)) problemas.push(`${f} no exporta «${n}»`);
+    for (const n of nombres) if (!lista.includes(n) && usa(n)) problemas.push(`«${n}» (${f}) se usa por su nombre global y src/main.js no lo publica`);
+  }
+  if (problemas.length) {
+    for (const p of problemas) console.log(`✗ [compatibilidad] ${p}`);
+    await b.close(); srv.close(); process.exit(1);
+  }
+}
 let malas = [{}];
 try {
   const p = await b.newPage();

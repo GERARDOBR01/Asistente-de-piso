@@ -21,7 +21,7 @@ import { basicoDe, siguientesBasicos } from './basicos.js';
 /** @typedef {{texto: string, q: string, pagina: number | undefined}} Siguiente */
 
 /** El título de una página, si sirve como botón. @param {string} doc @param {number} n @returns {string} */
-export function tituloDePagina(doc,n){
+export function tituloParaBoton(doc,n){
   const c=estado.docChunks.find(x=>x.docName===doc&&x.page===n&&x.heading&&!x.isFicha&&!x.isFigure);
   const h=c?/** @type {string} */(c.heading).replace(/^#+\s*/,'').replace(/\s+/g,' ').trim():'';
   /* Ni códigos, ni rótulos cortados («Vanguardista (2.6%):»), ni el check
@@ -61,7 +61,7 @@ export function siguientesDelManual(doc,paginas,q,{paginasGuardadas=new Map(),fi
   if(!doc||!pags.length)return[];
   const porPagina=pags.map(n=>estado.docChunks.filter(c=>c.docName===doc&&c.page===n&&!c.isFicha).map(c=>(c.heading||'')+' '+c.text).join('\n'));
   const vistas=new Set(pags);
-  const titulos=new Set(pags.map(n=>normalizeText(tituloDePagina(doc,n))));
+  const titulos=new Set(pags.map(n=>normalizeText(tituloParaBoton(doc,n))));
   const propia=new Set(tokenize(q||''));
   const raiz=(/** @type {string} */ w)=>w.slice(0,5);
   const comunes=new Set([...tokenize(q||''),...tokenize(nombreDeSeccion(doc)||'')].map(raiz));
@@ -75,7 +75,7 @@ export function siguientesDelManual(doc,paginas,q,{paginasGuardadas=new Map(),fi
   const candidatas=[];
   pags.forEach((p,i)=>todas.filter(n=>n>p).slice(0,3).forEach((n,k)=>{
     if(vistas.has(n)||candidatas.some(c=>c.n===n))return;
-    const t=tituloDePagina(doc,n);
+    const t=tituloParaBoton(doc,n);
     if(!t)return;
     const rs=tokenize(t).filter(w=>w.length>3).map(raiz).filter(r=>!comunes.has(r));
     const puntos=Math.max(0,...menciones.map(m=>rs.some(r=>m.raices.has(r))?m.peso:0));
