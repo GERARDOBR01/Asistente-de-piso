@@ -123,3 +123,24 @@ test('ia: proveedor y perilla de razonamiento por familia', () => {
   assert.deepEqual(razonamientoGemini('gemini-2.5-flash'), { thinkingBudget: 0 });
   assert.deepEqual(razonamientoGemini('gemini-3.8-flash'), { thinkingLevel: 'LOW' });
 });
+
+test('ia: qué se reintenta, qué es saturación y cuál es el respaldo', async () => {
+  const { isRetryable, esSaturacion, modeloDeRespaldo, nombreCortoDeModelo, modeloAlCargar, sleep, GEMINI_RESPALDO } = await import('../src/ia/reintentos.js');
+  assert.ok(isRetryable({ status: 503, message: '' }));
+  assert.ok(isRetryable(new Error('Spikes in demand are usually temporary')));
+  assert.ok(!isRetryable(Object.assign(new Error('x'), { name: 'AbortError', status: 503 })), 'lo que canceló el asesor no se reintenta');
+  assert.ok(!isRetryable({ status: 400, message: 'bad request' }));
+  assert.ok(esSaturacion(new Error('This model is currently experiencing high demand')));
+  assert.ok(!esSaturacion(new Error('Failed to fetch')), 'sin señal no es saturación');
+  assert.equal(modeloDeRespaldo('gemini', 'gemini-3.5-flash'), GEMINI_RESPALDO);
+  assert.equal(modeloDeRespaldo('gemini', GEMINI_RESPALDO), null, 'el respaldo no tiene respaldo');
+  assert.equal(modeloDeRespaldo('openai', 'gpt-4o'), null);
+  assert.equal(nombreCortoDeModelo('gemini-3.5-flash-lite'), '3.5 Flash-Lite');
+  assert.equal(nombreCortoDeModelo('gpt-4o-mini'), 'GPT-4o mini');
+  assert.deepEqual(modeloAlCargar('gemini-3.5-flash', null, 'gemini'), { modelo: 'gemini-3.5-flash-lite', migrar: true });
+  assert.deepEqual(modeloAlCargar('gemini-3.5-flash', '1', 'gemini'), { modelo: 'gemini-3.5-flash', migrar: false });
+  const ac = new AbortController();
+  const espera = sleep(10000, ac.signal);
+  ac.abort();
+  await assert.rejects(espera, e => e.name === 'AbortError');
+});

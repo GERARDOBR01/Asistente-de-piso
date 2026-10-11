@@ -1352,7 +1352,7 @@ function pedirLamina(msgEl,antes,q,idConsulta,doc,{sinDato=false}={}){
     const ok=document.createElement('button');ok.type='button';ok.className='ap-chip';ok.textContent='Listo';
     ok.onclick=()=>{
       const n=parseInt(num.value,10);
-      if(!(n>0)||!paginasDelManual(docPropio).includes(n)){num.classList.add('ap-num-mal');return}
+      if(!(n>0)||!paginasDelManual(docPropio,docPaginas).includes(n)){num.classList.add('ap-num-mal');return}
       elegir(docPropio,n);
     };
     fila.append(num,ok);
@@ -1410,7 +1410,7 @@ async function proponerConIA(doc,{silencioso=false}={}){
   const raras=palabrasRarasDelTablero(doc);
   if(!raras.length){if(!silencioso)showToast('Todavía no hay palabras del piso sin resolver en esta sección.','info',3500);return 0}
   const provider=appState.provider,key=appState.apiKey,model=modeloDeFicha(provider);
-  const pedido=`${PROPONER_PROMPT}\n\nSECCIÓN: ${secDe(doc)}\nPALABRAS DEL PISO: ${raras.join(', ')}\nTÍTULOS DEL MANUAL:\n${titulosDeSeccion(doc).join('\n')}${glosarioDeSeccion(doc)?'\n'+glosarioDeSeccion(doc):''}`;
+  const pedido=`${PROPONER_PROMPT}\n\nSECCIÓN: ${secDe(doc)}\nPALABRAS DEL PISO: ${raras.join(', ')}\nTÍTULOS DEL MANUAL:\n${titulosDeSeccion(doc).join('\n')}${glosarioDeSeccion(doc,docFichas)?'\n'+glosarioDeSeccion(doc,docFichas):''}`;
   const llamar=async m=>{
     if(provider==='gemini'){
       const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{
@@ -2180,7 +2180,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.18.2';
+const VERSION_APP='ap-v1.18.3';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2496,23 +2496,6 @@ function textoDePaginaParaFicha(docName,page){
   return docChunks.filter(c=>c.docName===docName&&c.page===page&&!c.isFicha&&!c.isFigure)
     .map(c=>(c.heading?`[${c.heading}] `:'')+c.text).join('\n').slice(0,FICHA_TEXTO_MAX)
 }
-function paginasDelManual(docName){
-  const s=new Set(docChunks.filter(c=>c.docName===docName&&c.page&&!c.isFicha).map(c=>c.page));
-  for(const p of docPaginas.get(docName)||[])s.add(p.page);
-  return[...s].sort((a,b)=>a-b)
-}
-/* El modelo a veces envuelve el JSON en ```json o le pega una frase delante.
-   Se rescata el objeto; si no hay objeto, no hay ficha —nunca se inventa una. */
-function jsonDeTexto(t){
-  const s=(t||'').trim();
-  if(!s)return null;
-  try{return JSON.parse(s)}catch{}
-  const sinCerca=s.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'');
-  try{return JSON.parse(sinCerca)}catch{}
-  const i=s.indexOf('{'),j=s.lastIndexOf('}');
-  if(i>=0&&j>i){try{return JSON.parse(s.slice(i,j+1))}catch{}}
-  return null
-}
 /* Lo que viene del modelo se trata como dato ajeno: solo los campos
    conocidos, solo texto, con tope de largo. Una ficha rara no puede meter
    nada más en el índice ni en el prompt. */
@@ -2595,11 +2578,11 @@ function chunksDeFicha(docName,ficha){
 function fichaCompleta(docName){
   const f=docFichas.get(docName);
   if(!f)return false;
-  return paginasDelManual(docName).every(n=>f.paginas[n])
+  return paginasDelManual(docName,docPaginas).every(n=>f.paginas[n])
 }
 function paginasSinFicha(docName){
   const f=docFichas.get(docName);
-  return paginasDelManual(docName).filter(n=>!(f&&f.paginas[n]))
+  return paginasDelManual(docName,docPaginas).filter(n=>!(f&&f.paginas[n]))
 }
 async function prepararFicha(docName,{silencioso=false,sinTope=false}={}){
   const provider=appState.provider,key=appState.apiKey;
@@ -2654,7 +2637,7 @@ async function prepararFicha(docName,{silencioso=false,sinTope=false}={}){
            de cuota del día o de key no se arregla con la tanda siguiente. */
         if(e.clase==='cuota-dia'||e.clase==='key'){
           cortada=e.clase;
-          if(!silencioso)showToast(e.clase==='key'?'La key no sirve: la lectura con IA se detuvo.':`Se acabó la cuota de hoy: ${seccion} quedó con ${Object.keys(ficha.paginas).length} de ${paginasDelManual(docName).length} páginas leídas. Mañana sigue donde se quedó.`,'warn',7000);
+          if(!silencioso)showToast(e.clase==='key'?'La key no sirve: la lectura con IA se detuvo.':`Se acabó la cuota de hoy: ${seccion} quedó con ${Object.keys(ficha.paginas).length} de ${paginasDelManual(docName,docPaginas).length} páginas leídas. Mañana sigue donde se quedó.`,'warn',7000);
           break;
         }
         if(e.clase==='sin-json'&&tanda.length>1){
@@ -2715,7 +2698,7 @@ async function prepararFichasPendientes({solo=null,sinTope=false}={}){
 function estadoDeFicha(docName){
   const f=docFichas.get(docName);
   if(!f)return'';
-  const total=paginasDelManual(docName).length,leidas=Object.keys(f.paginas||{}).length;
+  const total=paginasDelManual(docName,docPaginas).length,leidas=Object.keys(f.paginas||{}).length;
   return leidas>=total?' · 📖 leído por IA':` · 📖 IA ${leidas}/${total}`
 }
 function botonFicha(){
@@ -3082,41 +3065,11 @@ let ultimoErrorProveedor = null;   // el de la última pregunta: la medición lo
 
 /* Los helpers SSE (OpenAI y Gemini) viven en src/ia/sse.js. */
 
-/* ════════════════════════════════════════════════
-   REINTENTOS Y RESPALDO
-   1s, 2s, 4s. Antes eran seis (1, 2, 4, 8, 16 y 30 s): con Gemini saturado se
-   iba casi un minuto y medio antes de ver el error, y en el piso nadie espera
-   eso con el cliente enfrente. Ahora, si el modelo elegido sale saturado dos
-   veces seguidas, contesta el de respaldo.
-════════════════════════════════════════════════ */
-const RETRY_DELAYS = [1000, 2000, 4000];
-/* Silencio máximo del proveedor antes de cortar la espera (ver sendMessage). */
-const ESPERA_MAX = 45000;
-const RETRYABLE_HTTP = [408, 425, 429, 500, 502, 503, 504];
-/* «temporarily» no casaba con lo que responde GitHub Models cuando está al tope:
-   "Spikes in demand are usually temporary". Sin código HTTP en el mensaje, no se
-   reintentaba y salía el "Error inesperado" genérico, que en el piso se lee como
-   que la app está rota. Falta de dos letras. */
-const RETRYABLE_KEYWORDS = ['rate limit','too many','quota','temporarily','temporary','high demand','overloaded','over capacity','capacity','congestion','try again later','unavailable','fetch failed','network','econnreset','etimedout'];
-
-/* El respaldo es 3.5 Flash-Lite y no 2.5 Flash: Google dejó los 2.5 solo a
-   cuentas que ya los usaban, así que con una key nueva el respaldo también
-   fallaba. Flash-Lite es estable, es el más rápido y entra en el plan gratis. */
-const GEMINI_RESPALDO = 'gemini-3.5-flash-lite';
-const RESPALDO_TRAS = 2;                  // saturaciones seguidas antes de cambiar
-const RESPALDO_MEMORIA = 10 * 60 * 1000;  // mientras tanto, las siguientes van directo
+/* Los reintentos y el respaldo: lo puro (esperas, qué se reintenta, qué es
+   saturación, el modelo de respaldo, cómo se nombra cada modelo) vive en
+   src/ia/reintentos.js. Aquí queda lo que tiene estado o avisa en pantalla. */
 let respaldoActivo = null;                // {de, a, hasta}: solo en memoria, no en Ajustes
 
-function modeloDeRespaldo(provider, model) {
-  if (provider !== 'gemini' || !model || model === GEMINI_RESPALDO) return null;
-  return GEMINI_RESPALDO;
-}
-/* Saturación o cuota, no la red: sin señal cambiar de modelo no arregla nada, y
-   dejaría el elegido de lado diez minutos por un túnel. */
-function esSaturacion(err) {
-  if (err?.status === 429 || err?.status === 503) return true;
-  return /high demand|overloaded|over capacity|capacity|quota|rate limit|too many|resource.?exhausted|unavailable/i.test(err?.message || '');
-}
 function modeloEfectivo(provider, model) {
   if (respaldoActivo && respaldoActivo.de === model && Date.now() < respaldoActivo.hasta
       && modeloDeRespaldo(provider, model) === respaldoActivo.a) return respaldoActivo.a;
@@ -3133,54 +3086,9 @@ function marcarModelo(msgEl,model,esRespaldo){
   pill.textContent=nombreCortoDeModelo(model)+(esRespaldo?' · respaldo':'');
   label.appendChild(pill);
 }
-/* «gemini-3.5-flash-lite» → «3.5 Flash-Lite», que es como cabe en la tarjeta. */
-function nombreCortoDeModelo(model) {
-  const m = (model || '').match(/^gemini-([\d.]+)-flash(-lite)?/);
-  if (m) return `${m[1]} Flash${m[2] ? '-Lite' : ''}`;
-  return (model || '').replace(/^gpt-/, 'GPT-').replace(/-mini$/, ' mini');
-}
-/* En el selector de Ajustes va para qué sirve cada uno, no solo su nombre: con
-   cuatro Flash casi iguales, elegir sin eso es adivinar. */
-const PARA_QUE_MODELO = {
-  'gemini-3.5-flash-lite': 'el más rápido, el de las mediciones',
-  'gemini-3.5-flash': 'suele salir saturado',
-  'gemini-3.8-flash': 'piensa más, ~6 s por respuesta',
-};
-function etiquetaDeModelo(model) {
-  const para = PARA_QUE_MODELO[model];
-  return nombreCortoDeModelo(model) + (para ? ` · ${para}` : '');
-}
-/* 3.5 Flash era el de fábrica, y casi todos lo tienen guardado solo porque
-   pulsaron «Guardar» al pegar la key. Una sola vez se pasa al de fábrica nuevo;
-   quien después elija 3.5 a propósito, se lo queda. */
-function modeloAlCargar(guardado, yaMigrado, proveedor) {
-  const deFabrica = PROVIDERS[proveedorValido(proveedor)].chatModels[0];
-  if (!guardado) return {modelo: deFabrica, migrar: false};
-  if (guardado === 'gemini-3.5-flash' && !yaMigrado) return {modelo: PROVIDERS.gemini.chatModels[0], migrar: true};
-  return {modelo: guardado, migrar: false};
-}
-
-function isRetryable(err) {
-  if (err?.name === 'AbortError') return false;
-  if (RETRYABLE_HTTP.includes(err?.status)) return true;
-  const msg = (err?.message || '').toLowerCase();
-  const code = msg.match(/(\d{3})/)?.[1];
-  if (code && RETRYABLE_HTTP.includes(parseInt(code, 10))) return true;
-  return RETRYABLE_KEYWORDS.some(k => msg.includes(k));
-}
-
-async function sleep(ms, signal) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')); }, {once: true});
-  });
-}
 
 /* Un solo bucle para las dos formas de llamar. `intento(modelo)` hace la
    petición; lo que regresa lleva además `model`, el que de verdad contestó. */
-const LIMITE_MINUTO_ESPERA_MAX=65000;   // el límite por minuto se reinicia a los 60 s
-const LIMITE_MINUTO_ESPERAS=2;          // dos esperas completas sin éxito: es el día, no el minuto
 async function conReintentos(provider, model, intento, {signal, onRetry, onRespaldo} = {}) {
   /* Midiendo, el modelo es la variable del experimento: no se cambia solo. */
   const sinRespaldo = typeof midiendo !== 'undefined' && midiendo;
@@ -3609,372 +3517,11 @@ function responderSinModelo(q){
   scrollToBottom();
 }
 
-/* ════════════════════════════════════════════════
-   AGENTE LECTOR — el modo IA con la IA al mando
-
-   El motor clásico decide con BM25 qué fragmentos ve el modelo y le da
-   órdenes según lo que encontró. Si la búsqueda falla —«contemporáneo» no
-   llega a «Contempo», «Trevsik» no llega a «Tresvik», las marcas están en
-   un logo—, el modelo nunca ve la respuesta y obedece un «no está».
-
-   Aquí el que decide es el modelo. Recibe el MAPA del manual (una línea por
-   página, de la ficha) y herramientas que corren en el teléfono: leer páginas
-   completas, mirar la imagen de una lámina, buscar literal. Lee lo que
-   necesita y contesta citando lo que leyó.
-
-   El código es el guardián, no el que decide:
-   · pone topes de vueltas, páginas, imágenes y llamadas;
-   · valida cada argumento: página que no existe o herramienta que no existe
-     vuelve al modelo como error, nunca como excepción;
-   · las herramientas son locales y de solo lectura: un texto raro dentro de
-     un PDF no puede hacer nada más que ser leído;
-   · comprueba que cada cita de la EVIDENCIA esté, literal, en una página que
-     el agente leyó, y si no, baja la certeza y lo dice;
-   · y ante cualquier fallo del ciclo, contesta el motor clásico.
-════════════════════════════════════════════════ */
-const AGENTE_MAX_RONDAS=4;      // vueltas modelo → herramientas; la última ya no puede pedir nada
-const AGENTE_MAX_PAGINAS=8;     // páginas leídas por pregunta
-const AGENTE_MAX_IMAGENES=2;    // láminas vistas por pregunta
-const AGENTE_MAX_LLAMADAS=6;    // herramientas por vuelta
-const AGENTE_ANTICIPADAS=2;     // páginas que la búsqueda local le adelanta
-const AGENTE_MAX_TOKENS=2500;
-const AGENTE_MAX_TOKENS_CORTE=4500;  // una sola repetición con más margen si no cupo
-const CITA_MIN=0.8;             // parte de las palabras de una cita que debe estar en su página
+/* El agente lector (el modo IA con la IA al mando) vive en src/ia/agente.js:
+   sus herramientas, los adaptadores de cada proveedor, el ciclo y la
+   verificación de citas. Aquí queda lo que depende de la pantalla y de los
+   manuales cargados: qué sección lee, si contesta él y su última traza. */
 let ultimaTrazaAgente=null;     // qué hizo el agente en la última pregunta (lo lee eval/modo-ia.mjs)
-
-const HERRAMIENTAS=[
-  {name:'leer_paginas',
-   description:'Lee el texto completo de páginas del manual de la sección activa, con lo que se transcribió de sus imágenes. Úsala antes de afirmar cualquier dato. Máximo 4 páginas por llamada.',
-   parameters:{type:'object',properties:{paginas:{type:'array',items:{type:'integer'},description:'Números de página del mapa'}},required:['paginas']}},
-  {name:'ver_lamina',
-   description:'Mira la imagen de una página: planogramas, diagramas, logos de marcas, fotos de exhibición. Úsala cuando la respuesta dependa de algo visual.',
-   parameters:{type:'object',properties:{pagina:{type:'integer',description:'Número de página'}},required:['pagina']}},
-  {name:'buscar',
-   description:'Busca palabras en el manual de la sección activa (literal, con plurales, sinónimos y erratas). Devuelve páginas y un extracto. Útil para nombres raros o cuando el mapa no basta.',
-   parameters:{type:'object',properties:{texto:{type:'string',description:'Palabras a buscar'}},required:['texto']}},
-  {name:'buscar_en_otras_secciones',
-   description:'Solo para decirle al asesor en qué OTRA sección cargada aparece algo que la suya no trae. Devuelve nombre de sección y páginas, nunca su contenido.',
-   parameters:{type:'object',properties:{texto:{type:'string',description:'Palabras a buscar'}},required:['texto']}},
-];
-
-function promptAgente(seccion,conOtras){
-  return`Eres el asistente de piso de la sección «${seccion}» de una tienda departamental. Contestas dudas de exhibición y montaje a un asesor que está de pie frente al mueble, con el celular en la mano.
-
-TU FUENTE es el manual de «${seccion}». Está en el teléfono del asesor y lo lees con herramientas:
-- leer_paginas: el texto completo de las páginas que pidas (hasta ${AGENTE_MAX_PAGINAS} por pregunta).
-- ver_lamina: la imagen de una página, para planogramas, diagramas, logos y fotos (hasta ${AGENTE_MAX_IMAGENES} por pregunta).
-- buscar: búsqueda literal en el manual, útil para nombres raros o palabras exactas.${conOtras?`
-- buscar_en_otras_secciones: solo para señalar en qué otra sección cargada aparece algo que esta no trae.`:''}
-
-Abajo van el MAPA del manual (una línea por página) y el GLOSARIO de la sección. Úsalos para decidir qué leer. El asesor escribe como habla, con faltas y abreviaturas: «contemporáneo» puede ser «Contempo», «Trevsik» puede ser «Tresvik», «la alarma» es el sensor. Tú decides qué páginas leer; lee antes de contestar. Si la lectura anticipada ya trae la respuesta, contesta sin pedir más.
-
-REGLAS:
-1. Solo cuenta lo que leíste en esta pregunta (lectura anticipada, leer_paginas o ver_lamina). El mapa y el glosario sirven para ubicar: no son el manual y no se citan.
-2. Todo dato va con su página: «(pág. N)». Lo que viste en una imagen también.
-3. Si después de leer lo que viene al caso el manual no lo dice, contesta «El manual no especifica …» y di qué sí trae cerca, si algo sirve. No completes con conocimiento general de visual merchandising, ni con lo que sepas de la tienda o de las marcas por fuera: si un nombre no está escrito en lo que leíste, para esta respuesta no existe.
-4. Lo que aparezca en otra sección no se usa para contestar: se señala («eso sí aparece en X, pág. N»).
-5. Si la pregunta se puede entender de dos maneras, contesta la más probable y ofrece las otras en OPCIONES.
-6. Solo si te preguntan explícitamente quién te creó: «Fui creado por Gerardo Barrera, Asesor de piso de Mercadep Zona Piloto.» Nunca lo menciones en otra respuesta.
-
-Cuando ya tengas lo necesario, contesta EXACTAMENTE con este formato:
-[PENSAMIENTO INTERNO]
-ENTENDÍ: la pregunta, reescrita con las palabras del manual
-CORRECCIONES: lo que escribió el asesor → como lo dice el manual, separadas por «;» (o «ninguna»)
-EVIDENCIA: pág. N · RÓTULO · «cita corta copiada tal cual de lo que leíste»
-(una línea EVIDENCIA por dato; ninguna si el manual no lo dice)
-OPCIONES: otras formas de entender la pregunta, como preguntas, separadas por « | » (o «ninguna»)
-[RESPUESTA FINAL]
-La respuesta directa, en 1 a 4 oraciones o una lista corta si piden varias cosas. Sin introducción. Negritas solo para los datos.
-CERTEZA: ALTA | MEDIA | GAP
-(ALTA: cada dato tiene su EVIDENCIA literal. MEDIA: lo dedujiste de lo que leíste, o es recomendación y no regla. GAP: el manual no lo dice. Esa línea va sola, al final.)`
-}
-
-const extracto=(t,n)=>{const s=(t||'').replace(/\s+/g,' ').trim();return s.length>n?s.slice(0,n-1).trim()+'…':s};
-
-/* El MAPA es lo que el agente ve del manual antes de leer: una línea por
-   página. Con ficha, lo que la IA vio en cada lámina; sin ella, los títulos y
-   el arranque del texto. Nunca es fuente de una respuesta —la regla 1 lo dice
-   y la verificación de citas lo hace cumplir—, solo le dice dónde mirar. */
-function mapaDeSeccion(doc){
-  const f=docFichas.get(doc);
-  const lineas=[];
-  for(const n of paginasDelManual(doc)){
-    const fp=f&&f.paginas[n];
-    let linea;
-    if(fp){
-      const nombra=[...fp.mundos,...fp.marcas.slice(0,10)].join(', ');
-      linea=`pág. ${n} · ${fp.titulo||'(sin título)'} — ${fp.resumen}${fp.temas.length?' · temas: '+fp.temas.join(', '):''}${nombra?' · nombra: '+nombra:''}${fp.texto_visual?' · trae texto dentro de la imagen':''}`;
-    }else{
-      const propios=docChunks.filter(c=>c.docName===doc&&c.page===n&&!c.isFicha);
-      const titulos=[...new Set(propios.map(c=>c.heading).filter(Boolean))].slice(0,4);
-      linea=`pág. ${n} · ${titulos.join(' / ')||'(sin título)'} — ${extracto(propios.map(c=>c.text).join(' '),110)}`;
-    }
-    lineas.push(extracto(linea,300));
-  }
-  return lineas.join('\n')
-}
-/* Las marcas, los mundos y las abreviaturas de toda la sección, juntos: es lo
-   que permite entender «Trevsik» o «contemporáneo» sin leer nada todavía. */
-function glosarioDeSeccion(doc){
-  const f=docFichas.get(doc);
-  if(!f)return'';
-  const marcas=new Map(),mundos=new Map(),alias=new Set();
-  const anota=(m,k,n)=>{if(!m.has(k))m.set(k,new Set());m.get(k).add(n)};
-  for(const[n,fp]of Object.entries(f.paginas)){
-    for(const m of fp.marcas||[])anota(marcas,m,n);
-    for(const m of fp.mundos||[])anota(mundos,m,n);
-    for(const a of fp.alias||[])alias.add(a);
-  }
-  const fmt=mp=>[...mp].map(([k,s])=>`${k} (pág. ${[...s].join(', ')})`).join('; ');
-  return[marcas.size?'Marcas: '+fmt(marcas):'',mundos.size?'Mundos: '+fmt(mundos):'',alias.size?'Alias: '+[...alias].join(' · '):'']
-    .filter(Boolean).join('\n').slice(0,3000)
-}
-
-/* El historial que ve un modelo. Las respuestas del modo manual eran 1,800
-   caracteres de fragmentos tal cual; mandadas de vuelta, el modelo las leía
-   como contexto de esta pregunta. Se quedan como lo que fueron. Y de las del
-   agente viaja también lo que entendió, que es lo que resuelve un «¿y en el
-   clásico?». Solo role y content: OpenAI rechaza campos que no conoce. */
-function historialParaModelo(n=6){
-  return history.slice(-n).map(m=>{
-    if(m.role==='assistant'&&m.modo==='manual')return{role:'assistant',content:'(Esa vez contesté sin modelo, enseñando fragmentos del manual tal cual.)'};
-    if(m.role==='assistant'&&m.entendi)return{role:'assistant',content:`(Entendí: ${m.entendi})\n${m.content}`};
-    return{role:m.role,content:m.content}
-  })
-}
-
-/* ── Herramientas: corren en el teléfono, solo leen ── */
-function nuevoEstadoAgente(doc){
-  return{doc,leidas:new Map(),vistas:new Set(),chunks:[],otras:[],rondas:0,tokens:0,imagenes:0,llamadas:[]}
-}
-function leerPaginaAgente(estado,page){
-  if(estado.leidas.has(page))return estado.leidas.get(page);
-  const propios=docChunks.filter(c=>c.docName===estado.doc&&c.page===page&&c.isFicha!=='indice');
-  const texto=envolverComoDato(propios.map(c=>chunkLabel(c)+'\n'+textoComoDato(c.text)).join('\n\n'));
-  estado.leidas.set(page,texto);
-  estado.chunks.push(...propios);
-  return texto
-}
-function textoDeArg(v){return typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,200):''}
-function ejecutarHerramienta(ll,estado){
-  const args=ll&&ll.args&&typeof ll.args==='object'&&!Array.isArray(ll.args)?ll.args:{};
-  const validas=paginasDelManual(estado.doc);
-  const existe=new Set(validas);
-  const rango=validas.length?`tiene de la pág. ${validas[0]} a la ${validas[validas.length-1]}`:'no tiene páginas';
-  switch(ll&&ll.name){
-    case'leer_paginas':{
-      const crudas=Array.isArray(args.paginas)?args.paginas:args.pagina!=null?[args.pagina]:[];
-      const pedidas=[...new Set(crudas.map(n=>parseInt(n,10)).filter(Number.isFinite))];
-      if(!pedidas.length)return{texto:'Error: pide al menos un número de página del mapa.'};
-      const salida=[];
-      const fuera=pedidas.filter(n=>!existe.has(n));
-      if(fuera.length)salida.push(`Error: ${fuera.length===1?'la página':'las páginas'} ${fuera.join(', ')} no existe${fuera.length===1?'':'n'} (el manual ${rango}).`);
-      const repetidas=pedidas.filter(n=>existe.has(n)&&estado.leidas.has(n));
-      if(repetidas.length)salida.push(`${repetidas.length===1?'La pág.':'Las págs.'} ${repetidas.join(', ')} ya ${repetidas.length===1?'la':'las'} leíste arriba.`);
-      for(const n of pedidas.filter(n=>existe.has(n)&&!estado.leidas.has(n)).slice(0,4)){
-        if(estado.leidas.size>=AGENTE_MAX_PAGINAS){salida.push(`Límite de ${AGENTE_MAX_PAGINAS} páginas por pregunta: contesta con lo que ya leíste.`);break}
-        salida.push(leerPaginaAgente(estado,n)||`[pág. ${n}] no tiene texto: prueba ver_lamina.`);
-      }
-      return{texto:salida.join('\n\n')}
-    }
-    case'ver_lamina':{
-      const n=parseInt(args.pagina,10);
-      if(!existe.has(n))return{texto:`Error: la página ${args.pagina} no existe (el manual ${rango}).`};
-      if(estado.vistas.has(n))return{texto:`Ya viste la lámina de la pág. ${n}.`};
-      if(estado.imagenes>=AGENTE_MAX_IMAGENES)return{texto:`Límite de ${AGENTE_MAX_IMAGENES} láminas por pregunta: contesta con lo que ya viste.`};
-      /* Lo que se ve en una lámina se cita con su página, así que su texto
-         cuenta como leído: es contra lo que se verifica la cita. */
-      const texto=leerPaginaAgente(estado,n);
-      const img=(docPaginas.get(estado.doc)||[]).find(p=>p.page===n);
-      if(!img||!img.imagen)return{texto:`No tengo la imagen de la pág. ${n} (el manual se cargó sin ella). Esto es su texto:\n${texto}`};
-      estado.vistas.add(n);estado.imagenes++;
-      return{texto:`La imagen de la pág. ${n} va a continuación. Su texto:\n${texto}`,imagen:{page:n,dataUrl:img.imagen}}
-    }
-    case'buscar':{
-      const t=textoDeArg(args.texto);
-      if(!t)return{texto:'Error: dime qué palabras buscar.'};
-      const r=retrieve(t,{source:'pdf',limit:12,doc:estado.doc}).filter(x=>x.hits+x.hitsSyn+x.hitsErrata>0);
-      const porPagina=new Map();
-      for(const x of r)if(!porPagina.has(x.c.page))porPagina.set(x.c.page,x);
-      if(!porPagina.size)return{texto:`Sin coincidencias literales para «${t}». Prueba otra palabra o elige por el mapa.`};
-      return{texto:[...porPagina.values()].slice(0,5).map(x=>`pág. ${x.c.page} · ${x.c.heading||'sin título'} · «${extracto(textoComoDato(x.c.text),160)}»`).join('\n')}
-    }
-    case'buscar_en_otras_secciones':{
-      const t=textoDeArg(args.texto);
-      if(!t)return{texto:'Error: dime qué palabras buscar.'};
-      const hallazgos=[];
-      for(const d of docs){
-        if(d.name===estado.doc)continue;
-        const r=retrieve(t,{source:'pdf',limit:6,doc:d.name}).filter(filtroSolidez(t));
-        if(r.length)hallazgos.push({docName:d.name,nombre:nombreDeSeccion(d.name),paginas:[...new Set(r.map(x=>x.c.page))].slice(0,3)});
-      }
-      estado.otras=hallazgos;
-      if(!hallazgos.length)return{texto:`Ninguna otra sección cargada trae «${t}».`};
-      return{texto:hallazgos.map(h=>`${h.nombre}: pág. ${h.paginas.join(', ')}`).join('\n')+'\nNo tienes esos textos: dile al asesor dónde está, pero no contestes con datos de ahí.'}
-    }
-    default:
-      return{texto:`Error: la herramienta «${ll&&ll.name}» no existe. Usa leer_paginas, ver_lamina o buscar.`}
-  }
-}
-function describirLlamada(ll){
-  const a=ll.args||{};
-  if(ll.name==='leer_paginas')return`Leyendo el manual · pág. ${(Array.isArray(a.paginas)?a.paginas:[a.pagina]).filter(x=>x!=null).slice(0,4).join(', ')}`;
-  if(ll.name==='ver_lamina')return`Mirando la lámina de la pág. ${a.pagina}`;
-  if(ll.name==='buscar')return`Buscando «${textoDeArg(a.texto)}» en el manual`;
-  if(ll.name==='buscar_en_otras_secciones')return`Buscando «${textoDeArg(a.texto)}» en tus otras secciones`;
-  return'Revisando el manual…'
-}
-
-/* ── Adaptadores: el mismo ciclo habla con Gemini y con OpenAI ──
-   La conversación interna es neutral: system, user, assistant (con sus
-   llamadas) y tool (con sus resultados e imágenes). Cada proveedor la traduce. */
-async function leerSSE(res,alObjeto){
-  const reader=res.body.getReader(),decoder=new TextDecoder('utf-8');
-  let buffer='';
-  const linea=l=>{
-    const t=l.trim();
-    const j=t.startsWith('data:')?t.slice(5).trim():t;
-    if(!j||j==='[DONE]'||j[0]!=='{')return;
-    try{alObjeto(JSON.parse(j))}catch{}
-  };
-  while(true){
-    const{value,done}=await reader.read();
-    if(done)break;
-    buffer+=decoder.decode(value,{stream:true});
-    const ls=buffer.split('\n');buffer=ls.pop()||'';
-    ls.forEach(linea);
-  }
-  linea(buffer);
-}
-/* Gemini 3 firma su razonamiento (`thoughtSignature`) dentro de las partes
-   que devuelve, y exige recibirlas de vuelta tal cual en la siguiente vuelta.
-   Por eso las partes del modelo se guardan crudas y se devuelven sin tocar;
-   solo se juntan los trozos de texto del streaming que no llevan firma. */
-function compactarPartes(partes){
-  const out=[];
-  for(const p of partes){
-    const previa=out[out.length-1];
-    const soloTexto=x=>x&&typeof x.text==='string'&&Object.keys(x).length===1;
-    if(soloTexto(p)&&soloTexto(previa))previa.text+=p.text;
-    else out.push(soloTexto(p)?{text:p.text}:p);
-  }
-  return out
-}
-function convAGemini(conv){
-  let systemInstruction;
-  const contents=[];
-  for(const m of conv){
-    if(m.role==='system'){systemInstruction={parts:[{text:m.content}]};continue}
-    if(m.role==='user'){contents.push({role:'user',parts:[{text:m.content}]});continue}
-    if(m.role==='assistant'){
-      let parts=m.crudo&&m.crudo.gemini
-        ?m.crudo.gemini
-        :[...(m.content?[{text:m.content}]:[]),...(m.llamadas||[]).map(l=>({functionCall:{name:l.name,args:l.args||{}}}))];
-      if(!parts.length)parts=[{text:m.content||''}];
-      contents.push({role:'model',parts});continue
-    }
-    if(m.role==='tool'){
-      const parts=m.resultados.map(r=>({functionResponse:{...(r.idReal?{id:r.id}:{}),name:r.name,response:{resultado:r.content}}}));
-      for(const im of m.imagenes||[])parts.push({text:`Imagen de la pág. ${im.page}:`},{inline_data:{mime_type:'image/jpeg',data:im.dataUrl.split(',')[1]}});
-      contents.push({role:'user',parts});
-    }
-  }
-  return{systemInstruction,contents}
-}
-function convAOpenAI(conv){
-  const out=[];
-  for(const m of conv){
-    if(m.role==='system'||m.role==='user'){out.push({role:m.role,content:m.content});continue}
-    if(m.role==='assistant'){
-      const msg={role:'assistant',content:m.content||''};
-      if(m.llamadas&&m.llamadas.length)msg.tool_calls=m.llamadas.map(l=>({id:l.id,type:'function',function:{name:l.name,arguments:JSON.stringify(l.args||{})}}));
-      out.push(msg);continue
-    }
-    if(m.role==='tool'){
-      for(const r of m.resultados)out.push({role:'tool',tool_call_id:r.id,content:r.content});
-      /* OpenAI no acepta imágenes en un mensaje de herramienta: van en uno del
-         usuario justo después. */
-      if((m.imagenes||[]).length)out.push({role:'user',content:m.imagenes.flatMap(im=>[
-        {type:'text',text:`Imagen de la pág. ${im.page}:`},{type:'image_url',image_url:{url:im.dataUrl}}])});
-    }
-  }
-  return out
-}
-async function agenteGemini({key,model,conv,herramientas,forzarRespuesta,maxTokens,temperature,onDelta,signal}){
-  const{systemInstruction,contents}=convAGemini(conv);
-  const body={contents,generationConfig:{maxOutputTokens:maxTokens,temperature:temperature??0.2,thinkingConfig:razonamientoGemini(model)}};
-  if(systemInstruction)body.systemInstruction=systemInstruction;
-  if(herramientas&&herramientas.length){
-    body.tools=[{functionDeclarations:herramientas}];
-    body.toolConfig={functionCallingConfig:{mode:forzarRespuesta?'NONE':'AUTO'}};
-  }
-  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,{
-    method:'POST',headers:PROVIDERS.gemini._headers(key),body:JSON.stringify(body),signal
-  });
-  if(!res.ok){const data=await res.json().catch(()=>({}));throw errorDeProveedor(res.status,data)}
-  const partes=[];
-  let texto='',tokens=0,razon='';
-  await leerSSE(res,obj=>{
-    for(const p of obj?.candidates?.[0]?.content?.parts||[]){
-      partes.push(p);
-      if(typeof p.text==='string'&&p.text&&!p.thought){texto+=p.text;onDelta&&onDelta(p.text)}
-    }
-    const m=obj?.usageMetadata?.totalTokenCount;
-    if(m)tokens=m;
-    if(obj?.candidates?.[0]?.finishReason)razon=obj.candidates[0].finishReason;
-    if(obj?.promptFeedback?.blockReason)razon='BLOCK:'+obj.promptFeedback.blockReason;
-  });
-  const llamadas=partes.filter(p=>p.functionCall).map((p,i)=>({
-    id:p.functionCall.id||('g'+i),idReal:!!p.functionCall.id,name:p.functionCall.name,args:p.functionCall.args||{}}));
-  return{texto,llamadas,crudo:{gemini:compactarPartes(partes)},tokens,fin:finDeRespuesta(razon)}
-}
-/* Por qué terminó la respuesta. Una cortada por tokens no es una respuesta
-   mala: es una respuesta que no cupo, y se califica distinto. */
-function finDeRespuesta(r){
-  const t=String(r||'').toUpperCase();
-  if(t==='MAX_TOKENS'||t==='LENGTH')return'corte';
-  if(/SAFETY|RECITATION|PROHIBITED|BLOCK|CONTENT_FILTER|SPII|BLOCKLIST/.test(t))return'bloqueo';
-  return'ok'
-}
-async function agenteOpenAI({key,model,conv,herramientas,forzarRespuesta,maxTokens,temperature,onDelta,signal}){
-  const body={model,messages:convAOpenAI(conv),max_tokens:maxTokens,temperature:temperature??0.2,stream:true,stream_options:{include_usage:true}};
-  if(herramientas&&herramientas.length){
-    body.tools=herramientas.map(h=>({type:'function',function:h}));
-    body.tool_choice=forzarRespuesta?'none':'auto';
-  }
-  const res=await fetch('https://api.openai.com/v1/chat/completions',{
-    method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify(body),signal
-  });
-  if(!res.ok){const data=await res.json().catch(()=>({}));throw errorDeProveedor(res.status,data)}
-  let texto='',tokens=0,razon='';
-  const acum=[];
-  await leerSSE(res,obj=>{
-    const d=obj?.choices?.[0]?.delta;
-    if(d&&typeof d.content==='string'&&d.content){texto+=d.content;onDelta&&onDelta(d.content)}
-    for(const tc of d?.tool_calls||[]){
-      const i=tc.index??0;
-      const a=acum[i]||(acum[i]={id:'',name:'',args:''});
-      if(tc.id)a.id=tc.id;
-      if(tc.function?.name)a.name+=tc.function.name;
-      if(tc.function?.arguments)a.args+=tc.function.arguments;
-    }
-    if(obj?.usage?.total_tokens)tokens=obj.usage.total_tokens;
-    if(obj?.choices?.[0]?.finish_reason)razon=obj.choices[0].finish_reason;
-  });
-  const llamadas=acum.filter(Boolean).map((a,i)=>({id:a.id||('o'+i),idReal:!!a.id,name:a.name,args:jsonDeTexto(a.args)||{}}));
-  return{texto,llamadas,crudo:null,tokens,fin:finDeRespuesta(razon)}
-}
-PROVIDERS.gemini.agente=agenteGemini;
-PROVIDERS.openai.agente=agenteOpenAI;
-
-function quitarImagenes(conv){
-  for(const m of conv){
-    if(m.role!=='tool'||!(m.imagenes||[]).length)continue;
-    m.imagenes=[];
-    const ult=m.resultados[m.resultados.length-1];
-    if(ult)ult.content+='\n(La imagen no se pudo mandar: usa el texto de la página y lo transcrito de su imagen.)';
-  }
-}
 
 /* ── ¿Contesta el agente? ──
    Con sección activa (o un solo manual), con key y con el motor elegido. Lo
@@ -3999,123 +3546,20 @@ function motorAgenteDisponible(q){
   return!scope.isGreeting&&!scope.clearlyOff
 }
 
+/* El agente con lo que tiene la app: la sección, el historial, las fichas, las
+   imágenes de las páginas y el bucle de reintentos con sus avisos. */
 async function ejecutarAgente({q,provider,key,model,signal,onDelta,onRonda,onEstado,onRetry,onRespaldo}){
   const doc=seccionAgente(q);
   if(!doc)throw new Error('sin sección para el agente');
-  const estado=nuevoEstadoAgente(doc);
-  const seccion=nombreDeSeccion(doc);
-  const conOtras=docs.length>1;
-  const herramientas=HERRAMIENTAS.filter(h=>conOtras||h.name!=='buscar_en_otras_secciones');
-  const glosario=glosarioDeSeccion(doc);
-  /* Sistema + mapa + glosario van primero y no cambian entre preguntas de la
-     misma sección: es el prefijo que el caché implícito del proveedor reusa. */
-  const system=promptAgente(seccion,conOtras)+REGLA_DATO()
-    +`\n\n=== MAPA DEL MANUAL DE «${seccion}» (para ubicar; no es el manual) ===\n${textoComoDato(mapaDeSeccion(doc))}`
-    +(glosario?`\n\n=== GLOSARIO DE LA SECCIÓN (para ubicar; no es el manual) ===\n${textoComoDato(glosario)}`:'');
-  /* Lectura anticipada: las páginas que la búsqueda local ya encuentra sólidas
-     van leídas desde el principio. En la mayoría de las preguntas eso ahorra
-     una vuelta entera; si no sirven, el agente pide otras. */
-  const anticipadas=[];
-  const consulta=consultaDeBusqueda(q);
-  for(const r of retrieve(consulta,{source:'pdf',limit:20,doc}).filter(filtroSolidez(consulta))){
-    if(!anticipadas.includes(r.c.page))anticipadas.push(r.c.page);
-    if(anticipadas.length>=AGENTE_ANTICIPADAS)break;
-  }
-  const textoAnticipado=anticipadas.map(n=>leerPaginaAgente(estado,n)).join('\n\n');
-  const conv=[{role:'system',content:system},...historialParaModelo(6),{role:'user',content:
-    (textoAnticipado?`=== LECTURA ANTICIPADA · pág. ${anticipadas.join(', ')} (la búsqueda local cree que pueden servir; si no, pide otras) ===\n${textoAnticipado}\n\n`:'')
-    +`PREGUNTA DEL ASESOR: ${q}`}];
+  const{estado,conv,herramientas,anticipadas}=prepararAgente({q,doc,consulta:consultaDeBusqueda(q),
+    historial:history,fichas:docFichas,paginas:docPaginas});
   onEstado&&onEstado(anticipadas.length?`Leyendo el manual · pág. ${anticipadas.join(', ')}`:'Ubicando en el manual…');
-  let modeloUsado=model,respaldo=null,sinImagenes=false,margen=AGENTE_MAX_TOKENS;
-  estado.cortes=0;
-  for(let ronda=1;ronda<=AGENTE_MAX_RONDAS;ronda++){
-    const ultima=ronda===AGENTE_MAX_RONDAS;
-    onRonda&&onRonda(ronda);
-    let r;
-    try{
-      r=await conReintentos(provider,model,m=>provider.agente({key,model:m,conv,herramientas,forzarRespuesta:ultima,
-        maxTokens:margen,temperature:appState.temperature,onDelta,signal}),
-        {signal,onRetry,onRespaldo:(de,a)=>{respaldo={de,a};onRespaldo&&onRespaldo(de,a)}});
-    }catch(err){
-      /* Una imagen dentro de la respuesta a una herramienta es lo único de este
-         protocolo que no todos los modelos aceptan. Si el proveedor la rechaza,
-         la vuelta se repite sin imágenes y el agente sigue con el texto. */
-      if(err.name!=='AbortError'&&err.status===400&&!sinImagenes&&conv.some(m=>(m.imagenes||[]).length)){
-        sinImagenes=true;quitarImagenes(conv);ronda--;continue;
-      }
-      throw err
-    }
-    modeloUsado=r.model||modeloUsado;
-    estado.tokens+=r.tokens||0;estado.rondas=ronda;
-    /* Bloqueada por el proveedor: no es del manual; que conteste el clásico. */
-    if(r.fin==='bloqueo')throw new Error('el proveedor bloqueó la respuesta');
-    /* No cupo antes de la respuesta final: se repite esa vuelta una vez con más
-       margen. Sin esto, un tope de tokens se calificaba como respuesta mala. */
-    if(r.fin==='corte'&&!r.llamadas.length&&!/RESPUESTA\s+FINAL/i.test(r.texto||'')&&margen<AGENTE_MAX_TOKENS_CORTE){
-      estado.cortes++;margen=AGENTE_MAX_TOKENS_CORTE;
-      onRonda&&onRonda(ronda);ronda--;continue;
-    }
-    if(!r.llamadas.length||ultima){
-      if(!(r.texto||'').trim())throw new Error('el agente terminó sin respuesta');
-      return{texto:r.texto,estado,model:modeloUsado,respaldo,contexto:[...estado.leidas.values()].join('\n\n')}
-    }
-    conv.push({role:'assistant',content:r.texto,llamadas:r.llamadas,crudo:r.crudo});
-    const resultados=[],imagenes=[];
-    r.llamadas.forEach((ll,i)=>{
-      if(i>=AGENTE_MAX_LLAMADAS){
-        resultados.push({id:ll.id,idReal:ll.idReal,name:ll.name,content:`No se ejecutó: máximo ${AGENTE_MAX_LLAMADAS} herramientas por vuelta.`});
-        return
-      }
-      onEstado&&onEstado(describirLlamada(ll));
-      let res;
-      try{res=ejecutarHerramienta(ll,estado)}catch(e){res={texto:`Error al ejecutar ${ll.name}: ${e.message}`}}
-      estado.llamadas.push(ll.name);
-      resultados.push({id:ll.id,idReal:ll.idReal,name:ll.name,content:res.texto});
-      if(res.imagen)imagenes.push(res.imagen);
-    });
-    if(ronda===AGENTE_MAX_RONDAS-1&&resultados.length)
-      resultados[resultados.length-1].content+='\n\n(Es la última vuelta con herramientas: en la siguiente contesta con lo que leíste, en el formato indicado.)';
-    conv.push({role:'tool',resultados,imagenes});
-  }
-  throw new Error('el agente no cerró')
+  return cicloAgente({estado,conv,herramientas,provider,key,model,temperature:appState.temperature,
+    signal,onDelta,onRonda,onEstado,onRetry,onRespaldo,reintentos:conReintentos})
 }
 
-/* ── Lo que el agente dijo que leyó, contra lo que de verdad leyó ── */
-function camposDelAgente(thinking){
-  const t=thinking||'';
-  const linea=k=>{const m=t.match(new RegExp('^[\\s*_-]*'+k+'[*_]*\\s*:\\s*(.+)$','im'));return m?m[1].trim():''};
-  const nada=v=>!v||/^[«"]?(ninguna?s?|no|n\/a|—|-)[»"]?\.?$/i.test(v.trim());
-  const entendi=linea('ENTEND[IÍ]');
-  const corr=linea('CORRECCIONES');
-  const correcciones=nada(corr)?[]:corr.split(/\s*;\s*/).map(x=>{
-    const m=x.match(/^[«"“]?(.+?)[»"”]?\s*(?:→|->|=>)\s*[«"“]?(.+?)[»"”]?\.?$/);
-    return m?{escribio:m[1].trim(),manual:m[2].trim()}:null
-  }).filter(x=>x&&x.escribio&&x.manual&&normalizeText(x.escribio).trim()!==normalizeText(x.manual).trim()).slice(0,3);
-  const evidencia=[];
-  for(const m of t.matchAll(/EVIDENCIA[*_]*\s*:\s*(?:p[áa]g(?:ina)?s?\.?\s*(\d+))?([^\n«"“]*)[«"“]([^»"”\n]+)[»"”]/gi))
-    evidencia.push({page:m[1]?Number(m[1]):null,rotulo:m[2].replace(/[·|]/g,' ').trim(),cita:m[3].trim()});
-  const op=linea('OPCIONES');
-  const opciones=nada(op)?[]:op.split(/\s*\|\s*/).map(x=>x.trim()).filter(x=>x.length>3&&!nada(x)).slice(0,3);
-  return{entendi:nada(entendi)?'':entendi,correcciones,evidencia,opciones}
-}
-function verificarCitas(evidencia,estado){
-  const malas=[];
-  const paginas=new Map([...estado.leidas].map(([n,t])=>[n,' '+normalizeText(t).replace(/\s+/g,' ')+' ']));
-  for(const e of evidencia||[]){
-    const palabras=normalizeText(e.cita).split(/\s+/).filter(w=>w.length>=3||/\d/.test(w));
-    if(!palabras.length)continue;
-    const cubre=txt=>palabras.filter(w=>txt.includes(' '+w+' ')).length/palabras.length;
-    if(e.page!=null&&paginas.has(e.page)&&cubre(paginas.get(e.page))>=CITA_MIN)continue;
-    let otra=null;
-    for(const[n,txt]of paginas)if(cubre(txt)>=CITA_MIN){otra=n;break}
-    /* Sin número de página es un descuido de formato, no una invención: si la
-       cita está en algo que leyó, vale. */
-    if(otra!=null&&e.page==null)continue;
-    malas.push({...e,motivo:otra!=null?`está en la pág. ${otra}, no en la ${e.page}`
-      :e.page!=null&&!paginas.has(e.page)?`la pág. ${e.page} no la leyó`:'no aparece en lo que leyó'});
-  }
-  return{total:(evidencia||[]).length,malas}
-}
+/* Lo que el agente dijo que leyó contra lo que de verdad leyó (camposDelAgente,
+   verificarCitas): src/ia/agente.js. */
 
 let avisoSinRed=false;
 async function sendMessage(){
@@ -4291,7 +3735,7 @@ async function sendMessage(){
      quedaban más cerca de la pregunta que la evidencia de esta, y volvían a
      salir en una respuesta que el contexto actual ya no sostiene. Lo último que
      el modelo lee antes de contestar es el manual y la pregunta. */
-  messages.push(...historialParaModelo(6));
+  messages.push(...historialParaModelo(history,6));
   if(context)messages.push({role:'user',content:'[CONTEXTO — DOCUMENTACIÓN DISPONIBLE]\n\nRevisa este contexto antes de responder. Toda tu respuesta debe basarse ÚNICAMENTE en esta información:\n\n'+context});
   let userContent=q;
   if(scope.isGreeting){
@@ -5328,7 +4772,7 @@ function sigueEnElManual(doc,paginas,q,max=3){
     const vinetas=(crudo.match(/[●•▪■]/g)||[]).length;
     return{peso:vinetas>=2?3:tk.length<40?2:1,raices:new Set(tk.filter(w=>w.length>3).map(raiz))};
   });
-  const todas=paginasDelManual(doc);
+  const todas=paginasDelManual(doc,docPaginas);
   const ficha=docFichas.get(doc);
   const candidatas=[];
   paginas.forEach((p,i)=>todas.filter(n=>n>p).slice(0,3).forEach((n,k)=>{
@@ -7053,7 +6497,7 @@ async function pruebasAgente(){
   /* Historial */
   history=[{role:'user',content:'marcas'},{role:'assistant',content:'[VAJILLA DEMO · pág. 5]\n'+'Marca '.repeat(300),modo:'manual'},
     {role:'user',content:'¿qué marcas van en contempo?'},{role:'assistant',content:'Tresvik (pág. 4).',entendi:'¿Qué marcas van en Contempo?'}];
-  const h=historialParaModelo(6);
+  const h=historialParaModelo(history,6);
   fila('lo del modo manual no vuelve al modelo como fragmentos',h[1].content.length<120);
   fila('lo que entendió el agente sí vuelve',/Entendí: ¿Qué marcas van en Contempo/.test(h[3].content));
   fila('el historial solo lleva role y content',h.every(m=>Object.keys(m).sort().join()==='content,role'));

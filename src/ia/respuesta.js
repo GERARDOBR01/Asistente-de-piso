@@ -225,3 +225,17 @@ export function getStreamingDisplayText(streamedText){
   if(partial)return sinEnvolturaDePlantilla(sinCorchetesDePlantilla(sinLineaDeCerteza(partial[1])));
   return null;
 }
+
+/* El modelo a veces envuelve el JSON en ```json o le pega una frase delante.
+   Se rescata el objeto; si no hay objeto, no hay ficha —nunca se inventa una. */
+/** @param {string | null | undefined} t @returns {any} */
+export function jsonDeTexto(t){
+  const s=(t||'').trim();
+  if(!s)return null;
+  try{return JSON.parse(s)}catch{}
+  const sinCerca=s.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'');
+  try{return JSON.parse(sinCerca)}catch{}
+  const i=s.indexOf('{'),j=s.lastIndexOf('}');
+  if(i>=0&&j>i){try{return JSON.parse(s.slice(i,j+1))}catch{}}
+  return null
+}

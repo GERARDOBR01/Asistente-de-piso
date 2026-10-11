@@ -58,7 +58,8 @@ lo que está en el repo es lo que corre.
 | 5 | Puerta de evidencia y su contrato de decisión | hecho |
 | 5b | Conversación y respuesta (lo que decide el modo manual y el contexto del modelo), con el historial como parámetro: el motor contesta en Node (`lab/motor-node.mjs`) | hecho |
 | 6 | Verificación | hecho |
-| 7 | IA (proveedores, prompt, agente), UI, almacenamiento | |
+| 7a | IA sin pantalla (`src/ia/`): proveedores, SSE, parser, reintentos y el agente lector | hecho |
+| 7b | Lo demÃ¡s que es puro (Â«Sigue en el manualÂ», Aprende, Tablero, MediciÃ³n) y el almacenamiento | |
 | 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
 
 ## Medido (paso 1)
@@ -228,6 +229,25 @@ Con la sección elegida, la búsqueda solo mira ese manual, pero BM25 pesa cada 
   la página entera como lámina. Comprobadas con una mutación: sin el reinicio de la caché
   fallan 3.
 - ap-v1.18.1.
+
+## Medido (paso 7a)
+
+- **`src/ia/`, sin DOM y con `tsc` estricto**, en dos PR para que el golden quede idÃ©ntico en cada uno:
+
+  | MÃ³dulo | Contenido |
+  |---|---|
+  | `errores.js` | la clase de cada error del proveedor (cuota del dÃ­a, lÃ­mite por minuto, saturaciÃ³n, key, red) |
+  | `sse.js` | el streaming de OpenAI y Gemini |
+  | `proveedores.js` | `PROVIDERS` y la perilla de razonamiento de cada familia |
+  | `respuesta.js` | las reglas, el modo de respuesta, la certeza declarada, el parser y `jsonDeTexto` |
+  | `reintentos.js` | quÃ© se reintenta, quÃ© es saturaciÃ³n, el respaldo y el nombre de cada modelo |
+  | `agente.js` | el agente lector: herramientas, adaptadores, `prepararAgente`, `cicloAgente` y la verificaciÃ³n de citas |
+
+- **Lo que es de la app entra como parÃ¡metro:** el historial (`historialParaModelo(history)`), las fichas, las imÃ¡genes de las pÃ¡ginas y el bucle de reintentos, que recuerda el respaldo activo y avisa en pantalla y por eso se queda en `app.js`.
+- **El agente corre entero en Node con un proveedor falso** (`lab/agente.test.mjs`): la lectura anticipada, el ciclo, la Ãºltima vuelta sin herramientas, el tope de tokens que se repite una vez, la imagen rechazada y las citas.
+- `tipos.d.ts` trae `fetch` y los temporizadores mÃ­nimos, sin abrir `lib: dom`. `src/ia/` entra a la prueba de frontera.
+- `app.js` baja de 7,572 a 6,597 lÃ­neas.
+- Golden master idÃ©ntico (667) en cada PR, arnÃ©s 305/305, agente simulado y gate idÃ©ntico. **129 pruebas en Node.** ap-v1.18.2 y ap-v1.18.3.
 
 ## Consecuencias
 
