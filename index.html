@@ -38,13 +38,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
   /* ── OSCURO (default): vidrio neutro con un punto rojo (10-oct-2026) ──
-     Negro frío, superficies de vidrio sin color y un solo acento rojo para lo
-     activo, la página citada y lo que graba. Los nombres --gold* se quedan por
-     compatibilidad con todo el CSS de abajo: hoy son el acento rojo.
-     --acc-rgb es el mismo acento en canales, para los tintes rgba(). */
+     Negro frío y superficies de vidrio sin color. El rojo (--rojo) marca solo
+     la sección seleccionada en la barra de abajo y la cámara en vivo; todo lo
+     demás que está seleccionado se ve como vidrio más claro. Los nombres
+     --gold* se quedan por compatibilidad con todo el CSS de abajo: hoy son ese
+     vidrio claro, no un color. --acc-rgb es lo mismo en canales, para rgba(). */
   --bg: #0A0B0D;
   --bg-texture: none;
-  --acc-rgb: 229,51,58;
+  --acc-rgb: 255,255,255;
+  --rojo: #FF5C63;
+  --rojo-rgb: 229,51,58;
   --glow-a: radial-gradient(70% 38% at 50% -6%, rgba(255,255,255,0.07), rgba(255,255,255,0) 70%);
   --glow-b: radial-gradient(55% 32% at -5% 38%, rgba(255,255,255,0.035), rgba(255,255,255,0) 70%);
   --glow-c: radial-gradient(50% 28% at 105% 88%, rgba(255,255,255,0.03), rgba(255,255,255,0) 70%);
@@ -63,11 +66,11 @@
   --text3: #8A8F98;
   --text4: #62666E;
 
-  --gold:  #FF5C63;
-  --gold2: #FF7A80;
-  --gold3: #FFA3A7;
-  --gdim:  rgba(229,51,58,0.16);
-  --gglow: rgba(229,51,58,0.07);
+  --gold:  #F2F3F5;
+  --gold2: #E3E5E9;
+  --gold3: #C9CCD2;
+  --gdim:  rgba(255,255,255,0.11);
+  --gglow: rgba(255,255,255,0.05);
   /* El botón principal ya no es un degradado: es blanco sólido (negro en claro). */
   --grad:  linear-gradient(#F4F5F7, #F4F5F7);
   --on-accent: #0A0B0D;
@@ -99,7 +102,9 @@
 [data-theme="light"] {
   --bg:  #EEF0F3;
   --bg-texture: none;
-  --acc-rgb: 196,22,28;
+  --acc-rgb: 17,19,23;
+  --rojo: #C4161C;
+  --rojo-rgb: 196,22,28;
   --glow-a: radial-gradient(70% 38% at 50% -6%, rgba(255,255,255,0.9), rgba(255,255,255,0) 70%);
   --glow-b: radial-gradient(55% 32% at -5% 38%, rgba(255,255,255,0.7), rgba(255,255,255,0) 70%);
   --glow-c: radial-gradient(50% 28% at 105% 88%, rgba(255,255,255,0.6), rgba(255,255,255,0) 70%);
@@ -118,11 +123,11 @@
   --text3: #636973;
   --text4: #8E939B;
 
-  --gold:  #C4161C;
-  --gold2: #A81218;
-  --gold3: #8C0F14;
-  --gdim:  rgba(196,22,28,0.09);
-  --gglow: rgba(196,22,28,0.045);
+  --gold:  #111317;
+  --gold2: #2A2E35;
+  --gold3: #4A4F58;
+  --gdim:  rgba(255,255,255,0.92);
+  --gglow: rgba(255,255,255,0.55);
   --grad:  linear-gradient(#111317, #111317);
   --on-accent: #FFFFFF;
   --accent-sombra: rgba(17,19,23,0.18);
@@ -1353,21 +1358,64 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .status-pill,.theme-toggle,.quick-btn,.rv-sello,.rv-tipos,.rv-btn{box-shadow:var(--brillo)}
 
-/* ── Pestañas: una pastilla de vidrio rojizo que se desliza a la activa.
+/* ── Pestañas: una pastilla de vidrio rojizo que se desliza a la activa. Es el
+      rojo de la app junto con la cámara en vivo: dice en qué sección estás.
       switchTab() pone --tab-i con la posición. ── */
 .tabs{--tab-i:0;background:var(--nav-fondo);box-shadow:var(--brillo),var(--shm)}
 .tabs::before{content:'';position:absolute;top:6px;bottom:6px;left:calc(4px + (100% - 8px) / 5 * var(--tab-i));width:calc((100% - 8px) / 5);
-  border-radius:18px;background:var(--gdim);box-shadow:var(--brillo),0 0 0 1px rgba(var(--acc-rgb),0.32);
+  border-radius:18px;background:rgba(var(--rojo-rgb),0.16);box-shadow:var(--brillo),0 0 0 1px rgba(var(--rojo-rgb),0.34);
   transition:left .32s var(--suave)}
 .tab{position:relative;z-index:1;transition:color .24s ease}
 .tab.active .tab-ico{background:none}
 .tab.active .ico{animation:salta .42s var(--rebote)}
-.tab .badge{background:rgb(var(--acc-rgb));color:#fff}
+.tab.active{color:var(--rojo)}
+.tab .badge{background:var(--text);color:var(--bg)}
 @keyframes salta{0%{transform:scale(1)}40%{transform:scale(.82)}100%{transform:scale(1)}}
 
-/* ── Al cambiar de pestaña, el panel entra suave ── */
-.panel.active{animation:panel-entra .26s var(--suave)}
-@keyframes panel-entra{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* ── Lo seleccionado fuera de la barra: vidrio más claro, sin color ── */
+.prov-tab.active,.api-btn.active,.rv-tipo.on,.tb-chip.activo,.rv-ayuda button.on,.toggle-switch input:checked+.toggle-slider{
+  border-color:var(--border3);box-shadow:var(--brillo),0 4px 14px rgba(0,0,0,0.18)}
+[data-theme="light"] :is(.prov-tab.active,.api-btn.active,.rv-tipo.on,.tb-chip.activo,.rv-ayuda button.on){box-shadow:var(--brillo),0 4px 14px rgba(20,30,50,0.10)}
+
+/* ── Al cambiar de sección: el panel llega del lado de la pestaña tocada
+      (switchTab() pone data-dir) y sus piezas entran en cascada, una tras
+      otra cada 45 ms. Relleno «backwards»: al terminar, la animación suelta
+      el transform y el hundirse al tocar sigue funcionando. ── */
+.panel.active{animation:panel-der .34s var(--suave) backwards}
+.panel.active[data-dir="izq"]{animation-name:panel-izq}
+@keyframes panel-der{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes panel-izq{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+#panel-chat.active>*,#panel-chat.active .quick-btns>*,#panel-chat.active .vacio-ejemplos>*,
+#panel-revisar.active .rv>*,#panel-revisar.active .rv-acciones>*,
+#panel-docs.active>*,#panel-docs.active .doc-list>*,
+#panel-memory.active .tablero>*,#panel-memory.active .tb-tiles>*,
+#panel-config.active .config-fields>*,#panel-config.active .provider-tabs>*{animation:escalon .44s var(--suave) var(--d,0s) backwards}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(2){--d:.045s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(3){--d:.09s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(4){--d:.135s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(5){--d:.18s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(6){--d:.225s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(7){--d:.27s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(n+8){--d:.3s}
+@keyframes escalon{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+
+/* Tablero: las barras crecen desde la izquierda y las cifras suben al llegar. */
+#panel-memory.active .tb-barra span{transform-origin:left center;animation:crece .8s .25s var(--suave) backwards}
+#panel-memory.active .tb-n{animation:cifra .5s .15s var(--rebote) backwards}
+@keyframes crece{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes cifra{from{opacity:0;transform:translateY(8px) scale(.9)}to{opacity:1;transform:none}}
+/* Manuales: mientras lee un PDF, un brillo recorre la barra; el icono de subir flota. */
+.proc-progress{position:relative}
+.proc-bar{position:relative;overflow:hidden}
+.proc-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:recorre 1.2s linear infinite}
+[data-theme="light"] .proc-bar::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent)}
+@keyframes recorre{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+#panel-docs.active .drop-icon{animation:flota 3.2s ease-in-out .6s infinite}
+@keyframes flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+/* Revisar: el tipo elegido da un pequeño salto al tocarlo. */
+.rv-tipo.on{animation:salta .38s var(--rebote)}
+/* Ajustes: el interruptor se estira un poco al cambiar, como uno físico. */
+.toggle-switch input:active+.toggle-slider::before{width:18px}
 
 /* ── Chat: la pregunta en gris, la respuesta en tarjeta casi opaca ── */
 .msg.user .msg-body,[data-theme="light"] .msg.user .msg-body{background:var(--usuario);border:1px solid var(--border2)}
@@ -1376,7 +1424,7 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .msg.user{animation-name:msg-entra-usuario}
 @keyframes msg-entra{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes msg-entra-usuario{from{opacity:0;transform:translate(10px,6px)}to{opacity:1;transform:none}}
-/* Las palabras que coincidieron: subrayado rojo fino en vez de bloques de color. */
+/* Las palabras que coincidieron: subrayado fino en vez de bloques de color. */
 .frag-text mark,[data-theme="light"] .frag-text mark{background:var(--s3);box-shadow:inset 0 -2px 0 rgba(var(--acc-rgb),0.7);border-radius:3px}
 .frag-text mark.sin{background:var(--s2);box-shadow:inset 0 -1px 0 rgba(var(--acc-rgb),0.4)}
 .frag-card{background:var(--s1)}
@@ -1387,15 +1435,15 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .vacio-demo,[data-theme="light"] .vacio-demo{background:var(--tarjeta);border-color:var(--border2)}
 .vacio-demo:hover{border-color:rgba(var(--acc-rgb),0.45)}
 
-/* ── Manual integrado: tarjeta neutra; el rojo se queda solo en la etiqueta ── */
+/* ── Manual integrado: tarjeta neutra, como las demás ── */
 .doc-item.builtin{background:var(--s1);border-color:var(--border)}
 
-/* ── Barras de avance: el punto rojo ── */
+/* ── Barras de avance: claras sobre el vidrio ── */
 .proc-bar,.token-bar-fill,.tb-barra span{background:var(--gold)}
 
 /* ── Revisar: el disparador es un obturador; el veredicto cae como sello ── */
 .rv-disparo{box-shadow:0 0 0 4px var(--bg),0 0 0 5px var(--border3),0 12px 30px var(--accent-sombra);transition:transform .14s var(--suave)}
-.rv-disparo.vivo{box-shadow:0 0 0 4px var(--bg),0 0 0 7px rgba(var(--acc-rgb),0.75),0 12px 30px var(--accent-sombra)}
+.rv-disparo.vivo{box-shadow:0 0 0 4px var(--bg),0 0 0 7px rgba(var(--rojo-rgb),0.8),0 12px 30px var(--accent-sombra)}
 .rv-vacia{background:radial-gradient(60% 50% at 50% 40%,rgba(255,255,255,.07),rgba(0,0,0,0) 70%),linear-gradient(180deg,#141519,#08090B)}
 .rv-nivel{border:1.5px solid currentColor;transform:rotate(-3deg);animation:sello .46s .32s var(--rebote) both}
 @keyframes sello{from{opacity:0;transform:rotate(-8deg) scale(1.6)}to{opacity:1;transform:rotate(-3deg) scale(1)}}
