@@ -14,7 +14,7 @@
     "motor-node": "node lab/motor-node.mjs",
     "aislamiento": "node lab/aislamiento.mjs",
     "corpus-publico": "node eval/corpus-publico/generar.mjs",
-    "tipos": "tsc -p ."
+    "tipos": "tsc -p . && tsc -p tsconfig.dom.json"
   },
   "devDependencies": {
     "@huggingface/transformers": "4.3.0",

@@ -27,6 +27,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Tipos del motor (tsc --checkJs, sin compilar)
         run: npx tsc -p .
+      # Lo que sí usa el navegador (Revisar, IndexedDB), con lib dom y aparte:
+      # el motor sigue sin poder tocar la pantalla.
+      - name: Tipos de lo que usa el navegador
+        run: npx tsc -p tsconfig.dom.json
       - name: Pruebas en Node (laboratorio, frontera del motor y propiedades)
         run: node --test "lab/*.test.mjs"
       - name: Arnés
