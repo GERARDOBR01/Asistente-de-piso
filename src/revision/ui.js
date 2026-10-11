@@ -11,7 +11,7 @@ import { peor } from './veredicto.js';
 import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto, interpretarC2pa, admiteSynthid, conSynthid } from './procedencia.js';
 import { revisarColor, NOMBRE_GRUPO } from './color.js';
 import { revisarSurtido } from './surtido.js';
-import { revisarTriangulo, revisarNiveles, puntosDeCajas } from './triangulo.js';
+import { revisarTriangulo, revisarNiveles, puntosDeCajas, REGLA_TRIANGULO } from './triangulo.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
@@ -60,6 +60,9 @@ const st = {
   /** «Sugerir» está buscando: el lienzo no acepta toques */ buscando: false,
   /** hay un bucle de dibujo en curso (barrido o anillo) */ girando: false,
   /** ya se pidieron los modelos del focal */ precargado: false,
+  /** @type {null|{i:number,x0:number,y0:number,movido:boolean}} punto que se arrastra */ arrastre: null,
+  /** @type {null|{x:number,y:number}} dónde mira la lupa, en píxeles de la imagen */ lupa: null,
+  /** @type {Array<{x:number,y:number,w:number,h:number,categoria:string,score:number}>} lo que va encontrando «Sugerir» */ cajasVistas: [],
 };
 
 /* ── Escena: vacía, cámara o foto ───────────────────────────────────────── */
@@ -511,11 +514,11 @@ async function sugerir() {
   const f = st.foto, z = activa(), b = $('rv-sugerir');
   if (!f || !z || st.buscando) return;
   b.disabled = true; b.textContent = 'Buscando…';
-  st.buscando = true; girar();
+  st.buscando = true; st.cajasVistas = []; girar();
   const previos = /** @type {PuntoFocal[]} */ (z.puntos);
   try {
     const { sugerirPuntos } = await import('./detector.js');
-    const r = await conTope(sugerirPuntos({ base: f.base, img: f.img }, z.marco, previos, { cerca: 0.04 * Math.max(f.img.width, f.img.height) }), 12000);
+    const r = await conTope(sugerirPuntos({ base: f.base, img: f.img }, z.marco, previos, { cerca: 0.04 * Math.max(f.img.width, f.img.height), alCaja: c => { st.cajasVistas.push(c); } }), 12000);
     if (!r.encontrados) aviso('No encontré maniquíes ni objetos en la zona: toca cada elemento y la app busca su punto más alto.', 'warn');
     else {
       /* Los de la persona vuelven tal cual (mismo objeto, misma silueta). */
@@ -534,7 +537,7 @@ async function sugerir() {
       ? 'La búsqueda tardó demasiado en este teléfono: toca cada elemento y la app busca su punto más alto.'
       : 'No se pudo cargar el detector (la primera vez necesita señal). Toca los puntos a mano.', 'warn');
   } finally {
-    st.buscando = false;
+    st.buscando = false; st.cajasVistas = [];
     b.disabled = false; b.textContent = 'Sugerir';
     actualizarAyuda(); dibujar(1);
   }
@@ -554,7 +557,7 @@ function girar() {
   requestAnimationFrame(paso);
 }
 
-/** Vibración corta, si el teléfono la tiene y no se pidió menos movimiento. @param {number} ms */
+/** Vibración corta, si el teléfono la tiene y no se pidió menos movimiento. @param {number|number[]} ms */
 function vibrar(ms) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   try { navigator.vibrate?.(ms); } catch { /* sin vibración */ }
@@ -646,6 +649,28 @@ function dibujar(p) {
     ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     pildora(ctx, NOMBRE_TIPO[st.tipo], x + w / 2, Math.max(14 * u, y - 14 * u), '#16171B', u);
   }
+  if (st.lupa) dibujarLupa(ctx, f, k, u, st.lupa);
+}
+
+/**
+ * La lupa: un círculo arriba del dedo con la foto ampliada 2.5 veces y una
+ * cruz en el punto. El dedo tapa justo lo que hay que ver; la lupa no.
+ * @param {CanvasRenderingContext2D} ctx @param {NonNullable<typeof st.foto>} f @param {number} k @param {number} u @param {{x:number,y:number}} q
+ */
+function dibujarLupa(ctx, f, k, u, q) {
+  const W = ctx.canvas.width, R = 56 * u, zoom = 2.5;
+  const px = q.x * k, py = q.y * k;
+  const cx = Math.min(W - R - 4 * u, Math.max(R + 4 * u, px)), cy = py - R - 46 * u > R ? py - R - 46 * u : py + R + 46 * u;
+  const lado = (2 * R) / zoom;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.closePath();
+  ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 14 * u; ctx.fillStyle = '#000'; ctx.fill();
+  ctx.shadowBlur = 0; ctx.clip();
+  ctx.drawImage(f.base, px - lado / 2, py - lado / 2, lado, lado, cx - R, cy - R, 2 * R, 2 * R);
+  ctx.strokeStyle = 'rgba(255,92,99,.95)'; ctx.lineWidth = 1.6 * u;
+  ctx.beginPath(); ctx.moveTo(cx - 12 * u, cy); ctx.lineTo(cx + 12 * u, cy); ctx.moveTo(cx, cy - 12 * u); ctx.lineTo(cx, cy + 12 * u); ctx.stroke();
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
 }
 
 /**
@@ -664,8 +689,18 @@ function dibujarBusqueda(ctx, z, u) {
   g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,.35)');
   ctx.fillStyle = g; ctx.fillRect(x, Math.max(y, ly - 40 * u), w, Math.min(40 * u, ly - y));
   ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillRect(x, ly - 1 * u, w, 2 * u);
-  pildora(ctx, 'Buscando elementos…', x + w / 2, Math.max(16 * u, y + 18 * u), '#16171B', u);
+  /* Lo que va encontrando, uno por uno: caja suave, nombre y confianza. */
+  const k = W / /** @type {NonNullable<typeof st.foto>} */ (st.foto).img.width;
+  for (const c of st.cajasVistas) {
+    ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.fillStyle = 'rgba(255,255,255,.08)';
+    redondo(ctx, c.x * k, c.y * k, c.w * k, c.h * k, 10 * u); ctx.fill(); ctx.stroke();
+    pildora(ctx, `${NOMBRE_DETECTADO[c.categoria] || c.categoria} · ${Math.round(c.score * 100)} %`, c.x * k + c.w * k / 2, c.y * k + 14 * u, 'rgba(22,23,27,.85)', u);
+  }
+  pildora(ctx, st.cajasVistas.length ? `Encontrando… ${st.cajasVistas.length}` : 'Buscando elementos…', x + w / 2, Math.max(16 * u, y + 18 * u), '#16171B', u);
 }
+
+/** Cómo se dice en el piso lo que ve el detector (COCO). */
+const NOMBRE_DETECTADO = /** @type {Record<string, string>} */ ({ person: 'maniquí', handbag: 'bolsa', suitcase: 'bolsa', backpack: 'mochila', 'potted plant': 'planta', vase: 'jarrón', bottle: 'botella', tie: 'corbata', umbrella: 'paraguas', 'teddy bear': 'peluche' });
 
 /** El recuadro de una zona con su número, básico y nivel. @param {CanvasRenderingContext2D} ctx @param {Zona} z @param {number} i @param {number} u */
 function dibujarMarcoZona(ctx, z, i, u) {
@@ -772,6 +807,34 @@ function dibujarFocal(ctx, k, u, e, z) {
     ctx.beginPath(); ps.forEach((/** @type {any} */ q, /** @type {number} */ i) => (i ? ctx.lineTo(q.x * k, q.y * k) : ctx.moveTo(q.x * k, q.y * k)));
     ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = COLOR_NIVEL[/** @type {'GRAVE'} */ (r.nivel)]; ctx.globalAlpha = e; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]);
   }
+  /* Las alturas que se midieron (Alturas y niveles): una banda por nivel, de
+     lado a lado de la zona, con su nombre. Se calculaban y no se veían. */
+  const rn = z.res ? z.res.find(x => x.basico === 'niveles') : null;
+  if (rn?.marcas?.niveles?.length && rn.nivel !== 'NO_CALIFICA' && e > 0.2) {
+    const W = ctx.canvas.width, m = z.marco;
+    const ys = rn.marcas.niveles.slice().sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
+    const nombre = (/** @type {number} */ i) => ys.length === 1 ? 'una altura' : i === 0 ? 'alto' : i === ys.length - 1 ? 'bajo' : 'medio';
+    ctx.save(); ctx.globalAlpha = Math.min(1, e * 1.2);
+    ys.forEach((/** @type {number} */ y, /** @type {number} */ i) => {
+      const yy = y * k, x0 = m.x * W, x1 = (m.x + m.w) * W;
+      ctx.setLineDash([10 * u, 7 * u]); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = 'rgba(255,255,255,.75)';
+      ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke(); ctx.setLineDash([]);
+      pildora(ctx, nombre(i), x1 - 34 * u, yy, 'rgba(22,23,27,.82)', u);
+    });
+    ctx.restore();
+  }
+  /* Empate arriba: una flecha señala cuál subir (el del centro del empate). */
+  if (r?.nivel === 'OBSERVACIÓN' && r.marcas?.cima && Number(r.evidencia?.empatan_arriba) > 0 && e > 0.6) {
+    const tol = REGLA_TRIANGULO.tolerancia * /** @type {NonNullable<typeof st.foto>} */ (st.foto).img.height;
+    const arriba = r.marcas.puntos.filter((/** @type {any} */ q) => q.y - r.marcas.cima.y < tol);
+    const centro = arriba.reduce((/** @type {number} */ s, /** @type {any} */ q) => s + q.x, 0) / arriba.length;
+    const q = arriba.reduce((/** @type {any} */ a, /** @type {any} */ b) => Math.abs(b.x - centro) < Math.abs(a.x - centro) ? b : a);
+    const x = q.x * k, y = q.y * k - 16 * u;
+    ctx.strokeStyle = COLOR_NIVEL['OBSERVACIÓN']; ctx.fillStyle = COLOR_NIVEL['OBSERVACIÓN']; ctx.lineWidth = 3 * u;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 34 * u); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 8 * u, y - 30 * u); ctx.lineTo(x, y - 42 * u); ctx.lineTo(x + 8 * u, y - 30 * u); ctx.closePath(); ctx.fill();
+    pildora(ctx, 'sube este', x, Math.max(14 * u, y - 56 * u), '#16171B', u);
+  }
   /* El número de cada punto es su orden de toque y no cambia al revisar: el
      aviso «se juntó con el 2» tiene que señalar el mismo punto que se ve. */
   const ps = z.puntos.length ? z.puntos : (r?.marcas?.puntos || []);
@@ -779,7 +842,8 @@ function dibujarFocal(ctx, k, u, e, z) {
   if (st.modo === 'tocar') for (const q of /** @type {PuntoFocal[]} */ (z.puntos)) {
     if (!q.caja || !q.toque) continue;
     const W = ctx.canvas.width, H = ctx.canvas.height;
-    if (q.capa) ctx.drawImage(q.capa, 0, 0, W, H);
+    /* La silueta con un brillo en su contorno: se ve qué agarró el toque. */
+    if (q.capa) { ctx.save(); ctx.shadowColor = 'rgba(255,196,61,.9)'; ctx.shadowBlur = 12 * u; ctx.drawImage(q.capa, 0, 0, W, H); ctx.restore(); }
     ctx.setLineDash([5 * u, 4 * u]); ctx.lineWidth = 1.4 * u; ctx.strokeStyle = 'rgba(255,255,255,.6)';
     ctx.beginPath(); ctx.moveTo(q.toque.x * k, q.toque.y * k); ctx.lineTo(q.x * k, q.y * k); ctx.stroke();
     ctx.setLineDash([]);
@@ -849,11 +913,45 @@ function contar(el, fin) {
   requestAnimationFrame(paso);
 }
 
+/* La evidencia en palabras del piso. Lo técnico (umbral de bordes, balance de
+   blancos con sus factores) se queda en el título del chip, para quien lo
+   busque, y no en el texto. */
+const DE_DONDE = { manual: 'puntos tocados a mano', detector: 'puntos sugeridos por la app', 'detector+manual': 'sugeridos y tocados', silueta: 'cimas por silueta', 'detector+silueta': 'sugeridos y por silueta' };
+/** @type {Record<string, (v: any) => string | null>} */
+const CHIP = {
+  tramos: v => `${v} tramos de color`,
+  fondo_pct: v => v ? `fondo ${v} %` : null,
+  luz_corregida: v => v ? 'luz corregida' : null,
+  balance_blancos: v => /^sin/.test(String(v)) ? null : 'blancos ajustados',
+  fuera_de_grupo: v => v ? `${v} fuera de su bloque` : 'bloques limpios',
+  fuera_de_rueda: v => v ? `${v} fuera de la rueda` : null,
+  grupos: () => null,
+  bloques: v => v ? `bloques: ${v}` : null,
+  celdas: v => `${v} celdas revisadas`,
+  umbral_bordes: () => null,
+  vacio_pct: v => `vacío ${v} %`,
+  huecos: v => v ? `${v} ${v === 1 ? 'hueco' : 'huecos'}` : 'sin huecos',
+  hueco_mayor_pct: v => v ? `hueco mayor ${v} %` : null,
+  puntos: v => `${v} ${v === 1 ? 'elemento' : 'elementos'}`,
+  origen_puntos: v => DE_DONDE[/** @type {'manual'} */ (v)] || null,
+  cima_pos_pct: v => `cima al ${v} % del ancho`,
+  desnivel_pct: v => `desnivel ${v} %`,
+  empatan_arriba: v => v ? `${v + 1} empatan arriba` : null,
+  forma: v => String(v),
+  niveles: v => `${v} ${v === 1 ? 'altura' : 'alturas'}`,
+};
 /** @param {Record<string, any>} ev */
 function chips(ev) {
   return Object.entries(ev).filter(([, v]) => v !== null && v !== undefined && v !== '')
-    .map(([k, v]) => `<span>${esc(k.replace(/_pct$/, ' %').replace(/_/g, ' '))} ${esc(v === true ? 'sí' : v === false ? 'no' : String(v))}</span>`).join('');
+    .map(([k, v]) => {
+      const crudo = `${k.replace(/_pct$/, ' %').replace(/_/g, ' ')} ${v === true ? 'sí' : v === false ? 'no' : String(v)}`;
+      const txt = CHIP[k] ? CHIP[k](v) : crudo;
+      return txt ? `<span title="${esc(crudo)}">${esc(txt)}</span>` : '';
+    }).join('');
 }
+
+/** ¿Hubo IA en esta medición? Solo la de los puntos del focal (MediaPipe, en el teléfono). @param {Resultado} r */
+const conIA = r => /detector|silueta/.test(String(r.evidencia?.origen_puntos || ''));
 
 /** Cómo se lee el origen en pantalla: sin metadatos no es una falla del montaje. @param {any} o */
 function nivelOrigen(o) {
@@ -977,17 +1075,25 @@ function pintarResultados(subir = false) {
       <div class="rv-cifra-fila"><span class="rv-cifra"><b data-cifra="${c.n === null ? '' : c.n}">${c.n === null ? '—' : j ? esc(String(c.n)) : '0'}</b><small>${esc(c.de)}</small></span><span class="rv-cifra-txt">${esc(c.txt)}</span></div>
       <p class="rv-motivo">${esc(r.motivo)}</p>
       <div class="rv-ev">${chips(r.evidencia)}</div>
-      <div class="rv-fuente">fuente: CÓDIGO · medido en este teléfono · sin IA${z.tipo === 'tringla' && r.nivel !== 'NO_CALIFICA' ? ' · regla de color por confirmar' : ''}</div>
+      <div class="rv-fuente">${conIA(r)
+        ? 'fuente: CÓDIGO · los puntos los ubicó IA en tu teléfono (MediaPipe) · el veredicto, el código · nada se sube'
+        : 'fuente: CÓDIGO · medido en este teléfono · sin IA'}${z.tipo === 'tringla' && r.nivel !== 'NO_CALIFICA' ? ' · regla de color por confirmar' : ''}</div>
     </div>`;
     }).join('')}
     ${st.origen ? tarjetaOrigen(origenVisto(), undefined, true) : ''}
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
-      ${listaManual().map(m => `<label><input type="checkbox"> ${esc(m)}</label>`).join('')}</div>
+      ${listaManual().map(m => `<label><input type="checkbox" data-item="${esc(m)}"${revisadoAMano().has(m) ? ' checked' : ''}> ${esc(m)}</label>`).join('')}</div>
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
     <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>
     <button class="rv-otra" id="rv-otra" type="button">↺ Revisar otra foto</button>`;
-  const primera = /** @type {HTMLElement|null} */ (caja.querySelector('.rv-ver [data-cifra]'));
-  if (primera && primera.dataset.cifra) contar(primera, Number(primera.dataset.cifra));
+  /* El veredicto se siente: un toque corto si cumple, dos si algo está mal. */
+  if (subir) vibrar(general === 'GRAVE' || general === 'OBSERVACIÓN' ? [14, 70, 14] : 12);
+  /* Todas las cifras suben, una tras otra. */
+  caja.querySelectorAll('.rv-ver [data-cifra]').forEach((/** @type {HTMLElement} */ el, /** @type {number} */ i) => {
+    if (!el.dataset.cifra) return;
+    el.textContent = '0';
+    setTimeout(() => contar(el, Number(el.dataset.cifra)), i * 140);
+  });
   /* Primero se ven las marcas sobre la foto; luego la cifra sube a la vista.
      Nunca mientras la persona toca puntos o dibuja: le movería la foto. */
   if (subir) setTimeout(() => {
@@ -997,6 +1103,11 @@ function pintarResultados(subir = false) {
     if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }, 950);
   $('rv-compartir').onclick = compartir;
+  caja.querySelectorAll('.rv-lista input').forEach((/** @type {HTMLInputElement} */ inp) => inp.addEventListener('change', () => {
+    const s = revisadoAMano();
+    if (inp.checked) s.add(/** @type {string} */ (inp.dataset.item)); else s.delete(/** @type {string} */ (inp.dataset.item));
+    guardarRevisado();
+  }));
   conectarSynthid();
 }
 
@@ -1009,49 +1120,129 @@ function resumenTexto() {
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
   if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
   if (o?.evidencia?.huella) l.push(`Huella SHA-256 de la foto original: ${o.evidencia.huella}…`);
-  l.push('Medido por código en el teléfono, sin IA.');
+  const marcados = listaManual().filter(m => revisadoAMano().has(m));
+  if (marcados.length) l.push(`Revisado a mano: ${marcados.join(', ')}.`);
+  l.push(lista.some(x => conIA(x.r))
+    ? 'Medido por código en el teléfono; los puntos del focal los ubicó IA en el mismo teléfono. Nada se subió.'
+    : 'Medido por código en el teléfono, sin IA.');
   return l.join('\n');
 }
 
-/** La foto marcada con una franja de texto abajo. */
-function reporte() {
+/* La lista de lo que se revisa a mano, por foto (su huella): se guarda en el
+   teléfono y viaja al compartir. */
+const CLAVE_REVISADO = 'ap_rv_revisado';
+/** @type {Map<string, Set<string>>} */
+const revisados = new Map();
+const huellaActual = () => String(st.origen?.evidencia?.huella || 'sin-huella');
+/** @returns {Set<string>} */
+function revisadoAMano() {
+  const h = huellaActual();
+  if (!revisados.has(h)) {
+    let guardado = [];
+    try { guardado = (JSON.parse(localStorage.getItem(CLAVE_REVISADO) || '{}') || {})[h] || []; } catch { /* sin almacenamiento */ }
+    revisados.set(h, new Set(Array.isArray(guardado) ? guardado.filter(x => typeof x === 'string') : []));
+  }
+  return /** @type {Set<string>} */ (revisados.get(h));
+}
+function guardarRevisado() {
+  try {
+    const todo = JSON.parse(localStorage.getItem(CLAVE_REVISADO) || '{}') || {};
+    todo[huellaActual()] = [...revisadoAMano()];
+    /* Las 30 fotos más recientes bastan. */
+    const llaves = Object.keys(todo);
+    for (const k of llaves.slice(0, Math.max(0, llaves.length - 30))) delete todo[k];
+    localStorage.setItem(CLAVE_REVISADO, JSON.stringify(todo));
+  } catch { /* sin almacenamiento: se queda en la sesión */ }
+}
+
+/**
+ * La imagen para compartir, de 1080 px de ancho: la foto marcada y, debajo,
+ * cada veredicto con su insignia de color, su cifra y su motivo, lo revisado a
+ * mano, la evidencia de la foto y una leyenda. En WhatsApp se lee sola, sin el
+ * texto que la acompaña.
+ */
+function reporteParaCompartir() {
   const lz = $('rv-lienzo');
   dibujar(1);
-  const u = lz.width / 400, ancho = lz.width - 28 * u;
+  const ANCHO = 1080, M = 48, u = ANCHO / 400;
+  const altoFoto = Math.round(lz.height * ANCHO / lz.width);
   const medir = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
-  /* Cada línea del resumen se acomoda en renglones del ancho de la foto. */
-  /** @type {{t:string, titulo:boolean}[]} */
-  const renglones = [];
-  resumenTexto().split('\n').forEach((t, i) => {
-    medir.font = `${i ? 500 : 700} ${Math.round((i ? 12.5 : 14) * u)}px Geist, system-ui, sans-serif`;
+  /** @param {string} t @param {string} font @param {number} ancho */
+  const renglones = (t, font, ancho) => {
+    medir.font = font;
+    /** @type {string[]} */
+    const out = [];
     let r = '';
     for (const pal of t.split(' ')) {
       const prueba = r ? r + ' ' + pal : pal;
-      if (r && medir.measureText(prueba).width > ancho) { renglones.push({ t: r, titulo: !i }); r = pal; }
-      else r = prueba;
+      if (r && medir.measureText(prueba).width > ancho) { out.push(r); r = pal; } else r = prueba;
     }
-    renglones.push({ t: r, titulo: !i });
-  });
+    if (r) out.push(r);
+    return out;
+  };
+  const F = {
+    titulo: '700 40px Geist, system-ui, sans-serif', sub: '500 26px Geist, system-ui, sans-serif',
+    basico: '700 30px Geist, system-ui, sans-serif', nivel: '700 24px "Geist Mono", ui-monospace, monospace',
+    motivo: '500 27px Geist, system-ui, sans-serif', chica: '500 23px Geist, system-ui, sans-serif',
+  };
+  const lista = todos(), o = origenVisto(), varias = st.zonas.length > 1;
+  /** @type {Array<{alto:number, pinta:(ctx:CanvasRenderingContext2D, y:number) => void}>} */
+  const bloques = [];
+  const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  const fecha = `${f2(d.getDate())}/${f2(d.getMonth() + 1)}/${d.getFullYear()} · ${f2(d.getHours())}:${f2(d.getMinutes())}`;
+  bloques.push({ alto: 110, pinta: (ctx, y) => {
+    ctx.font = F.titulo; ctx.fillStyle = '#F4F2F0'; ctx.fillText('Revisión con foto', M, y + 8);
+    ctx.font = F.sub; ctx.fillStyle = '#9A97A2'; ctx.fillText(`Asistente de Piso · ${fecha}`, M, y + 62);
+  } });
+  for (const { r, i } of lista) {
+    const c = cifra(r);
+    const mot = renglones(r.motivo, F.motivo, ANCHO - 2 * M - 56);
+    const linea = c.n === null ? c.txt : `${c.n}${c.de} · ${c.txt}`;
+    bloques.push({ alto: 74 + 38 + mot.length * 36 + 28, pinta: (ctx, y) => {
+      const color = COLOR_NIVEL[/** @type {'CUMPLE'} */ (r.nivel)] || '#fff';
+      redondo(ctx, M, y, ANCHO - 2 * M, 74 + 38 + mot.length * 36 + 8, 22);
+      ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fill();
+      ctx.fillStyle = color; ctx.fillRect(M, y + 18, 6, 74 + 38 + mot.length * 36 - 28);
+      ctx.font = F.basico; ctx.fillStyle = '#F4F2F0';
+      ctx.fillText(`${varias ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}`, M + 28, y + 20);
+      ctx.font = F.nivel;
+      const tn = r.nivel.replace('_', ' '), wn = ctx.measureText(tn).width + 36;
+      redondo(ctx, ANCHO - M - 20 - wn, y + 16, wn, 42, 21); ctx.fillStyle = color; ctx.fill();
+      ctx.fillStyle = r.nivel === 'GRAVE' ? '#fff' : '#16171B'; ctx.fillText(tn, ANCHO - M - 20 - wn + 18, y + 25);
+      ctx.font = F.sub; ctx.fillStyle = '#D8D5DE'; ctx.fillText(linea, M + 28, y + 70);
+      ctx.font = F.motivo; ctx.fillStyle = '#B7B3BF';
+      mot.forEach((t, k) => ctx.fillText(t, M + 28, y + 112 + k * 36));
+    } });
+  }
+  const marcados = listaManual().filter(m => revisadoAMano().has(m));
+  const pie = [
+    marcados.length ? `Revisado a mano: ${marcados.join(', ')}.` : 'Lo que no se ve en la foto (limpieza, etiquetas, planchado…) se revisa a mano.',
+    o ? `Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}` : '',
+    o?.evidencia?.huella ? `Huella SHA-256 de la foto original: ${o.evidencia.huella}…` : '',
+    lista.some(x => conIA(x.r)) ? 'Veredicto por código en el teléfono; los puntos del focal los ubicó IA en el mismo teléfono. Nada se subió.' : 'Medido por código en el teléfono, sin IA. Nada se subió.',
+    'Leyenda: verde CUMPLE · ámbar OBSERVACIÓN · rojo GRAVE · azul NO CALIFICA.',
+  ].filter(Boolean).flatMap(t => renglones(t, F.chica, ANCHO - 2 * M));
+  bloques.push({ alto: 24 + pie.length * 34, pinta: (ctx, y) => {
+    ctx.font = F.chica; ctx.fillStyle = '#8F8C98';
+    pie.forEach((t, k) => ctx.fillText(t, M, y + 12 + k * 34));
+  } });
+  const SEP = 22;
+  const altoPanel = 40 + bloques.reduce((s, b) => s + b.alto + SEP, 0) + 20;
   const c = document.createElement('canvas');
-  const alto = Math.round((30 + renglones.length * 20) * u);
-  c.width = lz.width; c.height = lz.height + alto;
+  c.width = ANCHO; c.height = altoFoto + altoPanel;
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-  ctx.drawImage(lz, 0, 0);
-  ctx.fillStyle = '#111217'; ctx.fillRect(0, lz.height, c.width, alto);
-  const lista = todos();
+  ctx.drawImage(lz, 0, 0, ANCHO, altoFoto);
+  ctx.fillStyle = '#111217'; ctx.fillRect(0, altoFoto, ANCHO, altoPanel);
   ctx.fillStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (lista.length ? peor(lista.map(x => x.r.nivel)) : 'NO_CALIFICA')];
-  ctx.fillRect(0, lz.height, c.width, 4 * u);
+  ctx.fillRect(0, altoFoto, ANCHO, 4 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  renglones.forEach((r, i) => {
-    ctx.font = `${r.titulo ? 700 : 500} ${Math.round((r.titulo ? 14 : 12.5) * u)}px Geist, system-ui, sans-serif`;
-    ctx.fillStyle = r.titulo ? '#F4F2F0' : '#C9C6CE';
-    ctx.fillText(r.t, 14 * u, lz.height + (16 + i * 20) * u);
-  });
+  let y = altoFoto + 40;
+  for (const b of bloques) { b.pinta(ctx, y); y += b.alto + SEP; }
   return c;
 }
 
 async function compartir() {
-  const c = reporte();
+  const c = reporteParaCompartir();
   const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.9)));
   const texto = resumenTexto();
   const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
@@ -1140,6 +1331,47 @@ function elegirTipo(t) {
 /* Dibujar un recuadro con el dedo o el mouse. */
 function engancharLienzo() {
   const lz = $('rv-lienzo');
+  /* En el focal: arrastrar un punto lo ajusta (con lupa), y con «Punto
+     exacto» la lupa sale desde que se apoya el dedo. Tocar sin mover sigue
+     quitando el punto (eso lo hace el «click»). */
+  lz.addEventListener('pointerdown', (/** @type {PointerEvent} */ e) => {
+    const z = activa();
+    if (st.modo !== 'tocar' || !z || !st.foto || st.buscando) return;
+    const q = aImagen(e);
+    if (!q) return;
+    const cerca = 22 * st.foto.img.width / lz.getBoundingClientRect().width;
+    const i = z.puntos.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca);
+    if (i >= 0) st.arrastre = { i, x0: e.clientX, y0: e.clientY, movido: false };
+    else if (!st.exacto) return;
+    st.lupa = q;
+    lz.setPointerCapture(e.pointerId);
+    dibujar(1);
+  });
+  lz.addEventListener('pointermove', (/** @type {PointerEvent} */ e) => {
+    if (!st.lupa) return;
+    const q = aImagen(e, true);
+    if (!q) return;
+    const a = st.arrastre, z = activa();
+    if (a && z) {
+      if (!a.movido && Math.hypot(e.clientX - a.x0, e.clientY - a.y0) < 6) return;
+      a.movido = true;
+      const p = /** @type {PuntoFocal} */ (z.puntos[a.i]);
+      p.x = q.x; p.y = q.y; p.sugerido = false;
+      if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
+    }
+    st.lupa = q;
+    dibujar(1);
+  });
+  const soltarLupa = () => {
+    if (!st.lupa) return;
+    if (st.arrastre?.movido) { st.soltado = performance.now(); const z = activa(); if (z) z.nota = undefined; actualizarAyuda(); }
+    st.arrastre = null; st.lupa = null;
+    dibujar(1);
+  };
+  lz.addEventListener('pointerup', soltarLupa);
+  lz.addEventListener('pointercancel', soltarLupa);
+  /* Mientras se arrastra o se mira con la lupa, el dedo no mueve la página. */
+  lz.addEventListener('touchmove', (/** @type {TouchEvent} */ e) => { if (st.lupa) e.preventDefault(); }, { passive: false });
   lz.addEventListener('pointerdown', (/** @type {PointerEvent} */ e) => {
     if (st.modo !== 'dibujar' || !st.foto) return;
     const q = aImagen(e, true);
@@ -1233,5 +1465,5 @@ function iniciar() {
 iniciar();
 
 /* Para eval/revision.mjs y las capturas: el mismo código que corre en el teléfono. */
-/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st,
+/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st, reporteParaCompartir,
   sugerirPuntos: async (/** @type {any} */ a, /** @type {any} */ m, /** @type {any} */ p, /** @type {any} */ o) => (await import('./detector.js')).sugerirPuntos(a, m, p, o) };
