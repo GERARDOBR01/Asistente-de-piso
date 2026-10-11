@@ -1,0 +1,7 @@
+{
+  // Lo que usa el navegador (canvas, IndexedDB, MediaPipe): con lib "dom", en
+  // un proyecto aparte para que el motor siga sin poder tocar la pantalla.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "lib": ["es2022", "dom", "dom.iterable"] },
+  "include": ["src/tipos.d.ts", "src/revision/silueta.js", "src/revision/detector.js", "src/revision/c2pa.js"]
+}
