@@ -1,36 +1,15 @@
-<!-- Ícono de la app (paleta del 10-oct: neutro frío, vidrio y un solo punto rojo).
-     Los PNG se sacan con Chrome: una página con este SVG a pantalla completa y una
-     captura de N×N (el script está en el README, sección «Gráficos»). El dibujo cabe
-     en la zona segura de «maskable» (el círculo central de 80 %). -->
+<!-- Ícono de la app: el monograma AP (11-oct-2026). La A es la triangulación
+     con su punto focal arriba; la P, una página del manual con la esquina
+     doblada. Fondo claro, trazo grafito y un solo punto rojo.
+     Los PNG, og.jpg y el banner salen de aquí con `node design/iconos.mjs`.
+     Todo el dibujo cabe en la zona segura de «maskable» (el círculo central
+     de 80 %): el punto más lejano del centro está a 201 px de 205. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="pliegueA" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3B3F47"/>
-      <stop offset="1" stop-color="#0A0B0D" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="pliegueB" x1="1" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2A2E35"/>
-      <stop offset="1" stop-color="#0A0B0D" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="vidrio" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.05"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" fill="#0A0B0D"/>
-  <!-- los pliegues del fondo de la app -->
-  <path d="M250 -20C330 70 430 100 540 60L540 -20Z" fill="url(#pliegueA)"/>
-  <path d="M190 -20C270 110 390 180 540 165L540 100C410 125 300 70 250 -20Z" fill="url(#pliegueB)"/>
-  <path d="M-20 420C110 370 250 430 330 540L-20 540Z" fill="url(#pliegueB)"/>
-  <!-- globo de diálogo de vidrio, con su brillo arriba -->
-  <path d="M136 132h240a28 28 0 0 1 28 28v164a28 28 0 0 1-28 28H244l-60 48v-48h-48a28 28 0 0 1-28-28V160a28 28 0 0 1 28-28z" fill="url(#vidrio)" stroke="#F2F3F5" stroke-opacity="0.9" stroke-width="12" stroke-linejoin="round"/>
-  <path d="M150 142h212" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>
-  <!-- hoja del manual -->
-  <path d="M206 170h78l34 34v112h-112z" fill="#F2F3F5"/>
-  <path d="M284 170v34h34" fill="#C3C9D1"/>
-  <rect x="222" y="222" width="80" height="10" rx="5" fill="#8A8F98"/>
-  <rect x="222" y="252" width="60" height="10" rx="5" fill="#8A8F98"/>
-  <rect x="222" y="282" width="70" height="10" rx="5" fill="#8A8F98"/>
-  <!-- el punto rojo: el dato que encontró -->
-  <circle cx="300" cy="257" r="14" fill="#E5333A"/>
+  <rect width="512" height="512" fill="#EEF0F3"/>
+  <!-- el punto focal -->
+  <circle cx="188" cy="142" r="20" fill="#E5333A"/>
+  <!-- A: la triangulación -->
+  <path d="M124 376 L188 200 L252 376 Z" fill="none" stroke="#111318" stroke-width="32" stroke-linejoin="round"/>
+  <!-- P: la lámina, con la esquina cortada como página doblada -->
+  <path d="M308 376 V200 H336 L386 250 V256 A40 40 0 0 1 346 296 H308" fill="none" stroke="#111318" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

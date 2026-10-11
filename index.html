@@ -10,6 +10,7 @@
 <meta name="theme-color" content="#0A0B0D" media="(prefers-color-scheme: dark)"/>
 <meta name="theme-color" content="#EEF0F3" media="(prefers-color-scheme: light)"/>
 <link rel="manifest" href="manifest.webmanifest"/>
+<link rel="icon" type="image/svg+xml" href="icons/icono.svg"/>
 <link rel="icon" type="image/png" href="icons/icon-192.png"/>
 <link rel="apple-touch-icon" href="icons/icon-180.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -896,6 +897,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 /* ── Cabecera ── */
 header{align-items:center;gap:12px;margin-bottom:16px;padding-bottom:0;border-bottom:0}
 header::after{display:none}
+.hdr-marca .ap-mono{width:24px;height:24px;display:block}
 .hdr-marca{width:40px;height:40px;border-radius:12px;background:var(--grad);color:var(--on-accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 18px var(--accent-sombra)}
 .hdr-left{flex:1;min-width:0}
 .hdr-left h1{font-family:'Geist',system-ui,sans-serif;font-size:17px;font-weight:600;letter-spacing:-0.01em;line-height:1.2}
@@ -1535,7 +1537,8 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
 <header>
   <div class="hdr-marca" aria-hidden="true">
-    <svg class="ico" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+    <!-- El monograma AP de icons/icono.svg: la A es la triangulación con su punto focal, la P una lámina. -->
+    <svg class="ap-mono" viewBox="104 112 304 296"><circle cx="188" cy="142" r="22" fill="var(--rojo)"/><path d="M124 376 L188 200 L252 376 Z" fill="none" stroke="currentColor" stroke-width="36" stroke-linejoin="round"/><path d="M308 376 V200 H336 L386 250 V256 A40 40 0 0 1 346 296 H308" fill="none" stroke="currentColor" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </div>
   <div class="hdr-left">
     <h1>Asistente de piso <span class="hdr-cliente">· Mercadep</span></h1>
