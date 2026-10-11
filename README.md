@@ -601,11 +601,12 @@ número del motor era público ni corría en el CI. Para eso está `eval/corpus-
   `npm run gate -- --actualizar` sube la línea base y el diff del PR lo enseña.
 
 Comprobado con una mutación: pedirle al filtro de solidez una palabra más rompe 7 preguntas
-y el gate las lista y falla (p = 0.016). La línea base de hoy es **68/78 datos y 14/15 «no
-está»**, y las 10 que fallan son las mismas familias de falla que con los manuales reales:
+y el gate las lista y falla (p = 0.016). La línea base empezó en **68/78 datos y 14/15 «no
+está»**, y las 10 que fallaban eran las mismas familias de falla que con los manuales reales:
 el filtro de solidez que deja sin tarjetas una pregunta con una sola palabra en común, las
 conversaciones de seguimiento, los rótulos en mayúsculas que se pierden al leer el PDF y un
-aviso falso por errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
+aviso falso por errata. La coincidencia floja de la Fase 3 la subió a **74/78**; quedan un
+seguimiento que cambia de objeto, dos rótulos en mayúsculas y la errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
 acierta la app en el piso.** Eso se mide fuera del repo, con tres baterías separadas
 (desarrollo, prueba y confirmación, esta última corrida una sola vez), y ahí el modo manual
 da 58–70 % con preguntas que no vio al afinarse.
