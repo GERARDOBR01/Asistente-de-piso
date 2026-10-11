@@ -23,6 +23,13 @@
 //   --motor <nombre>     clasico (el de siempre) o agente (el lector con
 //                        herramientas). Con agente, antes de preguntar se
 //                        prepara la ficha del manual con IA; va con su --etiqueta
+//   --local <json>       carga los PDF de una lista ({archivo, nombre}), como
+//                        eval/corpus-publico/manuales.json, en la app de este repo
+//   --cdp <url>          con --local y --clave-en-pagina: pregunta en una pestaña
+//                        ya abierta de un Chrome con --remote-debugging-port, la
+//                        del asesor con su key pegada (--pagina <texto de la URL>
+//                        la elige; --recargar trae el código de hoy). La key no
+//                        sale de esa pestaña.
 //
 // La key se lee de GEMINI_API_KEY o de ~/.config/asistente/gemini.key. No se
 // imprime ni se escribe en ningún archivo. Requiere playwright-core y Chromium:
@@ -46,6 +53,8 @@ const ETIQUETA = arg('etiqueta', 'base');
 const PREGUNTAS = arg('preguntas', path.join(RAIZ, 'eval/preguntas-demo.json'));
 const SALIDA = arg('salida', path.join(RAIZ, 'eval/resultados'));
 const VIVO = arg('vivo', null);
+const LOCAL = arg('local', null);
+const CDP = arg('cdp', null);
 const MOTOR = arg('motor', null);
 if (MOTOR && !['clasico', 'agente'].includes(MOTOR)) { console.error('Motor desconocido: ' + MOTOR); process.exit(1); }
 const PAUSA = Number(arg('pausa', 7)) * 1000;
@@ -318,6 +327,43 @@ if (VIVO) {
     if (r.startsWith('ERROR')) throw new Error(r);
     console.log('ficha:', r);
   }
+} else if (LOCAL || CDP) {
+  /* Los manuales de una lista (`--local eval/corpus-publico/manuales.json`),
+     en la app de este repo. Con `--cdp`, en una pestaña ya abierta de un Chrome
+     con depuración remota: la del asesor, con su key pegada en Ajustes. La key
+     vive en el sessionStorage de esa pestaña; el script no la lee ni la manda
+     (va siempre con --clave-en-pagina). */
+  const { cargarPlaywright, abrirApp, subirManual } = await import('./navegador.mjs');
+  const lista = LOCAL ? JSON.parse(fs.readFileSync(LOCAL, 'utf8')) : [];
+  const manuales = lista.map(m => ({ nombre: m.nombre, buffer: fs.readFileSync(path.resolve(path.dirname(LOCAL), m.archivo)) }));
+  let p;
+  if (CDP) {
+    if (!EN_PAGINA) { console.error('Con --cdp la key se queda en la página: usa --clave-en-pagina.'); process.exit(1); }
+    const pw = await cargarPlaywright();
+    const b = await pw.chromium.connectOverCDP(CDP);
+    p = b.contexts().flatMap(c => c.pages()).find(x => !arg('pagina', null) || x.url().includes(arg('pagina', '')));
+    if (!p) { console.error('No encuentro la pestaña en ' + CDP); process.exit(1); }
+    p.on('dialog', d => d.accept());
+    /* Recargar trae el código que sirve hoy el servidor; el sessionStorage
+       (la key) sobrevive a la recarga de la misma pestaña. */
+    if (process.argv.includes('--recargar')) await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.pdfjsLib && typeof docs !== 'undefined', null, { timeout: 60000 });
+    const yaCargados = await p.evaluate(() => docs.map(d => d.name.normalize('NFC')));
+    for (const m of manuales) {
+      if (yaCargados.includes(m.nombre.normalize('NFC'))) continue;
+      const r = await subirManual(p, m.nombre, m.buffer);
+      console.log(r.ok ? `· ${m.nombre} (${r.s.toFixed(0)} s)` : `· ${m.nombre}: la app no lo agregó`);
+    }
+    const conKey = await p.evaluate(() => { try { return !!(sessionStorage.getItem('ap_api_key_gemini') || '').length; } catch { return false; } });
+    if (!conKey && MODO !== 'manual') { console.error('La pestaña no tiene key de Gemini en Ajustes.'); process.exit(1); }
+    /* Solo se desconecta: el Chrome y la pestaña son del asesor. */
+    cerrar = async () => {};
+  } else {
+    const app = await abrirApp(manuales);
+    p = app.p; cerrar = app.cerrar;
+  }
+  preguntar = a => p.evaluate(MEDIR, a);
+  if (MOTOR === 'agente') console.log('ficha:', JSON.stringify(await p.evaluate(PREPARAR, { clave: CLAVE })));
 } else {
   const { chromium } = await import(process.env.PLAYWRIGHT_CORE ? pathToFileURL(process.env.PLAYWRIGHT_CORE).href : 'playwright-core');
   const port = 9500 + Math.floor(Math.random() * 100);

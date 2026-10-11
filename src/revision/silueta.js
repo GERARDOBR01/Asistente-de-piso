@@ -43,7 +43,13 @@ export function capaDe(objeto, W, H) {
   c.width = W; c.height = H;
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   const img = ctx.createImageData(W, H);
-  for (let i = 0; i < objeto.length; i++) if (objeto[i]) { const k = i * 4; img.data[k] = 255; img.data[k + 1] = 196; img.data[k + 2] = 61; img.data[k + 3] = 110; }
+  /* Relleno tenue y el borde casi opaco: así se lee el contorno de lo que
+     agarró el toque, y la foto se sigue viendo debajo. */
+  for (let i = 0; i < objeto.length; i++) {
+    if (!objeto[i]) continue;
+    const x = i % W, borde = x === 0 || x === W - 1 || i < W || i >= W * (H - 1) || !objeto[i - 1] || !objeto[i + 1] || !objeto[i - W] || !objeto[i + W];
+    const k = i * 4; img.data[k] = 255; img.data[k + 1] = 196; img.data[k + 2] = 61; img.data[k + 3] = borde ? 235 : 80;
+  }
   ctx.putImageData(img, 0, 0);
   return c;
 }
