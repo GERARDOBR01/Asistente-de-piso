@@ -1919,6 +1919,14 @@ function bloqueAprendido(cont){
 ════════════════════════════════════════════════ */
 function switchTab(name){
   const pestanas=['chat','revisar','docs','memory','config'];
+  /* El panel nuevo entra del lado de la pestaña tocada: desde la derecha si
+     está a la derecha de la anterior (CSS: .panel.active[data-dir]). Se marca
+     antes de activarlo para que la animación arranque ya con su dirección. */
+  const barra=document.querySelector('.tabs');
+  const antes=barra?Number(barra.style.getPropertyValue('--tab-i')||0):0;
+  const ahora=Math.max(0,pestanas.indexOf(name));
+  const nuevo=document.getElementById('panel-'+name);
+  if(nuevo)nuevo.dataset.dir=ahora<antes?'izq':'der';
   pestanas.forEach((t,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);
     document.getElementById('panel-'+t).classList.toggle('active',t===name);
@@ -1926,8 +1934,7 @@ function switchTab(name){
   /* La pastilla de la barra se desliza a la pestaña activa (CSS: .tabs::before).
      Un toque corto de vibración confirma el cambio; el navegador lo ignora si
      no hubo un toque de la persona, y no se usa con «reducir movimiento». */
-  const barra=document.querySelector('.tabs');
-  if(barra)barra.style.setProperty('--tab-i',String(Math.max(0,pestanas.indexOf(name))));
+  if(barra)barra.style.setProperty('--tab-i',String(ahora));
   try{
     if(navigator.vibrate&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate(6);
   }catch{}
@@ -2519,7 +2526,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.17.0';
+const VERSION_APP='ap-v1.18.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
