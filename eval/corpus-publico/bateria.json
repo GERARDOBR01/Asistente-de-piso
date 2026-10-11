@@ -82,6 +82,12 @@
   {"q": "¿y la góndola?", "turnos": ["¿qué altura tiene la isla?"], "tipo": "dato", "cat": "conversación", "m": "530 HOGAR", "p": [5], "k": ["1.60 m", "1,60 m"]},
   {"q": "¿y las sábanas?", "turnos": ["¿cómo se doblan las toallas?"], "tipo": "dato", "cat": "conversación", "m": "530 HOGAR", "p": [3], "k": ["caja abierta"]},
   {"q": "¿con cuántas esferas?", "turnos": ["¿cuándo se arma el árbol?"], "tipo": "dato", "cat": "conversación", "m": "530 HOGAR", "p": [6], "k": ["120"]},
+  {"q": "¿y en las camisas?", "turnos": ["¿a qué altura va el sensor en los pantalones?"], "tipo": "dato", "cat": "conversación", "m": "140 CASUAL", "p": [6], "k": ["costura lateral"]},
+  {"q": "¿y los pantalones?", "turnos": ["¿cómo se doblan las playeras?"], "tipo": "dato", "cat": "conversación", "m": "140 CASUAL", "p": [4], "k": ["tercios"]},
+  {"q": "¿y la de Lounge?", "turnos": ["¿en qué se entrega la compra de Ocasión?"], "tipo": "dato", "cat": "conversación", "m": "210 BOUTIQUE", "p": [9], "k": ["bolsa de papel"]},
+  {"q": "¿y en el inferior?", "turnos": ["¿qué va en el entrepaño superior de destilados?"], "tipo": "dato", "cat": "conversación", "m": "412 CAVA", "p": [3], "k": ["packs"]},
+  {"q": "¿y la mesa nido?", "turnos": ["¿qué distancia lleva la isla al siguiente mueble?"], "tipo": "dato", "cat": "conversación", "m": "530 HOGAR", "p": [5], "k": ["95 cm"]},
+  {"q": "¿y cuántas copas por cliente?", "turnos": ["¿cuántos ml se sirven por copa en la degustación?"], "tipo": "dato", "cat": "conversación", "m": "412 CAVA", "p": [5], "k": ["3 copas"]},
 
   {"q": "¿cuántos maniquíes van en la boutique?", "tipo": "no-esta", "cat": "cuántos", "m": "210 BOUTIQUE"},
   {"q": "¿a qué temperatura va la cerveza?", "tipo": "no-esta", "cat": "palabra parecida", "m": "412 CAVA"},

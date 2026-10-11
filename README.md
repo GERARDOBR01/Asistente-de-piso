@@ -591,7 +591,7 @@ número del motor era público ni corría en el CI. Para eso está `eval/corpus-
   HTML a PDF con `generar.mjs`. Están hechos para traer **las trampas que encontró el
   benchmark** con manuales de verdad: títulos de dos renglones, tablas, check lists que
   repiten reglas, rótulos sin frase, el mismo título en dos secciones con cifras distintas.
-- **Una batería de 93 preguntas**: 68 de dato, 10 conversaciones de seguimiento y 15 «no
+- **Una batería de 99 preguntas**: 68 de dato, 16 conversaciones de seguimiento y 15 «no
   está» o trampa, con el mismo formato y el mismo calificador que las privadas.
 - **`lab/gate.mjs`** carga los cuatro PDF en la app real (`lab/volcar.mjs --local`, sin
   puente ni teléfono, 5 s), califica cada pregunta y la compara con
@@ -605,8 +605,9 @@ y el gate las lista y falla (p = 0.016). La línea base empezó en **68/78 datos
 está»**, y las 10 que fallaban eran las mismas familias de falla que con los manuales reales:
 el filtro de solidez que deja sin tarjetas una pregunta con una sola palabra en común, las
 conversaciones de seguimiento, los rótulos en mayúsculas que se pierden al leer el PDF y un
-aviso falso por errata. La coincidencia floja de la Fase 3 la subió a **74/78**; quedan un
-seguimiento que cambia de objeto, dos rótulos en mayúsculas y la errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
+aviso falso por errata. La coincidencia floja de la Fase 3 la subió a **74/78**, y el seguimiento que cambia el
+objeto («¿y las sábanas?») a 81/84 con 6 conversaciones más; quedan dos rótulos en
+mayúsculas y la errata. **El corpus es inventado: protege contra regresiones, no dice cuánto
 acierta la app en el piso.** Eso se mide fuera del repo, con tres baterías separadas
 (desarrollo, prueba y confirmación, esta última corrida una sola vez), y ahí el modo manual
 da 58–70 % con preguntas que no vio al afinarse.

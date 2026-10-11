@@ -21,7 +21,7 @@ nada. Por eso el criterio se escribe antes y la confirmación se corre una sola 
 | Juego | Para qué | Cuántas veces |
 |---|---|---|
 | Desarrollo (las tres baterías de antes, con los 14 manuales reales) | iterar las reglas, con `lab/comparar.mjs` | las que haga falta |
-| eval-gate (corpus público ficticio, 93 preguntas) | que nada que estaba bien pase a mal, en cada PR | en cada PR |
+| eval-gate (corpus público ficticio, 99 preguntas) | que nada que estaba bien pase a mal, en cada PR | en cada PR |
 | Confirmación (57 preguntas nuevas sobre páginas que nadie había usado, revisadas por Gerardo) | decir si la Fase 3 sirve | **una sola vez** |
 
 **Criterio de salida**, todo a la vez:
@@ -45,9 +45,16 @@ vio deja de serlo: la siguiente necesita preguntas nuevas.
 - Medido con `lab/comparar.mjs`: arregla 10 (4 de dato y 6 «no está» de las cruzadas) y rompe
   0. El gate pasa de 68 a 74 de 78.
 
-Falta, en este orden: el seguimiento que sustituye el objeto («¿y las sábanas?»), los ordinales
-(«primera etapa» contra «1° ETAPA») y estrechar el diccionario de sinónimos donde hoy es
-demasiado amplio.
+- **Seguimiento por sustitución** (`sustituirObjeto`, `src/motor/conversacion.js`): «¿y las
+  sábanas?» cambia el objeto de la pregunta anterior en vez de pegarla. Solo con conector y sin
+  verbo ni interrogativo; si no, se pega como antes. Gate de 80 a 81 de 84 (con 6 conversaciones
+  nuevas en la batería pública), Hit@1 de 91.7 a 92.9; desarrollo, arregla 0 y rompe 0.
+- **Ordinales:** «primera etapa» contra «1° ETAPA» ya no daba aviso (`formasDePar`); queda una
+  prueba que cae si se quita la traducción.
+- **Sinónimos:** «entallado» ya no se expande a «piezas». Quita tarjetas de relleno en 3
+  preguntas y no cambia ninguna calificación.
+
+Falta: la corrida única de la confirmación 2, cuando Gerardo revise la batería.
 
 ## Consecuencias
 

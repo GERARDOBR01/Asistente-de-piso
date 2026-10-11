@@ -12,6 +12,7 @@ import { estado, alReiniciar } from '../estado.js';
 import { normalizeText, tokenize } from './texto.js';
 import { otraSeccionNombrada, rutaPorEvidencia } from './ruta.js';
 import { esOperacionDeTienda } from './puerta.js';
+import { esVerbo } from './busqueda.js';
 
 /* ── EL VOCABULARIO DE LA SECCIÓN ─────────────────
    Sustituye a la lista fija de palabras de Hombres para decidir si una
@@ -152,7 +153,61 @@ export function consultaAmpliada(q,hist){
   if(!esElipsis(q))return q;
   const previa=preguntaAnterior(hist);
   if(!previa)return q;
-  return previa+' '+q
+  return sustituirObjeto(previa,q)||previa+' '+q
+}
+
+/* ── «¿Y LAS SÁBANAS?»: SE CAMBIA EL OBJETO ──────
+   Pegar las dos preguntas deja arriba lo que se preguntó antes: tras «¿cómo se
+   doblan las toallas?», «¿y las sábanas?» buscaba «toallas sábanas» y la
+   primera tarjeta seguía siendo la de toallas. Lo que el asesor hace es cambiar
+   una pieza de la pregunta anterior, así que eso se hace aquí:
+   - «¿y las sábanas?» cambia el objeto: «¿cómo se doblan las sábanas?»;
+   - «¿y en los nichos?» cambia el lugar: «… por fila en los nichos»;
+   - «¿y la de lounge?» cambia lo que lo distingue: «la etiqueta de lounge».
+   Solo con conector de seguimiento («y», «e»…) y sin verbo ni pregunta nueva:
+   «¿y si falta una talla?» o «¿a qué hora?» preguntan otra cosa del mismo
+   objeto, y para eso sigue sirviendo pegar. Si no hay qué cambiar, null. */
+const ARTICULO='(?:el|la|los|las|un|una|unos|unas)';
+const PREPOSICION='(?:en|para|con|sin|sobre|entre|de|del|a|al|por)';
+const INTERROGATIVA=/^(?:qu[eé]|cu[aá]l(?:es)?|cu[aá]nt[oa]s?|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n(?:es)?|por\s*qu[eé])$/i;
+/** @param {string} previa @param {string} q @returns {string | null} */
+export function sustituirObjeto(previa,q){
+  const m=(q||'').match(/^\s*¿?\s*(?:y|e|pero|entonces)\s+([\s\S]*?)\s*\??\s*$/i);
+  if(!m)return null;
+  const resto=m[1].trim();
+  const palabras=resto.split(/\s+/);
+  if(!resto||palabras.length>5)return null;
+  /* Un verbo o un interrogativo es otra pregunta, no otro objeto. */
+  if(palabras.some(w=>INTERROGATIVA.test(w)||esVerbo(normalizeText(w).trim())||/^(?:si|es|son|está|están|hay|tiene|tienen|lleva|llevan)$/i.test(w)))return null;
+  const base=previa.replace(/\s*\?\s*$/,'');
+  const cierre=/\?\s*$/.test(previa)?'?':'';
+  const sinSigno=(/** @type {string} */ t)=>t.replace(/^¿\s*/,'');
+  /* «en los nichos»: el mismo tipo de complemento que ya traía la anterior. */
+  const prep=resto.match(new RegExp('^('+PREPOSICION+')\\s+(.+)$','iu'));
+  if(prep){
+    const re=new RegExp('(^|\\s)'+prep[1]+'\\s+[^?¿,;.]+$','iu');
+    return re.test(base)?base.replace(re,(_,a)=>a+resto)+cierre:null;
+  }
+  /* «la de lounge»: la misma cosa, distinto complemento. */
+  const deOtro=resto.match(new RegExp('^'+ARTICULO+'\\s+(de\\s+.+)$','iu'));
+  /* El objeto: el último «artículo + nombre (de algo)» que no va detrás de
+     una preposición; «en la cava» es el lugar, no el objeto. */
+  const np=new RegExp('(^|[\\s¿])('+ARTICULO+'\\s+[\\p{L}\\d-]+(?:\\s+de\\s+[\\p{L}\\d-]+)?)','giu');
+  /** @type {{i: number, txt: string} | null} */
+  let objeto=null;
+  for(const x of base.matchAll(np)){
+    const i=/** @type {number} */(x.index)+x[1].length;
+    const antes=base.slice(0,i).trim().split(/\s+/).pop()||'';
+    if(new RegExp('^'+PREPOSICION+'$','i').test(sinSigno(antes)))continue;
+    objeto={i,txt:x[2]};
+  }
+  if(!objeto)return null;
+  let nuevo=resto;
+  if(deOtro){
+    const sinDe=objeto.txt.replace(/\s+de\s+[\p{L}\d-]+$/u,'');
+    nuevo=sinDe+' '+deOtro[1];
+  }else if(!new RegExp('^'+ARTICULO+'\\s','iu').test(resto))return null;
+  return base.slice(0,objeto.i)+nuevo+base.slice(objeto.i+objeto.txt.length)+cierre
 }
 
 /* ── LA SECCIÓN QUE ELIGE LA PREGUNTA ─────────────
