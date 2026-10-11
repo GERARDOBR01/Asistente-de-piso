@@ -95,7 +95,7 @@ EVIDENCIA: pág. N · RÓTULO · «cita corta copiada tal cual de lo que leíste
 (una línea EVIDENCIA por dato; ninguna si el manual no lo dice)
 OPCIONES: otras formas de entender la pregunta, como preguntas, separadas por « | » (o «ninguna»)
 [RESPUESTA FINAL]
-La respuesta directa, en 1 a 4 oraciones o una lista corta si piden varias cosas. Sin introducción. Negritas solo para los datos.
+La respuesta directa, en 1 a 4 oraciones, o la lista completa si preguntan cuáles son (marcas, mundos, categorías), cada cosa con su mundo y su página. Sin introducción. Negritas solo para los datos.
 CERTEZA: ALTA | MEDIA | GAP
 (ALTA: cada dato tiene su EVIDENCIA literal. MEDIA: lo dedujiste de lo que leíste, o es recomendación y no regla. GAP: el manual no lo dice. Esa línea va sola, al final.)`
 }

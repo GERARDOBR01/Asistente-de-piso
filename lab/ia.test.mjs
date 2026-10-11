@@ -9,7 +9,8 @@ import {
 } from '../src/ia/respuesta.js';
 import { claseDeError, errorDeProveedor } from '../src/ia/errores.js';
 import { streamGemini, streamOpenAICompatible, parseOpenAIChunk, textoDeGemini } from '../src/ia/sse.js';
-import { PROVIDERS, proveedorValido, razonamientoGemini } from '../src/ia/proveedores.js';
+import { PROVIDERS, proveedorValido, razonamientoGemini, partesGemini, mensajesOpenAI } from '../src/ia/proveedores.js';
+import { laminasParaVer, notaDeLaminas, LAMINAS_MAX } from '../src/ia/laminas.js';
 
 test('ia: el parser separa el razonamiento de la respuesta, con erratas en las marcas', () => {
   const r = parseAIResponse('[PENSAMIENTO NTRNO]\nLECTURA: pág. 37\n\n[RESPUESTA FINAL AL SESOR]\n\nVan los lentes de lectura (pág. 37).');
@@ -143,4 +144,49 @@ test('ia: qué se reintenta, qué es saturación y cuál es el respaldo', async 
   const espera = sleep(10000, ac.signal);
   ac.abort();
   await assert.rejects(espera, e => e.name === 'AbortError');
+});
+
+/* Las láminas que son una imagen viajan como imagen (src/ia/laminas.js). */
+const fr = (docName, page, text, extra = {}) => ({ docName, page, text, ...extra });
+const IMG = 'data:image/jpeg;base64,QUJD';
+
+test('láminas: va la imagen de la página con poco texto, no la de una que ya se lee', () => {
+  const todos = [
+    fr('demo.pdf', 17, 'Cambia en temporada de Rebajas'),
+    fr('demo.pdf', 5, 'Tallaje correcto: dos chicas, dos medianas, dos grandes. '.repeat(8)),
+    fr('demo.pdf', 17, 'Mundo · Tipo de producto · Segmento · Marca (lo que la IA leyó)', { isFicha: 'visual' }),
+  ];
+  const ctx = [todos[1], todos[0]];
+  const r = laminasParaVer(ctx, todos, (d, n) => (n === 17 || n === 5 ? IMG : null));
+  assert.deepEqual(r.map(l => l.page), [17]);
+  assert.match(notaDeLaminas(r), /pág\. 17/);
+  assert.equal(notaDeLaminas([]), '');
+});
+
+test('láminas: como mucho LAMINAS_MAX, sin repetir página y solo si hay imagen guardada', () => {
+  const todos = [1, 2, 3, 4].map(n => fr('d.pdf', n, 'Corto'));
+  const ctx = [todos[0], todos[0], todos[1], todos[2], todos[3]];
+  const r = laminasParaVer(ctx, todos, (d, n) => (n === 1 ? null : IMG));
+  assert.equal(r.length, LAMINAS_MAX);
+  assert.deepEqual(r.map(l => l.page), [2, 3].slice(0, LAMINAS_MAX));
+});
+
+test('láminas: a una pregunta de marcas va la lámina de MARCAS aunque traiga texto (los logos no están en él)', () => {
+  const largo = 'Tresvik Kalinde Ondera Brunell Vellut Marabú Ferrol Quintal Arenzo Pirca '.repeat(6);
+  const todos = [fr('d.pdf', 14, largo, { heading: 'MUNDOS Y MARCAS · BÁSICOS' }), fr('d.pdf', 3, largo, { heading: 'CHECK LIST' })];
+  assert.deepEqual(laminasParaVer(todos, todos, () => IMG, { deMarcas: true }).map(l => l.page), [14]);
+  assert.deepEqual(laminasParaVer(todos, todos, () => IMG).map(l => l.page), []);
+});
+
+test('proveedores: la imagen va detrás del texto, rotulada con su página, en Gemini y en OpenAI', () => {
+  const m = { role: 'user', content: 'Contexto', imagenes: [{ page: 17, dataUrl: IMG }] };
+  const g = partesGemini(m);
+  assert.deepEqual(g[0], { text: 'Contexto' });
+  assert.deepEqual(g[1], { text: 'Imagen de la pág. 17:' });
+  assert.deepEqual(g[2], { inline_data: { mime_type: 'image/jpeg', data: 'QUJD' } });
+  const [o, sin] = mensajesOpenAI([m, { role: 'system', content: 'S' }]);
+  assert.equal(o.content[0].text, 'Contexto');
+  assert.equal(o.content[2].image_url.url, IMG);
+  assert.deepEqual(sin, { role: 'system', content: 'S' });
+  assert.deepEqual(partesGemini({ role: 'user', content: 'x' }), [{ text: 'x' }]);
 });

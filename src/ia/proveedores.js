@@ -35,7 +35,7 @@ export const PROVIDERS={
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:temperature??0.2})
+        body:JSON.stringify({model,messages:mensajesOpenAI(messages),max_tokens:maxTokens,temperature:temperature??0.2})
       });
       const data=await res.json();
       if(!res.ok)throw errorDeProveedor(res.status,data);
@@ -46,7 +46,7 @@ export const PROVIDERS={
       return streamOpenAICompatible(
         'https://api.openai.com/v1/chat/completions',
         key,
-        buildOpenAIStreamBody(messages, model, maxTokens, temperature),
+        buildOpenAIStreamBody(mensajesOpenAI(messages), model, maxTokens, temperature),
         onDelta, signal
       );
     }
@@ -66,13 +66,13 @@ export const PROVIDERS={
        sacó 23/24, dos de sus respuestas llegaron cortadas y se saturó a media
        prueba. Queda en la lista para quien lo quiera. */
     chatModels:['gemini-3.5-flash-lite','gemini-3.5-flash','gemini-3.6-flash','gemini-3.8-flash'],
-    /** @param {MensajeIA[]} messages @returns {{systemInstruction?: {parts: {text: any}[]}, contents: {role: string, parts: {text: any}[]}[]}} */
+    /** @param {MensajeIA[]} messages @returns {{systemInstruction?: {parts: {text: any}[]}, contents: {role: string, parts: object[]}[]}} */
     _toGeminiMessages(messages){
       const sys=messages.find(m=>m.role==='system');
       const rest=messages.filter(m=>m.role!=='system');
       return{
         systemInstruction:sys?{parts:[{text:sys.content}]}:undefined,
-        contents:rest.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
+        contents:rest.map(m=>({role:m.role==='assistant'?'model':'user',parts:partesGemini(m)}))
       };
     },
     /* Los Gemini con razonamiento descuentan de `maxOutputTokens` lo que
@@ -120,6 +120,22 @@ export const PROVIDERS={
     }
   }
 };
+
+/* Un mensaje puede llevar láminas (`imagenes`, src/ia/laminas.js): cada una va
+   detrás del texto, rotulada con su página, en el formato de cada proveedor. */
+/** @param {MensajeIA} m @returns {object[]} */
+export function partesGemini(m){
+  /** @type {object[]} */
+  const parts=[{text:m.content}];
+  for(const im of m.imagenes||[])parts.push({text:`Imagen de la pág. ${im.page}:`},{inline_data:{mime_type:'image/jpeg',data:im.dataUrl.split(',')[1]}});
+  return parts
+}
+/** @param {MensajeIA[]} messages @returns {MensajeIA[]} */
+export function mensajesOpenAI(messages){
+  return messages.map(m=>m.imagenes&&m.imagenes.length
+    ?{role:m.role,content:[{type:'text',text:m.content},...m.imagenes.flatMap(im=>[{type:'text',text:`Imagen de la pág. ${im.page}:`},{type:'image_url',image_url:{url:im.dataUrl}}])]}
+    :{role:m.role,content:m.content})
+}
 
 /** @param {string | null | undefined} model @returns {{thinkingBudget: number} | {thinkingLevel: string}} */
 export function razonamientoGemini(model){

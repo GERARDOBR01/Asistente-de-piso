@@ -2045,7 +2045,7 @@ const LECTURA_VERSION=3;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.22.2';
+const VERSION_APP='ap-v1.23.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -3379,6 +3379,7 @@ function responderSinModelo(q){
    verificación de citas. Aquí queda lo que depende de la pantalla y de los
    manuales cargados: qué sección lee, si contesta él y su última traza. */
 let ultimaTrazaAgente=null;     // qué hizo el agente en la última pregunta (lo lee eval/modo-ia.mjs)
+let ultimasLaminasVistas=[];    // las láminas que el motor clásico mandó como imagen (también la lee eval/)
 
 /* ── ¿Contesta el agente? ──
    Con sección activa (o un solo manual), con key y con el motor elegido. Lo
@@ -3537,7 +3538,7 @@ async function sendMessage(){
   /* El agente contesta primero si le toca. Si falla por cualquier cosa que no
      sea «detener» o el silencio del proveedor, la misma pregunta sigue por el
      motor clásico: el asesor recibe respuesta, no un error del agente. */
-  ultimaTrazaAgente=null;
+  ultimaTrazaAgente=null;ultimasLaminasVistas=[];
   if(motorAgenteDisponible(q)){
     currentAbort=new AbortController();
     try{
@@ -3593,7 +3594,13 @@ async function sendMessage(){
      salir en una respuesta que el contexto actual ya no sostiene. Lo último que
      el modelo lee antes de contestar es el manual y la pregunta. */
   messages.push(...historialParaModelo(history,6));
-  if(context)messages.push({role:'user',content:'[CONTEXTO — DOCUMENTACIÓN DISPONIBLE]\n\nRevisa este contexto antes de responder. Toda tu respuesta debe basarse ÚNICAMENTE en esta información:\n\n'+context});
+  /* Las láminas del contexto que casi no tienen texto (son una imagen) van
+     también como imagen: src/ia/laminas.js. */
+  const laminas=context&&!ctx.estado?laminasParaVer((ultimosFragmentos||[]).filter(c=>c.source==='pdf'),docChunks,
+    (d,n)=>((docPaginas.get(d)||[]).find(p=>p.page===n)||{}).imagen,{deMarcas:basicoDe(q)==='marcas'}):[];
+  if(context)messages.push({role:'user',content:'[CONTEXTO — DOCUMENTACIÓN DISPONIBLE]\n\nRevisa este contexto antes de responder. Toda tu respuesta debe basarse ÚNICAMENTE en esta información:\n\n'+context+notaDeLaminas(laminas),
+    imagenes:laminas.map(l=>({page:l.page,dataUrl:l.dataUrl}))});
+  ultimasLaminasVistas=laminas.map(l=>({doc:l.doc,page:l.page}));
   let userContent=q;
   if(scope.isGreeting){
     userContent+='\n\n[NOTA DEL SISTEMA: El usuario solo saluda. Responde amable en 1-2 oraciones invitándolo a preguntar sobre la sección del manual cargado. NO uses la redirección de fuera de tema.]';
@@ -3645,7 +3652,17 @@ async function sendMessage(){
       },
       signal:currentAbort.signal
     };
-    let recibido=await callWithRetryStream(provider,streamParams);
+    let recibido;
+    try{recibido=await callWithRetryStream(provider,streamParams)}
+    catch(err){
+      /* Un modelo que no acepta imágenes contesta 400: la misma pregunta va
+         sin las láminas, con el texto de siempre. */
+      if(err.name==='AbortError'||err.status!==400||!laminas.length)throw err;
+      for(const m of messages)delete m.imagenes;
+      laminas.length=0;ultimasLaminasVistas=[];
+      streamedText='';if(pendingSanitize)clearTimeout(pendingSanitize);
+      recibido=await callWithRetryStream(provider,streamParams);
+    }
     if(chatDescartado)return;
     /* A veces llega el razonamiento sin la contestación, con el proveedor
        diciendo que terminó bien. Medido con el demo: 2 de 18 respuestas de 3.8
@@ -4041,9 +4058,14 @@ const MAX_EVIDENCIA=3;
    que destapó todo esto y vuelve por la puerta de atrás en cuanto se permite
    enseñar lámina sin cita, así que se comprueba explícitamente. */
 const SIN_DATO=/no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura)\s+en\s+(?:el|los)\s+manual|no\s+hay\s+(?:regla|dato|informaci[óo]n)/i;
+/* Solo cuenta si la respuesta ABRE diciendo que no está. «Las marcas de
+   CONTEMPO son Tommy y Guess (pág. 13); el manual no especifica en qué mueble
+   van» trae el dato, y esconder la lámina por la segunda mitad dejaba al asesor
+   sin la tabla de la que sale la primera. */
 function esRespuestaSinDato(respuesta,certeza){
   if(certeza==='GAP')return true;
-  return SIN_DATO.test(respuesta||'')
+  const primera=(respuesta||'').trim().split(/(?<=[.!?])\s/)[0]||'';
+  return SIN_DATO.test(primera)
 }
 
 function figurasDeFragmentos(chunks,citas,respuesta,certeza){
@@ -4336,10 +4358,18 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
      verificación encontró de verdad en lo que se le mandó al modelo. */
   const pagsCitadas=[...verif.citadas].map(Number).sort((x,y)=>x-y);
   if(contextoEnviado&&pagsCitadas.length&&certeza!=='GAP'){
-    const doc=(ultimosFragmentos||[]).find(c=>c.source==='pdf'&&verif.citadas.has(String(c.page)))?.docName;
+    const citados=(ultimosFragmentos||[]).filter(c=>c.source==='pdf'&&verif.citadas.has(String(c.page)));
+    /* Todos los manuales citados, no solo el primero: una respuesta que junta
+       dos secciones decía una sola arriba. */
+    const manuales=[...new Set(citados.map(c=>c.docName))];
+    /* Y los mundos de las tablas citadas que la respuesta nombra («MUNDOS Y
+       MARCAS · VESTIR» → VESTIR): de un vistazo, en qué mundo va. */
+    const resp=normalizeText(cleanFinal);
+    const mundos=[...new Set(citados.map(c=>(c.heading||'').split(' · ')[1]||'').filter(m=>m&&resp.includes(normalizeText(m))))].slice(0,3);
     const cab=document.createElement('div');cab.className='resp-cab';
-    cab.innerHTML=ICO.doc+`<span class="resp-manual">${escapeHtml(doc?nombreDeSeccion(doc):'Tu manual')}</span>`
-      +pagsCitadas.slice(0,3).map(n=>`<span class="resp-pag">pág. ${n}</span>`).join('');
+    cab.innerHTML=ICO.doc+(manuales.length?manuales.slice(0,2):[null]).map(d=>`<span class="resp-manual">${escapeHtml(d?nombreDeSeccion(d):'Tu manual')}</span>`).join('')
+      +pagsCitadas.slice(0,3).map(n=>`<span class="resp-pag">pág. ${n}</span>`).join('')
+      +mundos.map(m=>`<span class="resp-pag resp-mundo">${escapeHtml(m)}</span>`).join('');
     /* Fuera del cuerpo: lo que se copia y lo que se califica es la respuesta. */
     loaderEl.insertBefore(cab,msgBody);
   }
@@ -4368,6 +4398,15 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   let figsApi=contextoEnviado?figurasDeFragmentos(ultimosFragmentos,citadasFig,cleanFinal,certeza):[];
   if(contextoEnviado&&!figsApi.length&&(verif.atadas||[]).length){
     const pag=paginaComoLamina(ultimosFragmentos,verif.atadas[0].pagina||verif.atadas[0].paginaRival,docPaginas);
+    if(pag){figsApi=[pag];figsApi.origen='pagina'}
+  }
+  /* La página citada no trae un recorte (una tabla de MUNDOS Y MARCAS, una
+     lámina que es toda imagen): va la página entera. Si el chat no alcanzó a
+     nombrar algo, la lámina lo enseña. Primero la que el modelo vio como
+     imagen, luego la primera citada. */
+  if(contextoEnviado&&!figsApi.length&&verif.citadas.size&&!esRespuestaSinDato(cleanFinal,certeza)){
+    const vista=ultimasLaminasVistas.find(l=>verif.citadas.has(String(l.page)));
+    const pag=paginaComoLamina(ultimosFragmentos,vista?vista.page:[...verif.citadas].map(Number).sort((x,y)=>x-y)[0],docPaginas);
     if(pag){figsApi=[pag];figsApi.origen='pagina'}
   }
   if(contextoEnviado)renderEvidencia(loaderEl,figsApi);
