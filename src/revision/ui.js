@@ -648,6 +648,7 @@ function dibujarFocal(ctx, k, u, e, z) {
   const r = z.res ? z.res.find(x => x.basico === 'triangulacion') : null;
   const tri = r?.marcas?.triangulo;
   if (tri) {
+    /** @type {{x: number, y: number}[]} */
     const pts = tri.map((/** @type {any} */ q) => ({ x: q.x * k, y: q.y * k }));
     const largo = pts.reduce((s, q, i) => s + Math.hypot(q.x - pts[(i + 1) % 3].x, q.y - pts[(i + 1) % 3].y), 0);
     ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
@@ -930,7 +931,7 @@ function reporte() {
 
 async function compartir() {
   const c = reporte();
-  const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)));
+  const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.9)));
   const texto = resumenTexto();
   const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
   const que = st.zonas.length > 1 ? 'area' : st.zonas[0]?.tipo || st.tipo;
@@ -980,7 +981,7 @@ async function muestraOrigen(cual) {
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   const g = ctx.createLinearGradient(0, 0, 64, 48); g.addColorStop(0, '#FF5A6E'); g.addColorStop(1, '#1F5FD6');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 48);
-  const jpeg = new Uint8Array(await /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9))).arrayBuffer());
+  const jpeg = new Uint8Array(await /** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.9))).arrayBuffer());
   const hace = new Date(Date.now() - 50 * 60000);
   const f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
   const fecha = `${hace.getFullYear()}:${f2(hace.getMonth() + 1)}:${f2(hace.getDate())} ${f2(hace.getHours())}:${f2(hace.getMinutes())}:00`;

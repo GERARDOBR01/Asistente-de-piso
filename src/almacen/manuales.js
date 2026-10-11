@@ -26,6 +26,7 @@ export function abrirDB(){
     req.onerror=()=>reject(req.error);
   })
 }
+/** @param {IDBTransactionMode} modo @param {(st: IDBObjectStore) => IDBRequest | void} fn @returns {Promise<any>} */
 export function txDB(modo,fn){
   return abrirDB().then(db=>new Promise((resolve,reject)=>{
     const tx=db.transaction(DB_STORE,modo);
@@ -38,11 +39,12 @@ export function txDB(modo,fn){
     tx.onabort=()=>{db.close();reject(tx.error||new Error('transacción abortada'))};
   }))
 }
+/** @param {Blob} file @returns {Promise<string>} */
 export async function hashArchivo(file){
   const buf=await file.arrayBuffer();
   const digest=await crypto.subtle.digest('SHA-256',buf);
   return[...new Uint8Array(digest)].slice(0,10).map(b=>b.toString(16).padStart(2,'0')).join('')
 }
-export const leerManual=hash=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
+export const leerManual=(/** @type {string} */ hash)=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
 export const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
-export const borrarManual=hash=>txDB('readwrite',st=>st.delete(hash));
+export const borrarManual=(/** @type {string} */ hash)=>txDB('readwrite',st=>st.delete(hash));

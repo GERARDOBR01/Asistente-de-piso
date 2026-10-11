@@ -32,7 +32,7 @@ export const REGLA_NIVELES = { separacion: 0.04, minimo: 3 };
 /**
  * @param {Punto[]} puntos      punto más alto de cada elemento (y crece hacia abajo)
  * @param {{width:number,height:number}} tam  tamaño de la foto
- * @param {{origen?:'detector'|'manual'|'detector+manual', regla?:typeof REGLA_TRIANGULO}} [op]
+ * @param {{origen?:string, regla?:typeof REGLA_TRIANGULO}} [op]
  * @returns {Resultado}
  */
 export function revisarTriangulo(puntos, tam, op = {}) {
@@ -71,7 +71,7 @@ export function revisarTriangulo(puntos, tam, op = {}) {
 /**
  * Alturas y niveles: cuántas alturas distintas hay entre los elementos.
  * @param {Punto[]} puntos @param {{width:number,height:number}} tam
- * @param {{origen?:'detector'|'manual'|'detector+manual', regla?:typeof REGLA_NIVELES, desnivelMinimo?:number}} [op]
+ * @param {{origen?:string, regla?:typeof REGLA_NIVELES, desnivelMinimo?:number}} [op]
  * @returns {Resultado}
  */
 export function revisarNiveles(puntos, tam, op = {}) {
