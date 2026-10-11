@@ -215,7 +215,7 @@ interface RespuestaHttp {
 declare function fetch(url: string, init?: { method?: string, headers?: Record<string, string>, body?: string, signal?: AbortSignal | null }): Promise<RespuestaHttp>;
 
 /** Un mensaje para el modelo, con el formato de OpenAI. */
-interface MensajeIA { role: string; content: any }
+interface MensajeIA { role: string; content: any; imagenes?: Array<{ page: number; dataUrl: string }> }
 /** El error de un proveedor, con su código HTTP y su clase (claseDeError). */
 interface ErrorDeProveedor extends Error { status?: number; clase?: string; espera?: number | null }
 /** La imagen guardada de una página al cargar el PDF. */

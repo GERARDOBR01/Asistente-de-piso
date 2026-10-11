@@ -199,8 +199,14 @@ const MEDIR = async ({ q, turnos, h, m, clave, modelo, variante, modo, motor }) 
     aviso: el?.querySelector('.verify-warn')?.innerText || '',
     contesto: el?.querySelector('.msg-modelo')?.textContent || '',
     error: !!el?.querySelector('.err-detail'),
+    /* Lo que enseña la tarjeta además del texto: la cabecera (manual, páginas,
+       mundos) y el pie de cada lámina. */
+    cabecera: el?.querySelector('.resp-cab')?.innerText || '',
+    laminasMostradas: [...(el?.querySelectorAll('.evidencia-fig figcaption') || [])].map(f => f.innerText),
     /* Lo que hizo el agente en la última pregunta (null con el motor clásico). */
     agente: typeof ultimaTrazaAgente !== 'undefined' ? ultimaTrazaAgente : null,
+    /* Las láminas que el motor clásico mandó como imagen. */
+    laminas: typeof ultimasLaminasVistas !== 'undefined' ? ultimasLaminasVistas : [],
     /* Lo que de verdad recibió el modelo, para separar fallos de búsqueda de
        fallos del modelo. */
     ctx: (ultimosFragmentos || []).map(c => ({ d: c.docName, p: c.page, h: c.heading || '', t: c.text || '' })),

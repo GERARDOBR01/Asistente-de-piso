@@ -121,6 +121,35 @@ Con `--cdp`, la medición pregunta en una pestaña de Chrome ya abierta (con
   el clásico no encontró la lámina y pierde dos por citar otra página. Gasta ~2,900 tokens por
   pregunta. El clásico sigue siendo el de fábrica.
 
+### Los básicos, con manuales reales (11-oct, noche)
+
+Lo que más se pregunta en el piso son los básicos: qué marcas van en qué mundo, cómo se
+clasifica la sección y cuál es la fórmula de exhibición. Probando la app salían dos fallas: el
+modelo no llegaba a las marcas y, en clasificación, explicaba *cómo* se clasificaba sin decir
+*cuáles* eran las categorías. Se armó una batería de **61 preguntas de básicos**, con un manual
+nuevo de Básicos de Display y los 14 manuales reales. Son 42 de desarrollo y 19 de confirmación,
+con hash y corridas una sola vez. Todo queda fuera del repo.
+
+| 3.5 Flash-Lite, razonado | antes (ap-v1.21) | ahora |
+|---|---|---|
+| Desarrollo (42): dato con su página | 26/42 (61.9 %) | **40/42 (95.2 %)** |
+| — «¿en qué mundo va X?» | 3/8 | **8/8** |
+| — marcas de un mundo | 6/12 | **11/12** |
+| Confirmación (19), una sola corrida | — | **17/19 (89.5 %)** |
+| Modo manual, desarrollo (sin API) | 21/42 | **35/42** |
+
+Tres arreglos lo explican:
+- **Las tablas «MUNDO | Marca» se leen fila por fila** (`tablasDeRotulos` en
+  `src/motor/layout.js`). Antes el rótulo del mundo le caía a la lista de la fila de abajo, y el
+  contexto decía que Tommy era PREMIUM.
+- **La lámina que es una imagen va como imagen** (`src/ia/laminas.js`). Si en el contexto llega
+  una página con casi todo dibujado, como «Clasificación de Departamentos», el modelo recibe
+  también su imagen. Lo mismo pasa con la lámina de MARCAS en una pregunta de marcas, porque
+  ahí muchas marcas son logos. Es una imagen por pregunta y sube la espera ~0.5 s.
+- **Listas completas** (regla 11 del prompt). Si preguntan cuáles son, se nombran todas, cada
+  una con su mundo y su página. Además, la lámina ya no se esconde por un «no especifica» a
+  media respuesta, y la cabecera de la tarjeta enseña los mundos que la respuesta nombra.
+
 ### Dos modos de respuesta, y el modelo de fábrica
 
 Desde el 26-sep, en **Ajustes → Modo de respuesta** hay dos:

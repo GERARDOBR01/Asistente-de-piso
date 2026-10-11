@@ -38,6 +38,7 @@ import * as proveedores from './ia/proveedores.js';
 import * as iaRespuesta from './ia/respuesta.js';
 import * as reintentos from './ia/reintentos.js';
 import * as agente from './ia/agente.js';
+import * as laminas from './ia/laminas.js';
 import * as estadoDelCorpus from './estado.js';
 import { estado, CLAVES } from './estado.js';
 /* La pestaña «Revisar» (ADR 0007) vive aparte del motor del manual: se arma
@@ -73,6 +74,7 @@ const PUBLICO = {
   errores: ['errorDeProveedor'],
   sse: ['textoDeGemini'],
   proveedores: ['PROVIDERS', 'PROV_ORDEN', 'proveedorValido', 'razonamientoGemini'],
+  laminas: ['laminasParaVer', 'notaDeLaminas'],
   iaRespuesta: ['GUARDRAIL_APPEND', 'NOTA_DEL_MODO', 'PROMPT_VERSION', 'certezaDe',
     'debeRepetirPorCorte', 'getStreamingDisplayText', 'jsonDeTexto', 'lecturaDe', 'modoValido',
     'parseAIResponse', 'promptDelModo', 'sanitizeFinalAnswer'],
@@ -92,7 +94,7 @@ const PUBLICO = {
     'validarExamen'],
   almacen: ['borrarManual', 'hashArchivo', 'leerManual', 'listarManuales', 'txDB'],
 };
-const MODULOS = { html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos, secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos, verificacion, errores, sse, proveedores, iaRespuesta, reintentos, agente, aprende, sigue, tablero, medicion, almacen };
+const MODULOS = { html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos, secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos, verificacion, errores, sse, proveedores, iaRespuesta, reintentos, agente, laminas, aprende, sigue, tablero, medicion, almacen };
 for (const [ns, nombres] of Object.entries(PUBLICO)) for (const n of nombres) globalThis[n] = MODULOS[ns][n];
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para

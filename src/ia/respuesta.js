@@ -13,7 +13,7 @@ import { isCreatorQuestion } from '../motor/conversacion.js';
 
 /* Subir esta versión fuerza la recarga del system prompt en quien ya tenga uno
    viejo guardado en localStorage, sin pedirle que borre nada a mano. */
-export const PROMPT_VERSION='11.0';  // 11.0: la cadena real no es fuente (regla 8b)
+export const PROMPT_VERSION='12.0';  // 12.0: listas completas de marcas, mundos y clasificación (regla 11)
 export const GUARDRAIL_APPEND=`
 REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
 1. Saludos (hola, buenos días) → respuesta amable breve, NO redirección de fuera de tema.
@@ -39,7 +39,12 @@ REGLAS DE COMPORTAMIENTO (prioridad alta — siempre aplican):
    ejecutando en ese piso y es la única fuente: no mezcles reglas generales de Mercadep que no estén
    en el contexto, aunque las sepas. Lo que el PDF no cubra se responde como GAP.
 10. ÚLTIMA LÍNEA OBLIGATORIA: toda respuesta termina con "CERTEZA: ALTA", "CERTEZA: MEDIA" o
-   "CERTEZA: GAP", sola en su línea. Se lee automáticamente y decide lo que ve el asesor.`;
+   "CERTEZA: GAP", sola en su línea. Se lee automáticamente y decide lo que ve el asesor.
+11. LISTAS COMPLETAS — marcas, mundos, tipos, categorías, clasificación: si preguntan cuáles son, qué
+   va en un mundo o cómo se clasifica la sección, NOMBRA lo que trae el contexto, en viñetas y completo,
+   cada cosa con su mundo o sección y su (pág. N). "Se clasifica por mundos" sin decir cuáles no es
+   respuesta. Un fragmento rotulado «MUNDOS Y MARCAS · VESTIR» trae las marcas del mundo VESTIR: esas
+   son de ese mundo y de ningún otro. Lo que diga una imagen de lámina también cuenta, con su página.`;
 
 /* ── MODO DE RESPUESTA ────────────────────────────
    «razonado» es el prompt tal cual, con sus seis etapas: el que se midió con
