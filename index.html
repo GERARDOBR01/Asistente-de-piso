@@ -1515,7 +1515,13 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .resp-cab{display:flex;align-items:center;gap:8px;margin:0 2px 6px;color:var(--text3);font-size:12.5px}
 .resp-cab .resp-manual{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)}
 .resp-pag{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;font-weight:600;color:var(--text);background:var(--s3);padding:4px 9px;border-radius:8px;white-space:nowrap}
-.evidencia-fig{max-width:min(100%,320px)}
+/* La lámina en una fila, como en el canvas: miniatura, de dónde es y «Toca
+   para ampliar». El visor (con su transición) es donde se lee de verdad. */
+.evidencia-tira{flex-direction:column;gap:8px}
+.evidencia-fig{display:flex;align-items:center;gap:12px;max-width:100%;padding:8px;border-radius:16px;background:var(--s2);box-shadow:none}
+.evidencia-fig img{width:112px;height:84px;object-fit:cover;object-position:top;border-radius:11px;flex-shrink:0;background:#ECE9E3}
+.evidencia-fig figcaption{border:0;background:none;padding:0;font-size:13.5px;font-weight:600;color:var(--text);line-height:1.35}
+.evidencia-fig figcaption::after{content:'Toca para ampliar';display:block;font-weight:400;font-size:12.5px;color:var(--text3);margin-top:4px}
 .chips-sigue .chip-ia,.chips-sigue .ap-chip{display:inline-flex;align-items:center;gap:7px;min-height:44px}
 .chip-pag{font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:var(--text3);margin-left:2px}
 .chips-sigue .chip-ia::before{content:'';width:14px;height:14px;flex-shrink:0;background:currentColor;opacity:.75;

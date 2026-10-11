@@ -4586,7 +4586,7 @@ function filaDeChips(titulo,preguntas){
     const b=document.createElement('button');b.className='chip-ia';b.textContent=texto;
     /* La página del botón, como en el canvas: «Estilo nórdico  p. 15». */
     const pag=typeof p==='string'?null:p.pagina;
-    if(pag&&!/pág\. \d+$/.test(texto)){const s=document.createElement('span');s.className='chip-pag';s.textContent='p. '+pag;b.appendChild(s)}
+    if(pag){b.textContent=texto.replace(/ · pág\. \d+$/,'');const s=document.createElement('span');s.className='chip-pag';s.textContent='p. '+pag;b.appendChild(s)}
     b.onclick=()=>ask(q);
     wrap.appendChild(b);
   }

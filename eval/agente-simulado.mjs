@@ -86,7 +86,11 @@ try {
     const preguntar = q => { history = []; rutaActual = null; responderSinModelo(q); return [...document.querySelectorAll('.msg.assistant')].pop(); };
     const m = preguntar('¿qué marcas hay?');
     const fila = m.querySelector('.chips-ia');
-    const chips = fila ? [...fila.querySelectorAll('.chip-ia')].map(b => b.textContent) : [];
+    /* La página va aparte, en .chip-pag («p. 7»): se lee como «título · pág. 7». */
+    const chips = fila ? [...fila.querySelectorAll('.chip-ia')].map(b => {
+      const pag = b.querySelector('.chip-pag');
+      return pag ? `${b.firstChild.textContent} · pág. ${pag.textContent.replace(/^p\. /, '')}` : b.textContent;
+    }) : [];
     const mostradas = ultimasTarjetas.map(t => t.c.page);
     const nada = preguntar('¿qué hago si se va la luz?').querySelector('.chips-ia');
     return { chips, mostradas, nada: !!nada, cubiertos: coberturaDeBasicos(docs[0].name).size, accesos: accesosConBasicos().map(a => a.label) };
