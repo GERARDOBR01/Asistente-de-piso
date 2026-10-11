@@ -434,6 +434,75 @@ Gerardo reportó que el origen «sigue teniendo fallos» con la IA. Antes de int
 - **La defensa de fondo sigue siendo el proceso:** foto tomada en la app (CUMPLE, con huella) u
   original firmada por la cámara. Detectar es una carrera que se pierde.
 
+## Focal: «Sugerir» sobre el recorte de la zona (11-oct)
+
+Visto en el teléfono: «Sugerir» ponía puntos en el fondo y le faltaban o le sobraban
+elementos. Tenía tres causas: detectaba sobre la foto entera y no sobre la zona, ponía el
+punto en lo alto de cada caja sin ver la silueta, y reemplazaba los puntos que la persona ya
+había tocado.
+
+**Medición nueva:** `node eval/revision.mjs --sugerir <dir>`, en Chrome. Usa las 17 cimas
+etiquetadas de 5 focales de tienda (`toques.json`) y el marco de cada zona
+(`etiquetas.json`). Una sugerencia acierta si cae a ≤ 3 % del alto y ≤ 6 % del ancho de una
+cima, y cada cima cuenta una vez.
+
+| Método | Recall (cimas encontradas) | Precisión (sugerencias en una cima) | Error medio Δy |
+|---|---|---|---|
+| Antes: foto entera, lo alto de la caja | 8/17 (47 %) | 8/11 (73 %) | 1.0 % |
+| Ahora | **11/17 (65 %)** | **11/12 (92 %)** | 1.0 % |
+
+**La regla nueva** (`src/revision/sugerir.js`, puro y con pruebas; la orquestación está en
+`detector.js`):
+
+1. **Detecta sobre el recorte del marco**, con 8 % de margen. En el recorte, un maniquí sube
+   de 0.57 a 0.75 de confianza y aparece la bolsa que en la foto entera no salía.
+2. **Umbrales:** 0.25 para personas, porque un maniquí sobre pared clara sale con 0.26, y
+   0.35 para objetos, porque por debajo eran fondo en todas las fotos medidas.
+3. **Descarta el fondo:**
+   - una caja que ocupa más de 60 % del recorte;
+   - una caja cortada por el borde de arriba del recorte, porque sigue hacia el techo;
+   - una persona de menos de 45 % del alto de la más alta.
+4. **Quita las bases:** un objeto que empieza justo donde termina otro, al menos igual de
+   ancho y con el de arriba casi entero encima, es su pedestal. El detector llama
+   «suitcase» a la base de una bolsa. La primera versión de esta regla se comía una bolsa
+   en una base escalonada, y la medición lo mostró.
+5. **Duplicados por IoU real y solo en la misma categoría:** la bolsa que lleva un maniquí ya
+   no se pierde por caer dentro de su caja.
+6. **Cada caja se afina con la silueta**, desde un toque virtual arriba de la caja (y, si cae
+   en un hueco como el asa de una bolsa, otro más abajo). Solo se le cree si su cima queda
+   dentro de la caja y cerca de su parte de arriba. Sin silueta queda en 10/15; con el
+   segundo toque, en 11/12.
+7. **Se fusiona con lo que ya tocó la persona**, sin pisarlo, con un tope de 9 elementos y
+   con el aviso «Encontré N elementos. ¿Falta alguno? Tócalo».
+
+**Lo que no ve:** zapatos sobre base, pampas, tringlas, un maniquí blanco sobre pared blanca
+y prendas dobladas. EfficientDet-Lite0 está entrenado con COCO, donde esas categorías no
+existen. Para eso está el toque inteligente.
+
+**Silueta:**
+- **`cimaDeSilueta` recibe la zona:** rechaza una cima más de 3 % por encima de ella.
+- **Hueco del fondo:** si el toque cae en un hueco (entre los brazos), busca el objeto más
+  cercano.
+- **Silueta sobre la imagen chica:** con la de ≤ 640 px y no la base, salen las mismas
+  12/17 cimas en ~140 ms en vez de ~180.
+- **Apertura morfológica, medida y descartada:** no cambió ninguna cima, porque las
+  siluetas que «suben» se juntan con lo de atrás por contacto ancho, no por puentes finos.
+  Con radio grande bajaba a 6/17, porque borraba las cabezas.
+- **El caso «doblado» (−43.6 %) sigue sin resolverse.** Se cubre en la pantalla: la silueta
+  se pinta encima de la foto y, si la cima cae sobre otro punto, el aviso dice «se juntó
+  con el 2» en vez de borrar el toque.
+
+**Lo que cambia en la pantalla:**
+- **Mientras busca:** el lienzo no acepta toques y una línea barre la zona.
+- **Puntos:** el sugerido lleva borde punteado y el pendiente, un anillo que gira.
+- **«Revisar»** espera a que lleguen todas las siluetas.
+- **Silueta tardía:** si llega después del tope de 8 s, el punto sube a su cima en vez de
+  perderse.
+- **Numeración y tope:** la numeración sigue el orden de toque y el tope de 9 se avisa.
+- **Precarga:** los modelos se bajan al elegir «Focal».
+
+Todo esto se midió en **desarrollo**, con 5 fotos. Falta el lote de confirmación.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

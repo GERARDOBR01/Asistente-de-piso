@@ -20,7 +20,8 @@ import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMu
 /** @typedef {{x:number,y:number,w:number,h:number}} Marco */
 /** @typedef {'manual'|'detector'|'detector+manual'|'silueta'|'detector+silueta'} OrigenPuntos */
 /** Un punto del focal: la cima de un elemento. `toque`, `caja` y `capa` vienen del toque inteligente.
- * @typedef {{x:number,y:number,toque?:{x:number,y:number},caja?:{x0:number,y0:number,x1:number,y1:number},capa?:HTMLCanvasElement}} PuntoFocal */
+ * `pendiente`: su silueta todavía no llega. `sugerido`: lo puso «Sugerir».
+ * @typedef {{x:number,y:number,toque?:{x:number,y:number},caja?:{x0:number,y0:number,x1:number,y1:number},capa?:HTMLCanvasElement,pendiente?:boolean,sugerido?:boolean}} PuntoFocal */
 
 /* Lo que encuadra la guía, en fracción de la foto. Es lo mismo que miden
    color.js y surtido.js: la guía no es decoración. */
@@ -56,6 +57,9 @@ const st = {
   /** ya tocó «Revisar con SynthID»: se ve la pregunta */ synthidAbierto: false,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
   anim: 0,
+  /** «Sugerir» está buscando: el lienzo no acepta toques */ buscando: false,
+  /** hay un bucle de dibujo en curso (barrido o anillo) */ girando: false,
+  /** ya se pidieron los modelos del focal */ precargado: false,
 };
 
 /* ── Escena: vacía, cámara o foto ───────────────────────────────────────── */
@@ -313,6 +317,7 @@ function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
  * @property {boolean} guia         true = la de la guía (sin dibujar a mano)
  * @property {{x:number,y:number}[]} puntos  focal, en píxeles de la imagen analizada
  * @property {OrigenPuntos} origenPuntos
+ * @property {string} [nota] lo que dijo «Sugerir», hasta que se toque la zona
  * @property {Resultado[]|null} res null = el focal espera sus puntos
  */
 
@@ -346,6 +351,7 @@ function empezarRevision(puntosListos = false) {
 /** El focal espera sus puntos. @param {number} i */
 function tocarZona(i) {
   st.activa = i; st.modo = 'tocar';
+  precargarModelos();
   st.zonas[i].res = null;
   $('rv-ayuda').hidden = false;
   actualizarAyuda(); dibujar(1); pintarZonas(); pintarResultados();
@@ -377,6 +383,7 @@ function nuevaRevision() {
   cerrarCamara();
   st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null;
   st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
+  st.exacto = false; st.buscando = false;
   $('rv-ayuda').hidden = true;
   $('rv-res').innerHTML = '';
   proporcion(4, 3); mostrar('vacia'); pintarZonas();
@@ -414,11 +421,16 @@ function actualizarAyuda() {
   const z = activa();
   if (!z) return;
   const n = z.puntos.length;
-  $('rv-ayuda-t').textContent = z.origenPuntos.startsWith('detector')
+  $('rv-ayuda-t').textContent = z.nota ? z.nota + ' · toca un punto para quitarlo'
+    : z.origenPuntos.startsWith('detector')
     ? `${n} ${n === 1 ? 'punto sugerido' : 'puntos sugeridos'} · toca uno para quitarlo o un elemento que falte para agregarlo`
     : st.exacto ? `${n} ${n === 1 ? 'punto' : 'puntos'} · punto exacto: toca justo lo más alto de cada elemento`
     : n ? `${n} ${n === 1 ? 'elemento' : 'elementos'} · si la silueta agarró algo de atrás, quita el punto y usa «Punto exacto»` : 'Toca cada elemento (maniquí, base, bolsa, planta) en cualquier parte: la app busca su punto más alto. O pide una sugerencia';
-  $('rv-listo').disabled = n < 3;
+  /* «Revisar» espera a que lleguen las siluetas: con un punto a medio subir,
+     la triangulación saldría de donde se tocó, no de la cima. */
+  const pendientes = /** @type {PuntoFocal[]} */ (z.puntos).filter(p => p.pendiente).length;
+  $('rv-listo').disabled = n < 3 || pendientes > 0 || st.buscando;
+  $('rv-listo').textContent = pendientes ? 'Buscando cimas…' : 'Revisar';
   $('rv-deshacer').disabled = !n;
   const ex = $('rv-exacto');
   if (ex) { ex.classList.toggle('on', st.exacto); ex.setAttribute('aria-pressed', String(st.exacto)); }
@@ -434,49 +446,127 @@ async function tocarElemento(z, q, cerca) {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
   const W = f.img.width, H = f.img.height;
   /** @type {PuntoFocal} */
-  const p = { x: q.x, y: q.y, toque: { x: q.x, y: q.y } };
+  const p = { x: q.x, y: q.y, toque: { x: q.x, y: q.y }, pendiente: true };
   z.puntos.push(p);
-  actualizarAyuda(); dibujar(1);
-  try {
-    const { siluetaEn, capaDe } = await import('./silueta.js');
-    const s = await conTope(siluetaEn(f.base, { x: q.x / W, y: q.y / H }), 8000);
+  actualizarAyuda(); girar();
+  /** @param {ReturnType<typeof import('./triangulo.js').cimaDeSilueta>} s @param {typeof import('./silueta.js').capaDe} capaDe */
+  const aplicar = (s, capaDe) => {
+    p.pendiente = false;
     if (!z.puntos.includes(p)) return;                       // lo quitaron mientras tanto
     if (!s) { aviso('No se distinguió bien ese elemento: quedó el punto que tocaste. Si no es su parte más alta, quítalo y toca justo arriba.'); return; }
     const cima = { x: s.cima.x * W, y: s.cima.y * H };
-    /* Si la cima cae sobre un elemento ya marcado, es el mismo: no se repite. */
-    if (z.puntos.some(o => o !== p && Math.hypot(o.x - cima.x, o.y - cima.y) < cerca)) {
-      z.puntos.splice(z.puntos.indexOf(p), 1);
-      aviso('Ese elemento ya está marcado.');
-    } else {
-      p.x = cima.x; p.y = cima.y; p.caja = s.caja; p.capa = capaDe(s.objeto, s.W, s.H);
-      z.origenPuntos = z.origenPuntos.startsWith('detector') ? 'detector+silueta' : 'silueta';
+    /* Si se tocó dentro de un elemento ya marcado, es el mismo: no se repite.
+       Si la silueta solo llegó hasta otro (se juntaron), se avisa con su
+       número y se queda el punto tocado: puede ser otro elemento. */
+    const otro = z.puntos.findIndex(o => o !== p && Math.hypot(o.x - cima.x, o.y - cima.y) < cerca);
+    if (otro >= 0) {
+      const o = /** @type {PuntoFocal} */ (z.puntos[otro]);
+      const dentro = o.caja && q.x / W >= o.caja.x0 && q.x / W <= o.caja.x1 && q.y / H >= o.caja.y0 && q.y / H <= o.caja.y1;
+      if (dentro) { z.puntos.splice(z.puntos.indexOf(p), 1); aviso('Ese elemento ya está marcado.'); }
+      else aviso(`Se juntó con el ${otro + 1}: quedó el punto que tocaste. Si es otro elemento, toca más arriba o usa «Punto exacto».`);
+      return;
+    }
+    p.x = cima.x; p.y = cima.y; p.caja = s.caja; p.capa = capaDe(s.objeto, s.W, s.H);
+    z.origenPuntos = z.origenPuntos.startsWith('detector') ? 'detector+silueta' : 'silueta';
+  };
+  try {
+    const { siluetaEn, capaDe } = await import('./silueta.js');
+    /* Sobre la imagen chica: misma silueta, la mitad del tiempo. */
+    const pedida = siluetaEn(fuenteChica(f), { x: q.x / W, y: q.y / H }, { marco: z.marco });
+    try { aplicar(await conTope(pedida, 8000), capaDe); }
+    catch (e) {
+      if (/** @type {any} */ (e)?.message !== 'tope') throw e;
+      /* Tardó: el punto se queda con su anillo y, si la silueta llega
+         después, sube a la cima en vez de perderse. */
+      aviso('El teléfono va lento: el punto sube a su cima en cuanto llegue la silueta.');
+      pedida.then(s => { aplicar(s, capaDe); actualizarAyuda(); dibujar(1); }, () => { p.pendiente = false; actualizarAyuda(); dibujar(1); });
+      return;
     }
   } catch {
+    p.pendiente = false;
     aviso('El toque inteligente necesita señal la primera vez: quedó el punto que tocaste.', 'warn');
     if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
   }
   actualizarAyuda(); dibujar(1);
 }
 
-/* Plan A como sugerencia: el detector propone, la persona confirma. Solo
-   dentro del recuadro de la zona: lo de afuera es otro departamento. */
+/** La foto chica como lienzo, una vez por foto: la silueta corre sobre ella. @param {NonNullable<typeof st.foto>} f */
+function fuenteChica(f) {
+  const ff = /** @type {any} */ (f);
+  if (!ff.chica) {
+    const c = document.createElement('canvas');
+    c.width = f.img.width; c.height = f.img.height;
+    /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).putImageData(new ImageData(Uint8ClampedArray.from(f.img.data), f.img.width, f.img.height), 0, 0);
+    ff.chica = c;
+  }
+  return /** @type {HTMLCanvasElement} */ (ff.chica);
+}
+
+/* Plan A como sugerencia: el detector propone, la persona confirma (detalle
+   y mediciones en detector.js y sugerir.js). Solo dentro del recuadro de la
+   zona: lo de afuera es otro departamento. Lo que la persona ya tocó se queda;
+   las sugerencias se agregan sin pisarlo. Mientras busca, el lienzo no acepta
+   toques y una línea barre la zona. */
 async function sugerir() {
   const f = st.foto, z = activa(), b = $('rv-sugerir');
-  if (!f || !z) return;
+  if (!f || !z || st.buscando) return;
   b.disabled = true; b.textContent = 'Buscando…';
+  st.buscando = true; girar();
+  const previos = /** @type {PuntoFocal[]} */ (z.puntos);
   try {
-    const { detectar } = await import('./detector.js');
-    const cajas = await detectar(f.base);
-    const k = f.img.width / f.base.width;
-    const W = f.img.width, H = f.img.height, m = z.marco;
-    const ps = puntosDeCajas(cajas).map(p => ({ x: p.x * k, y: p.y * k }))
-      .filter(p => p.x >= m.x * W && p.x <= (m.x + m.w) * W && p.y >= m.y * H - 0.03 * H && p.y <= (m.y + m.h) * H);
-    if (!ps.length) aviso('El detector no encontró maniquíes ni objetos en la zona: toca los puntos a mano.', 'warn');
-    else { z.puntos = ps; z.origenPuntos = 'detector'; }
+    const { sugerirPuntos } = await import('./detector.js');
+    const r = await conTope(sugerirPuntos({ base: f.base, img: f.img }, z.marco, previos, { cerca: 0.04 * Math.max(f.img.width, f.img.height) }), 12000);
+    if (!r.encontrados) aviso('No encontré maniquíes ni objetos en la zona: toca cada elemento y la app busca su punto más alto.', 'warn');
+    else {
+      /* Los de la persona vuelven tal cual (mismo objeto, misma silueta). */
+      z.puntos = r.puntos.map(p => previos.includes(/** @type {any} */ (p)) ? /** @type {PuntoFocal} */ (p) : { x: p.x, y: p.y, sugerido: true });
+      if (r.agregados) z.origenPuntos = previos.length ? 'detector+manual' : 'detector';
+      const n = r.encontrados;
+      /* En la barra de ayuda y no en un aviso flotante: el aviso tapaba la
+         parte de arriba de la foto, que es donde quedan las cimas. */
+      z.nota = r.agregados
+        ? `Encontré ${n} ${n === 1 ? 'elemento' : 'elementos'}. ¿Falta alguno? Tócalo`
+        : 'Lo que encontré ya estaba marcado. ¿Falta alguno? Tócalo';
+      vibrar(8);
+    }
+  } catch (e) {
+    aviso(/** @type {any} */ (e)?.message === 'tope'
+      ? 'La búsqueda tardó demasiado en este teléfono: toca cada elemento y la app busca su punto más alto.'
+      : 'No se pudo cargar el detector (la primera vez necesita señal). Toca los puntos a mano.', 'warn');
+  } finally {
+    st.buscando = false;
+    b.disabled = false; b.textContent = 'Sugerir';
     actualizarAyuda(); dibujar(1);
-  } catch {
-    aviso('No se pudo cargar el detector (la primera vez necesita señal). Toca los puntos a mano.', 'warn');
-  } finally { b.disabled = false; b.textContent = 'Sugerir'; }
+  }
+}
+
+/* Mientras haya algo en curso (la búsqueda o una silueta pendiente) se
+   redibuja: la línea que barre y el anillo que gira. */
+function girar() {
+  if (st.girando) return;
+  st.girando = true;
+  const paso = () => {
+    const pendiente = st.buscando || st.zonas.some(z => /** @type {PuntoFocal[]} */ (z.puntos).some(p => p.pendiente));
+    if (!pendiente || !st.foto) { st.girando = false; dibujar(1); return; }
+    dibujar(1);
+    requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
+}
+
+/** Vibración corta, si el teléfono la tiene y no se pidió menos movimiento. @param {number} ms */
+function vibrar(ms) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  try { navigator.vibrate?.(ms); } catch { /* sin vibración */ }
+}
+
+/* Los modelos (~20 MB la primera vez) se bajan al elegir Focal, no al primer
+   toque: así el toque inteligente responde a la primera. */
+function precargarModelos() {
+  if (st.precargado || !navigator.onLine) return;
+  st.precargado = true;
+  import('./silueta.js').then(m => m.cargarSegmentador()).catch(() => { st.precargado = false; });
+  import('./detector.js').then(m => m.cargarDetector()).catch(() => {});
 }
 
 /** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e @param {boolean} [recortar] */
@@ -540,6 +630,7 @@ function dibujar(p) {
     /* Solo la zona activa se anima; las demás ya están dibujadas. */
     const ez = i === st.activa ? e : 1, pz = i === st.activa ? p : 1;
     if (z.tipo === 'focal') dibujarFocal(ctx, k, u, ez, z);
+    if (st.buscando && i === st.activa) dibujarBusqueda(ctx, z, u);
     for (const r of z.res || []) {
       if (!r.marcas) continue;
       if (r.basico === 'colorizacion') dibujarColor(ctx, r, k, u, ez, pz);
@@ -555,6 +646,25 @@ function dibujar(p) {
     ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     pildora(ctx, NOMBRE_TIPO[st.tipo], x + w / 2, Math.max(14 * u, y - 14 * u), '#16171B', u);
   }
+}
+
+/**
+ * Mientras «Sugerir» busca: la zona se oscurece un poco y una línea la barre
+ * de arriba abajo. Con menos movimiento pedido, la línea se queda quieta.
+ * @param {CanvasRenderingContext2D} ctx @param {Zona} z @param {number} u
+ */
+function dibujarBusqueda(ctx, z, u) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, m = z.marco;
+  const x = m.x * W, y = m.y * H, w = m.w * W, h = m.h * H;
+  ctx.fillStyle = 'rgba(10,12,16,.28)'; ctx.fillRect(x, y, w, h);
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t = quieto ? 0.5 : (performance.now() % 1600) / 1600;
+  const ly = y + t * h;
+  const g = ctx.createLinearGradient(0, ly - 40 * u, 0, ly);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,.35)');
+  ctx.fillStyle = g; ctx.fillRect(x, Math.max(y, ly - 40 * u), w, Math.min(40 * u, ly - y));
+  ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillRect(x, ly - 1 * u, w, 2 * u);
+  pildora(ctx, 'Buscando elementos…', x + w / 2, Math.max(16 * u, y + 18 * u), '#16171B', u);
 }
 
 /** El recuadro de una zona con su número, básico y nivel. @param {CanvasRenderingContext2D} ctx @param {Zona} z @param {number} i @param {number} u */
@@ -662,7 +772,9 @@ function dibujarFocal(ctx, k, u, e, z) {
     ctx.beginPath(); ps.forEach((/** @type {any} */ q, /** @type {number} */ i) => (i ? ctx.lineTo(q.x * k, q.y * k) : ctx.moveTo(q.x * k, q.y * k)));
     ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = COLOR_NIVEL[/** @type {'GRAVE'} */ (r.nivel)]; ctx.globalAlpha = e; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]);
   }
-  const ps = r?.marcas?.puntos || z.puntos.slice().sort((a, b) => a.x - b.x);
+  /* El número de cada punto es su orden de toque y no cambia al revisar: el
+     aviso «se juntó con el 2» tiene que señalar el mismo punto que se ve. */
+  const ps = z.puntos.length ? z.puntos : (r?.marcas?.puntos || []);
   /* Mientras se tocan: la silueta de cada elemento (su caja) y de dónde se tocó a su cima. */
   if (st.modo === 'tocar') for (const q of /** @type {PuntoFocal[]} */ (z.puntos)) {
     if (!q.caja || !q.toque) continue;
@@ -679,7 +791,16 @@ function dibujarFocal(ctx, k, u, e, z) {
     const x = q.x * k, y = q.y * k, rad = 8 * u * (0.6 + 0.4 * s);
     ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
     ctx.fillStyle = '#fff'; ctx.fill();
+    /* Sugerido: borde punteado hasta que la persona lo revise. */
+    if (q.sugerido && st.modo === 'tocar') ctx.setLineDash([3 * u, 2.5 * u]);
     ctx.lineWidth = 2.4 * u; ctx.strokeStyle = "#FF5C63"; ctx.stroke();
+    ctx.setLineDash([]);
+    /* Silueta en camino: un anillo que gira alrededor del punto. */
+    if (q.pendiente) {
+      const a0 = (performance.now() / 160) % (Math.PI * 2);
+      ctx.beginPath(); ctx.arc(x, y, rad + 5 * u, a0, a0 + Math.PI * 1.3);
+      ctx.lineWidth = 2.2 * u; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.stroke();
+    }
     ctx.fillStyle = '#16171B'; ctx.font = `700 ${Math.round(9 * u)}px Geist Mono, ui-monospace, monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5 * u);
   });
@@ -999,6 +1120,7 @@ async function muestraOrigen(cual) {
 /** @param {Tipo} t */
 function elegirTipo(t) {
   st.tipo = t;
+  if (t === 'focal') precargarModelos();
   document.querySelectorAll('.rv-tipo').forEach(b => {
     const on = /** @type {HTMLElement} */ (b).dataset.tipo === t;
     b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
@@ -1041,6 +1163,8 @@ function engancharLienzo() {
   lz.addEventListener('click', (/** @type {MouseEvent} */ e) => {
     const z = activa();
     if (st.modo !== 'tocar' || !z || !st.foto || performance.now() - st.soltado < 400) return;
+    if (st.buscando) { aviso('Espera tantito: estoy buscando los elementos.'); return; }
+    z.nota = undefined;
     const q = aImagen(e);
     if (!q) return;
     /* Tocar un punto (o donde se tocó para crearlo) lo quita; tocar un
@@ -1049,7 +1173,7 @@ function engancharLienzo() {
     const ps = /** @type {PuntoFocal[]} */ (z.puntos);
     const i = ps.findIndex(p => Math.hypot(p.x - q.x, p.y - q.y) < cerca || (p.toque && Math.hypot(p.toque.x - q.x, p.toque.y - q.y) < cerca));
     if (i >= 0) { ps.splice(i, 1); actualizarAyuda(); dibujar(1); return; }
-    if (ps.length >= 9) return;
+    if (ps.length >= 9) { aviso('Ya hay 9 elementos, el máximo que se revisa en un focal. Quita uno para agregar otro.', 'warn'); return; }
     if (st.exacto) {
       ps.push({ x: q.x, y: q.y });
       if (z.origenPuntos === 'detector') z.origenPuntos = 'detector+manual';
@@ -1109,4 +1233,5 @@ function iniciar() {
 iniciar();
 
 /* Para eval/revision.mjs y las capturas: el mismo código que corre en el teléfono. */
-/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st };
+/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st,
+  sugerirPuntos: async (/** @type {any} */ a, /** @type {any} */ m, /** @type {any} */ p, /** @type {any} */ o) => (await import('./detector.js')).sugerirPuntos(a, m, p, o) };

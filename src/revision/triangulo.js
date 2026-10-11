@@ -113,37 +113,89 @@ export const REGLA_SILUETA = { areaMaxima: 0.35, bordeArriba: 0.005 };
  * @param {number} W @param {number} H
  * @param {{x:number,y:number}} toque  en fracción de la imagen
  * @param {typeof REGLA_SILUETA} [regla]
+ * @param {{marco?: {y: number}}} [op]  la zona del focal, en fracción
  * @returns {{cima:{x:number,y:number}, caja:{x0:number,y0:number,x1:number,y1:number}, area:number, objeto:Uint8Array, W:number, H:number}|null}
  *   cima, caja y área en fracción; `objeto` marca con 1 sus píxeles (para pintarlo); null si no hay objeto creíble
  */
-export function cimaDeSilueta(mask, W, H, toque, regla = REGLA_SILUETA) {
+export function cimaDeSilueta(mask, W, H, toque, regla = REGLA_SILUETA, op = {}) {
   const sx = Math.min(W - 1, Math.max(0, Math.round(toque.x * (W - 1))));
   const sy = Math.min(H - 1, Math.max(0, Math.round(toque.y * (H - 1))));
-  const valor = mask[sy * W + sx];
-  const visto = new Uint8Array(W * H);
-  const pila = [sy * W + sx];
-  visto[sy * W + sx] = 1;
+  let semilla = sy * W + sx;
+  let valor = mask[semilla];
+  let r = region(i => mask[i] === valor, semilla, W, H);
+  /* El toque cayó en un hueco del fondo que se ve a través del objeto (entre
+     los brazos, el asa de una bolsa): la región es el fondo entero. Se busca
+     el pixel de objeto más cercano, a no más de 3 % de la foto. */
+  if (r.n / (W * H) > regla.areaMaxima) {
+    const cerca = masCercano(i => mask[i] !== valor, sx, sy, W, H, Math.round(0.03 * Math.max(W, H)));
+    if (cerca >= 0) { semilla = cerca; valor = mask[cerca]; r = region(i => mask[i] === valor, semilla, W, H); }
+  }
+  /* Se probó una apertura morfológica para cortar las siluetas que se juntan
+     con lo de atrás (11-oct, 17 cimas): no cambió ninguna, porque se juntan
+     por contacto ancho, no por puentes finos; con radio grande borraba las
+     cabezas. No se usa: la silueta se ve encima de la foto y la persona la
+     corrige con «Punto exacto». */
+  const objeto = r.visto;
   let n = 0, x0 = W, y0 = H, x1 = -1, y1 = -1;
   /** @type {number[]} */
   let fila = [];
-  while (pila.length) {
-    const i = /** @type {number} */ (pila.pop());
+  for (let i = 0; i < W * H; i++) {
+    if (!objeto[i]) continue;
     const x = i % W, y = (i - x) / W;
     n++;
     if (y < y0) { y0 = y; fila = [x]; } else if (y === y0) fila.push(x);
     if (x < x0) x0 = x;
     if (x > x1) x1 = x;
     if (y > y1) y1 = y;
-    if (x > 0 && !visto[i - 1] && mask[i - 1] === valor) { visto[i - 1] = 1; pila.push(i - 1); }
-    if (x < W - 1 && !visto[i + 1] && mask[i + 1] === valor) { visto[i + 1] = 1; pila.push(i + 1); }
-    if (y > 0 && !visto[i - W] && mask[i - W] === valor) { visto[i - W] = 1; pila.push(i - W); }
-    if (y < H - 1 && !visto[i + W] && mask[i + W] === valor) { visto[i + W] = 1; pila.push(i + W); }
   }
   const area = n / (W * H);
-  if (area > regla.areaMaxima || y0 / H < regla.bordeArriba) return null;
-  fila.sort((a, b) => a - b);
+  if (!n || area > regla.areaMaxima || y0 / H < regla.bordeArriba) return null;
+  /* Con zona: una cima muy por encima de ella se juntó con algo de fuera. */
+  if (op.marco && y0 / H < op.marco.y - 0.03) return null;
   const cx = fila[fila.length >> 1];
-  return { cima: { x: cx / W, y: y0 / H }, caja: { x0: x0 / W, y0: y0 / H, x1: (x1 + 1) / W, y1: (y1 + 1) / H }, area, objeto: visto, W, H };
+  return { cima: { x: cx / W, y: y0 / H }, caja: { x0: x0 / W, y0: y0 / H, x1: (x1 + 1) / W, y1: (y1 + 1) / H }, area, objeto, W, H };
+}
+
+/**
+ * Región conexa (4 vecinos) desde `semilla` con los píxeles que cumplen `dentro`.
+ * @param {(i: number) => boolean} dentro @param {number} semilla @param {number} W @param {number} H
+ */
+function region(dentro, semilla, W, H) {
+  const visto = new Uint8Array(W * H);
+  const pila = [semilla];
+  visto[semilla] = 1;
+  let n = 0;
+  while (pila.length) {
+    const i = /** @type {number} */ (pila.pop());
+    const x = i % W;
+    n++;
+    if (x > 0 && !visto[i - 1] && dentro(i - 1)) { visto[i - 1] = 1; pila.push(i - 1); }
+    if (x < W - 1 && !visto[i + 1] && dentro(i + 1)) { visto[i + 1] = 1; pila.push(i + 1); }
+    if (i >= W && !visto[i - W] && dentro(i - W)) { visto[i - W] = 1; pila.push(i - W); }
+    if (i < W * (H - 1) && !visto[i + W] && dentro(i + W)) { visto[i + W] = 1; pila.push(i + W); }
+  }
+  return { visto, n };
+}
+
+/**
+ * El pixel más cercano a (x, y) que cumple `es`, por anillos cuadrados; -1 si no hay en `radio`.
+ * @param {(i: number) => boolean} es @param {number} x @param {number} y @param {number} W @param {number} H @param {number} radio
+ */
+function masCercano(es, x, y, W, H, radio) {
+  for (let d = 1; d <= radio; d++) {
+    let mejor = -1, dm = Infinity;
+    for (let yy = Math.max(0, y - d); yy <= Math.min(H - 1, y + d); yy++) {
+      for (let xx = Math.max(0, x - d); xx <= Math.min(W - 1, x + d); xx++) {
+        if (Math.max(Math.abs(xx - x), Math.abs(yy - y)) !== d) continue;
+        const i = yy * W + xx;
+        if (!es(i)) continue;
+        const dd = (xx - x) ** 2 + (yy - y) ** 2;
+        if (dd < dm) { dm = dd; mejor = i; }
+      }
+    }
+    if (mejor >= 0) return mejor;
+  }
+  return -1;
 }
 
 /**

@@ -14,6 +14,12 @@
 //     [{ foto, elementos: [{ nombre, toque:{x,y}, cima:{x,y} }] }], en Chrome,
 //     qué tan lejos de la cima real queda la que sale de la silueta.
 //
+//   node eval/revision.mjs --sugerir C:/Users/gerar/eval-revision/tienda [--salida informe.md]
+//     «Sugerir» del focal contra las cimas de toques.json, dentro del marco
+//     de etiquetas.json: recall, precisión y error, antes y ahora.
+//     SIN_SILUETA=1 mide sin afinar con la silueta. Con --siluetas,
+//     SILUETA_BASE=1 segmenta sobre la foto grande en vez de la chica.
+//
 //   node eval/revision.mjs --plantilla C:/Users/gerar/eval-revision
 //     Escribe un etiquetas.json de ejemplo para llenar.
 //
@@ -201,18 +207,21 @@ async function siluetas(dir) {
     await p.waitForFunction(() => /** @type {any} */ (window).__revision, null, { timeout: 30000 });
     for (const c of casos) {
       const b64 = fs.readFileSync(path.join(dir, c.foto)).toString('base64');
-      const r = await p.evaluate(async ({ b64, elementos }) => {
+      const r = await p.evaluate(async ({ b64, elementos, enBase }) => {
         const bytes = Uint8Array.from(atob(b64), x => x.charCodeAt(0));
         const a = await /** @type {any} */ (window).__revision.analizarArchivo(new Blob([bytes]), 'focal');
         const { siluetaEn } = await import('/src/revision/silueta.js');
         const out = [];
         for (const el of elementos) {
           const t0 = performance.now();
-          const s = await siluetaEn(a.base, el.toque);
+          /* Lo mismo que la app: la silueta sobre la imagen chica (≤ 640 px). */
+          const chica = document.createElement('canvas'); chica.width = a.img.width; chica.height = a.img.height;
+          chica.getContext('2d').putImageData(new ImageData(Uint8ClampedArray.from(a.img.data), a.img.width, a.img.height), 0, 0);
+          const s = await siluetaEn(enBase ? a.base : chica, el.toque);
           out.push({ s, ms: Math.round(performance.now() - t0) });
         }
         return out;
-      }, { b64, elementos: c.elementos });
+      }, { b64, elementos: c.elementos, enBase: !!process.env.SILUETA_BASE });
       c.elementos.forEach((/** @type {any} */ el, /** @type {number} */ i) => {
         const s = r[i].s;
         filas.push({ foto: c.foto, nombre: el.nombre, dy: s ? s.cima.y - el.cima.y : null, dx: s ? s.cima.x - el.cima.x : null, ms: r[i].ms });
@@ -239,6 +248,87 @@ async function siluetas(dir) {
   return l.join('\n');
 }
 
+/* ── «Sugerir» del focal, en Chrome ────────────────────────────────────────
+   Con las cimas etiquetadas de toques.json y el marco de etiquetas.json:
+   - recall: cimas con una sugerencia a ≤ 3 % del alto (y ≤ 6 % del ancho);
+   - precisión: sugerencias que caen en una cima (cada cima cuenta una vez):
+     las demás son fondo o duplicado;
+   - error medio |Δy| de las que acertaron.
+   Mide el método de la app (`window.__revision.sugerirPuntos`, si existe) y,
+   como línea base, el de antes: detector sobre la foto entera y el punto en
+   lo alto de la caja. */
+const TOL_Y = 0.03, TOL_X = 0.06;
+
+/** @param {{x:number,y:number}[]} sug @param {{x:number,y:number,nombre?:string}[]} cimas */
+export function cotejarSugerencias(sug, cimas) {
+  const libres = new Set(cimas.map((_, i) => i));
+  let aciertos = 0, err = 0;
+  for (const s of sug) {
+    let mejor = -1, d = Infinity;
+    for (const i of libres) {
+      const dy = Math.abs(s.y - cimas[i].y), dx = Math.abs(s.x - cimas[i].x);
+      if (dy <= TOL_Y && dx <= TOL_X && dy + dx < d) { d = dy + dx; mejor = i; }
+    }
+    if (mejor >= 0) { libres.delete(mejor); aciertos++; err += Math.abs(s.y - cimas[mejor].y); }
+  }
+  return { cimas: cimas.length, sugeridas: sug.length, aciertos, faltan: [...libres].map(i => cimas[i].nombre || String(i)), errMedio: aciertos ? err / aciertos : null };
+}
+
+async function sugerencias(dir) {
+  const { abrirApp } = await import('./navegador.mjs');
+  const casos = JSON.parse(fs.readFileSync(path.join(dir, 'toques.json'), 'utf8'));
+  const etiq = JSON.parse(fs.readFileSync(path.join(dir, 'etiquetas.json'), 'utf8'));
+  const { p, cerrar } = await abrirApp([], { log: () => {} });
+  const filas = [];
+  try {
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision, null, { timeout: 30000 });
+    for (const c of casos) {
+      const e = etiq.find((/** @type {any} */ x) => x.foto === c.foto && x.tipo === 'focal');
+      const marco = e?.marco || { x: 0, y: 0, w: 1, h: 1 };
+      const b64 = fs.readFileSync(path.join(dir, c.foto)).toString('base64');
+      const r = await p.evaluate(async ({ b64, marco, sinSilueta }) => {
+        const R = /** @type {any} */ (window).__revision;
+        const bytes = Uint8Array.from(atob(b64), x => x.charCodeAt(0));
+        const a = await R.analizarArchivo(new Blob([bytes]), 'focal');
+        const W = a.img.width, H = a.img.height;
+        const { detectar } = await import('/src/revision/detector.js');
+        const t0 = performance.now();
+        const cajas = await detectar(a.base);
+        const k = W / a.base.width;
+        const antes = R.puntosDeCajas(cajas).map((/** @type {any} */ q) => ({ x: q.x * k, y: q.y * k }))
+          .filter((/** @type {any} */ q) => q.x >= marco.x * W && q.x <= (marco.x + marco.w) * W && q.y >= marco.y * H - 0.03 * H && q.y <= (marco.y + marco.h) * H)
+          .map((/** @type {any} */ q) => ({ x: q.x / W, y: q.y / H }));
+        const msAntes = Math.round(performance.now() - t0);
+        let ahora = null, msAhora = null;
+        if (R.sugerirPuntos) {
+          const t1 = performance.now();
+          const s = await R.sugerirPuntos(a, marco, [], { silueta: !sinSilueta });
+          ahora = s.puntos.map((/** @type {any} */ q) => ({ x: q.x / W, y: q.y / H }));
+          msAhora = Math.round(performance.now() - t1);
+        }
+        return { antes, msAntes, ahora, msAhora };
+      }, { b64, marco, sinSilueta: !!process.env.SIN_SILUETA });
+      const cimas = c.elementos.map((/** @type {any} */ el) => ({ ...el.cima, nombre: el.nombre }));
+      filas.push({ foto: c.foto, antes: cotejarSugerencias(r.antes, cimas), msAntes: r.msAntes,
+        ahora: r.ahora ? cotejarSugerencias(r.ahora, cimas) : null, msAhora: r.msAhora });
+    }
+  } finally { await cerrar(); }
+  const suma = (/** @type {'antes'|'ahora'} */ k) => {
+    const fs_ = filas.map(f => f[k]).filter(Boolean);
+    const c = fs_.reduce((s, x) => s + x.cimas, 0), sg = fs_.reduce((s, x) => s + x.sugeridas, 0), a = fs_.reduce((s, x) => s + x.aciertos, 0);
+    const e = fs_.filter(x => x.errMedio !== null);
+    return { c, sg, a, err: e.length ? e.reduce((s, x) => s + x.errMedio * x.aciertos, 0) / Math.max(1, a) : null };
+  };
+  const linea = (/** @type {string} */ n, /** @type {ReturnType<typeof suma>} */ s) =>
+    `| ${n} | ${s.a}/${s.c} (${pct(s.a / Math.max(1, s.c))}) | ${s.a}/${s.sg} (${pct(s.a / Math.max(1, s.sg))}) | ${s.err === null ? '—' : (s.err * 100).toFixed(1) + ' %'} |`;
+  const l = ['# «Sugerir» del focal · cimas', '', `Fotos de \`${dir}\` (fuera del repo), en Chrome. Fecha: ${new Date().toISOString().slice(0, 10)}. Acierto: a ≤ ${TOL_Y * 100} % del alto y ≤ ${TOL_X * 100} % del ancho de una cima etiquetada.`, '',
+    '| Método | Recall (cimas encontradas) | Precisión (sugerencias en una cima) | Error medio Δy |', '|---|---|---|---|', linea('Antes: foto entera, lo alto de la caja', suma('antes'))];
+  if (filas.some(f => f.ahora)) l.push(linea('Ahora: recorte del marco + silueta', suma('ahora')));
+  l.push('', '| Foto | Cimas | Antes: aciertos / sugeridas · faltan | ms | Ahora: aciertos / sugeridas · faltan | ms |', '|---|---|---|---|---|---|');
+  for (const f of filas) l.push(`| ${f.foto} | ${f.antes.cimas} | ${f.antes.aciertos}/${f.antes.sugeridas} · ${f.antes.faltan.join(', ') || '—'} | ${f.msAntes} | ${f.ahora ? `${f.ahora.aciertos}/${f.ahora.sugeridas} · ${f.ahora.faltan.join(', ') || '—'}` : '—'} | ${f.msAhora ?? '—'} |`);
+  return l.join('\n');
+}
+
 /* ── Main ──────────────────────────────────────────────────────────────── */
 
 if (opt('--plantilla')) {
@@ -262,6 +352,8 @@ if (args.includes('--sinteticas')) {
   const t = calificar(sinteticas());
   texto = informe(t, 'Revisión con foto · batería sintética',
     `Generada por código con ruido, sombra y desenfoque en tres niveles (limpia, media, dura). Prueba el método; **no es evidencia del criterio del ADR 0007**, que se mide con fotos reales. Fecha: ${new Date().toISOString().slice(0, 10)}.`, true);
+} else if (opt('--sugerir')) {
+  texto = await sugerencias(/** @type {string} */ (opt('--sugerir')));
 } else if (opt('--siluetas')) {
   texto = await siluetas(/** @type {string} */ (opt('--siluetas')));
 } else if (opt('--fotos')) {

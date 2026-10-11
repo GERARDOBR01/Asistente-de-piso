@@ -15,6 +15,7 @@ import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensio
 import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
+import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -433,6 +434,82 @@ test('silueta: si se derrama (muy grande o hasta el borde de arriba) no se le cr
   const m = new Uint8Array(W * H).fill(255);
   for (let y = 0; y < 30; y++) for (let x = 20; x < 30; x++) m[y * W + x] = 0;   // pega con el techo
   assert.equal(cimaDeSilueta(m, W, H, { x: 0.5, y: 0.3 }), null);
+});
+
+test('silueta: con zona, una cima muy por encima de ella no se cree', () => {
+  const W = 100, H = 100;
+  const m = new Uint8Array(W * H);
+  /* Un objeto que sube hasta y=10 (se juntó con algo de arriba). */
+  for (let y = 10; y < 80; y++) for (let x = 40; x < 60; x++) m[y * W + x] = 255;
+  assert.ok(cimaDeSilueta(m, W, H, { x: 0.5, y: 0.6 }), 'sin zona, vale');
+  assert.equal(cimaDeSilueta(m, W, H, { x: 0.5, y: 0.6 }, undefined, { marco: { y: 0.3 } }), null, '20 % arriba de la zona: no');
+  assert.ok(cimaDeSilueta(m, W, H, { x: 0.5, y: 0.6 }, undefined, { marco: { y: 0.12 } }), 'a 2 % de la zona: sí');
+});
+
+test('silueta: un toque en el hueco del fondo (entre los brazos) agarra el objeto de al lado', () => {
+  const W = 100, H = 100;
+  const m = new Uint8Array(W * H);
+  /* Una «U»: dos brazos y la base; el toque cae entre los brazos, en el fondo. */
+  for (let y = 30; y < 80; y++) for (let x = 30; x < 70; x++) m[y * W + x] = 255;
+  for (let y = 30; y < 60; y++) for (let x = 48; x < 52; x++) m[y * W + x] = 0;   // el hueco: 4 px de ancho
+  const r = cimaDeSilueta(m, W, H, { x: 0.5, y: 0.4 });
+  assert.ok(r, 'encuentra el objeto');
+  assert.equal(r.cima.y, 0.3);
+});
+
+test('sugerir: duplicados solo dentro de la misma categoría; la bolsa sobre el maniquí se queda', () => {
+  const rec = { w: 1000, h: 1000, cortadoArriba: false };
+  const persona = { x: 300, y: 100, w: 200, h: 700, categoria: 'person', score: 0.9 };
+  const r = elegirCajas([
+    persona,
+    { ...persona, x: 310, score: 0.6 },                                         // la misma persona
+    { x: 360, y: 400, w: 80, h: 90, categoria: 'handbag', score: 0.5 },         // la bolsa que lleva
+  ], rec);
+  assert.deepEqual(r.map(c => c.categoria).sort(), ['handbag', 'person']);
+  assert.ok(iou(persona, { ...persona, x: 310 }) > 0.5);
+});
+
+test('sugerir: fuera lo que es fondo (llena la zona, sigue al techo, persona chica al fondo) y las bases', () => {
+  const rec = { w: 1000, h: 1000, cortadoArriba: true };
+  const r = elegirCajas([
+    { x: 100, y: 200, w: 200, h: 700, categoria: 'person', score: 0.9 },
+    { x: 0, y: 0, w: 950, h: 900, categoria: 'person', score: 0.8 },            // llena la zona
+    { x: 500, y: 0, w: 100, h: 400, categoria: 'person', score: 0.8 },          // cortada por arriba
+    { x: 700, y: 300, w: 40, h: 120, categoria: 'person', score: 0.7 },         // al fondo
+    { x: 400, y: 500, w: 120, h: 80, categoria: 'suitcase', score: 0.7 },       // bolsa
+    { x: 380, y: 585, w: 180, h: 100, categoria: 'suitcase', score: 0.5 },      // su base
+    { x: 600, y: 600, w: 60, h: 60, categoria: 'potted plant', score: 0.3 },    // poca confianza
+    { x: 650, y: 200, w: 100, h: 300, categoria: 'chair', score: 0.9 },         // mueble
+  ], rec);
+  assert.deepEqual(r.map(c => `${c.categoria}@${c.x}`).sort(), ['person@100', 'suitcase@400']);
+});
+
+test('sugerir: dos bolsas en bases escalonadas no son base una de la otra', () => {
+  const rec = { w: 1000, h: 1000, cortadoArriba: false };
+  const r = elegirCajas([
+    { x: 630, y: 560, w: 124, h: 77, categoria: 'handbag', score: 0.41 },
+    { x: 682, y: 655, w: 133, h: 85, categoria: 'suitcase', score: 0.68 },
+  ], rec);
+  assert.equal(r.length, 2);
+});
+
+test('sugerir: la silueta se cree solo si su cima cae dentro de la caja y cerca de arriba', () => {
+  const caja = { x: 100, y: 200, w: 100, h: 400 };
+  assert.ok(cimaCreible(caja, { x: 150, y: 210 }, 1000));
+  assert.ok(!cimaCreible(caja, { x: 150, y: 120 }, 1000), 'subió hasta otra cosa');
+  assert.ok(!cimaCreible(caja, { x: 250, y: 210 }, 1000), 'fuera de la caja');
+  assert.ok(!cimaCreible(caja, { x: 150, y: 400 }, 1000), 'agarró solo un pedazo');
+  assert.deepEqual(recorteDe({ x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, 1000, 1000), { x: 484, y: 484, w: 232, h: 232 });
+});
+
+test('sugerir: se fusiona con lo que tocó la persona, sin pisarlo, y con tope', () => {
+  const tocados = [{ x: 100, y: 100, toque: { x: 100, y: 150 } }];
+  const f = fusionarPuntos(tocados, [{ x: 105, y: 102 }, { x: 400, y: 300 }], 20);
+  assert.equal(f.puntos[0], tocados[0], 'el de la persona, el mismo objeto');
+  assert.equal(f.agregados, 1);
+  assert.equal(f.puntos.length, 2);
+  const lleno = Array.from({ length: 9 }, (_, i) => ({ x: i * 100, y: 0 }));
+  assert.equal(fusionarPuntos(lleno, [{ x: 50, y: 500 }], 20).agregados, 0, 'tope de 9');
 });
 
 /* ── Veredicto ─────────────────────────────────────────────────────────── */

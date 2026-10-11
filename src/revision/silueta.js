@@ -52,16 +52,17 @@ export function capaDe(objeto, W, H) {
  * La silueta del objeto tocado y su cima, en fracción de la imagen.
  * @param {HTMLCanvasElement|HTMLImageElement} fuente
  * @param {{x:number,y:number}} toque  en fracción de la imagen
+ * @param {{marco?: {y: number}}} [op]  la zona del focal: una cima muy por encima de ella no se cree
  * @returns {Promise<ReturnType<typeof cimaDeSilueta>>}
  */
-export async function siluetaEn(fuente, toque) {
+export async function siluetaEn(fuente, toque, op = {}) {
   const seg = await cargarSegmentador();
   /** @type {ReturnType<typeof cimaDeSilueta>} */
   let r = null;
   seg.segment(fuente, { keypoint: toque }, (/** @type {any} */ res) => {
     const m = res.categoryMask;
     if (!m) return;
-    r = cimaDeSilueta(m.getAsUint8Array(), m.width, m.height, toque);
+    r = cimaDeSilueta(m.getAsUint8Array(), m.width, m.height, toque, undefined, op);
     m.close?.();
   });
   return r;
