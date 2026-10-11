@@ -9,10 +9,12 @@
 // - icon-512-maskable.png: el cuadrado entero; el sistema le pone su máscara.
 // - icon-180.png (apple-touch): el cuadrado entero; iOS redondea solo.
 // - og.jpg (1200×630): la tarjeta que sale al compartir el enlace.
+// - docs/banner.png (1280×640): el del README, con dos capturas de la app
+//   real (Preguntar y Revisar, con el ejemplo sintético: nada de manuales reales).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cargarPlaywright } from '../eval/navegador.mjs';
+import { cargarPlaywright, servirRepo } from '../eval/navegador.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SVG = fs.readFileSync(path.join(RAIZ, 'icons/icono.svg'), 'utf8').replace(/<!--[\s\S]*?-->/g, '').trim();
@@ -49,6 +51,15 @@ small{display:block;margin-top:26px;font-size:18px;color:#9AA0A9}</style>
 <small>Funciona sin señal · nada se sube · si no está, te lo dice</small>
 </div></div>`;
 
+
+/* El banner del README: lo mismo que og.jpg y dos capturas de la app real. */
+const banner = (w, h, cap1, cap2) => og(w, h)
+  .replace('</style>', '.c{gap:0;padding:0 0 0 72px}.texto{max-width:600px}.ico{width:96px;height:96px;margin-bottom:22px}h1{font-size:60px;white-space:nowrap}p{font-size:22px;max-width:560px}'
+    + '.tel{position:absolute;width:250px;border-radius:32px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.55),0 0 0 1.5px rgba(255,255,255,.22)}.tel img{width:100%;display:block}'
+    + '.t1{right:292px;top:40px;transform:rotate(-3deg)}.t2{right:32px;top:84px;transform:rotate(3deg)}</style>')
+  .replace('<div class="c"><div class="ico">', '<div class="c"><div class="texto"><div class="ico">')
+  .replace(/<\/small>\s*<\/div><\/div>/, `</small></div></div></div><div class="tel t1"><img src="${cap1}"></div><div class="tel t2"><img src="${cap2}"></div>`);
+
 const pw = await cargarPlaywright();
 if (!pw) { console.error('Falta Playwright: PLAYWRIGHT_CORE=<ruta a index.mjs>'); process.exit(1); }
 const b = await pw.chromium.launch({ channel: process.env.CANAL || undefined });
@@ -65,4 +76,19 @@ await captura(baldosa(512, true), 512, 512, 'icons/icon-512.png', { omitBackgrou
 await captura(baldosa(512, false), 512, 512, 'icons/icon-512-maskable.png');
 await captura(baldosa(180, false), 180, 180, 'icons/icon-180.png');
 await captura(og(1200, 630), 1200, 630, 'icons/og.jpg', { type: 'jpeg', quality: 88 });
+
+/* Dos capturas de la app servida desde este repo, en oscuro: Preguntar con el
+   manual de ejemplo cargado y Revisar con su foto de ejemplo. */
+const srv = await servirRepo();
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: 'dark', serviceWorkers: 'block' });
+const app = await ctx.newPage();
+await app.goto(`http://127.0.0.1:${srv.address().port}/index.html`, { waitUntil: 'networkidle' });
+await app.waitForTimeout(1500);
+const cap1 = 'data:image/png;base64,' + (await app.screenshot()).toString('base64');
+await app.evaluate(() => switchTab('revisar'));
+await app.waitForTimeout(900);
+const cap2 = 'data:image/png;base64,' + (await app.screenshot()).toString('base64');
+await ctx.close(); srv.close();
+await captura(banner(1280, 640, cap1, cap2), 1280, 640, 'docs/banner.png');
+
 await b.close();

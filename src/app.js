@@ -1483,6 +1483,8 @@ function switchTab(name){
      Un toque corto de vibración confirma el cambio; el navegador lo ignora si
      no hubo un toque de la persona, y no se usa con «reducir movimiento». */
   if(barra)barra.style.setProperty('--tab-i',String(ahora));
+  /* La aurora del fondo (index.html, AURORA) se corre según la pestaña. */
+  document.documentElement.style.setProperty('--seccion-i',String(ahora));
   try{
     vibrarCorto();
   }catch{}
@@ -2043,7 +2045,7 @@ const LECTURA_VERSION=3;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.22.1';
+const VERSION_APP='ap-v1.22.2';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;

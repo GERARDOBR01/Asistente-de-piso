@@ -576,6 +576,16 @@ prueban con fast-check (`lab/motor.test.mjs`).
 Una cuarta parte del JavaScript son comentarios. Casi todos explican por qué una regla es
 como es, con la pregunta que la hizo necesaria.
 
+### Gráficos: el logo, la aurora y el banner
+
+El ícono es el monograma AP (`icons/icono.svg`): la A es la triangulación del display, con su punto focal arriba, y la P es una lámina con la esquina doblada. Los PNG del manifest (192 y 512 redondos, 512 *maskable*, 180 de Apple), `icons/og.jpg` y `docs/banner.png` salen del SVG y de capturas de la app real con el ejemplo sintético:
+
+```bash
+PLAYWRIGHT_CORE=<ruta a playwright-core/index.mjs> CANAL=chrome node design/iconos.mjs
+```
+
+El color vive en el fondo: una aurora de tres orbes (rojo de la marca, naranja y azul) detrás del vidrio, que se mueve despacio y se corre según la pestaña. Con «reducir movimiento» se queda quieta y con «reducir transparencia» desaparece. El rojo como *estado* sigue marcando solo la pestaña activa.
+
 ### Cómo se mide
 
 Abrir `index.html?test=1` corre el arnés: preguntas de respuesta conocida sobre el manual

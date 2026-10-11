@@ -1530,6 +1530,51 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat}
 
+
+/* ════════════════════════════════════════════════
+   AURORA (11-oct-2026)
+
+   Gerardo pidió más color «y dopamina» sin perder el vidrio. Investigación:
+   el vidrio se lee mejor sobre color vivo detrás (Liquid Glass, iOS 26) y
+   los degradados que funcionan son de tonos vecinos. Así que el color vive
+   en el FONDO: tres orbes —rojo de la marca, naranja y azul, nunca morado
+   ni dorado— muy desenfocados, que se mueven despacio y cambian de lugar
+   según la pestaña. Las tarjetas siguen casi opacas: el texto no pierde
+   contraste. El rojo como ESTADO sigue siendo solo la pestaña activa; la
+   aurora es ambiente.
+   Rendimiento (A54): una sola capa fija, solo transform/translate/opacity.
+   «Menos movimiento»: aurora quieta. «Menos transparencia»: sin aurora.
+════════════════════════════════════════════════ */
+:root{
+  --au-r:229,51,58;--au-n:255,138,61;--au-a:59,130,246;
+  --au-op:.46;--au-blur:34px;
+}
+[data-theme="light"]{--au-op:.34}
+body::after{
+  content:'';position:fixed;inset:-18vmax;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(closest-side at 50% 50%,rgba(var(--au-r),var(--au-op)),rgba(var(--au-r),0)) 2% -4%/58vmax 58vmax no-repeat,
+    radial-gradient(closest-side at 50% 50%,rgba(var(--au-n),calc(var(--au-op)*.8)),rgba(var(--au-n),0)) 104% 26%/52vmax 52vmax no-repeat,
+    radial-gradient(closest-side at 50% 50%,rgba(var(--au-a),calc(var(--au-op)*.9)),rgba(var(--au-a),0)) 18% 104%/64vmax 64vmax no-repeat;
+  filter:blur(var(--au-blur));
+  /* Cada pestaña corre la aurora un poco: Preguntar a la izquierda, Ajustes a la derecha. */
+  translate:calc((var(--seccion-i,0) - 2) * 3.5vmax) calc((var(--seccion-i,0) - 2) * -1.5vmax);
+  transition:translate .9s var(--suave);
+  animation:aurora-deriva 36s ease-in-out infinite alternate;
+  will-change:transform;
+}
+@keyframes aurora-deriva{
+  0%{transform:rotate(0deg) scale(1)}
+  50%{transform:rotate(6deg) scale(1.06)}
+  100%{transform:rotate(-4deg) scale(1.02)}
+}
+/* Sobre la aurora, el fondo de la app deja de ser un negro plano: el vidrio
+   flotante (barra, caja de pregunta, chips) deja ver el color, y la tarjeta
+   del texto largo se queda casi opaca. */
+.tabs,.chat-input-area{backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5)}
+.quick-btn,.status-pill,.hdr-marca{backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4)}
+@media (prefers-reduced-motion:reduce){body::after{animation:none;transition:none}}
+@media (prefers-reduced-transparency:reduce){body::after{display:none}}
 </style>
 </head>
 <body>
