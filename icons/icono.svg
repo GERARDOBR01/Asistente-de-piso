@@ -1,23 +1,36 @@
-<!-- Ícono de la app. Los PNG se sacan con Chromium: una página con este SVG a pantalla completa, --screenshot --window-size=N,N. El dibujo cabe en la zona segura de «maskable». -->
+<!-- Ícono de la app (paleta del 10-oct: neutro frío, vidrio y un solo punto rojo).
+     Los PNG se sacan con Chrome: una página con este SVG a pantalla completa y una
+     captura de N×N (el script está en el README, sección «Gráficos»). El dibujo cabe
+     en la zona segura de «maskable» (el círculo central de 80 %). -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="coral" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FF5A6E"/>
-      <stop offset="1" stop-color="#FF8A5B"/>
+    <linearGradient id="pliegueA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3B3F47"/>
+      <stop offset="1" stop-color="#0A0B0D" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="brillo" cx="0.22" cy="0.18" r="0.75">
-      <stop offset="0" stop-color="#FF5A6E" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#FF5A6E" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="pliegueB" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2E35"/>
+      <stop offset="1" stop-color="#0A0B0D" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="vidrio" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.05"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#0D0E12"/>
-  <rect width="512" height="512" fill="url(#brillo)"/>
-  <!-- globo de diálogo -->
-  <path d="M136 132h240a28 28 0 0 1 28 28v164a28 28 0 0 1-28 28H244l-60 48v-48h-48a28 28 0 0 1-28-28V160a28 28 0 0 1 28-28z" fill="none" stroke="url(#coral)" stroke-width="16" stroke-linejoin="round"/>
+  <rect width="512" height="512" fill="#0A0B0D"/>
+  <!-- los pliegues del fondo de la app -->
+  <path d="M250 -20C330 70 430 100 540 60L540 -20Z" fill="url(#pliegueA)"/>
+  <path d="M190 -20C270 110 390 180 540 165L540 100C410 125 300 70 250 -20Z" fill="url(#pliegueB)"/>
+  <path d="M-20 420C110 370 250 430 330 540L-20 540Z" fill="url(#pliegueB)"/>
+  <!-- globo de diálogo de vidrio, con su brillo arriba -->
+  <path d="M136 132h240a28 28 0 0 1 28 28v164a28 28 0 0 1-28 28H244l-60 48v-48h-48a28 28 0 0 1-28-28V160a28 28 0 0 1 28-28z" fill="url(#vidrio)" stroke="#F2F3F5" stroke-opacity="0.9" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M150 142h212" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>
   <!-- hoja del manual -->
-  <path d="M206 170h78l34 34v112h-112z" fill="#F3F0E9"/>
-  <path d="M284 170v34h34" fill="#D9D2C4"/>
-  <rect x="222" y="222" width="80" height="10" rx="5" fill="#8E8B94"/>
-  <rect x="218" y="248" width="88" height="20" rx="4" fill="url(#coral)"/>
-  <rect x="222" y="284" width="64" height="10" rx="5" fill="#8E8B94"/>
+  <path d="M206 170h78l34 34v112h-112z" fill="#F2F3F5"/>
+  <path d="M284 170v34h34" fill="#C3C9D1"/>
+  <rect x="222" y="222" width="80" height="10" rx="5" fill="#8A8F98"/>
+  <rect x="222" y="252" width="60" height="10" rx="5" fill="#8A8F98"/>
+  <rect x="222" y="282" width="70" height="10" rx="5" fill="#8A8F98"/>
+  <!-- el punto rojo: el dato que encontró -->
+  <circle cx="300" cy="257" r="14" fill="#E5333A"/>
 </svg>
