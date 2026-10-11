@@ -136,6 +136,18 @@ SLOW MOVERS: Reubicar a focal → cross-merchandising → cambiar presentación 
 SUPERVISIÓN DIARIA: Enganchado ✓ Alineación ✓ Colorización ✓ Maniquíes ✓ Tallas ✓ Limpieza ✓ Precios ✓
 `;
 
+/* Iconos de línea (los emojis no siguen el tema ni el grosor de las pestañas). */
+const ICO={
+  libro:'<svg class="ico-linea" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h6"/></svg>',
+  doc:'<svg class="ico-linea" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  lupa:'<svg class="ico-linea" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
+  ojo:'<svg class="ico-linea" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+};
+/* Unos pliegues como los del fondo: el dibujo de los estados vacíos. */
+const PLIEGUES='<svg class="vacio-pliegues" viewBox="0 0 120 72" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 60C26 52 44 58 58 44S90 24 114 30" opacity=".9"/><path d="M6 48C24 40 42 46 56 32S86 12 114 18" opacity=".6"/><path d="M6 36C22 28 40 34 54 20S82 2 114 6" opacity=".35"/></svg>';
+/** Botón con icono y texto (el texto, escapado). */
+const conIcono=(ico,texto)=>ICO[ico]+'<span>'+escapeHtml(texto)+'</span>';
+
 /* ════════════════════════════════════════════════
    ACCESOS RÁPIDOS POR DEFECTO
 ════════════════════════════════════════════════ */
@@ -259,7 +271,7 @@ function preguntarSeccion(q,alternativas){
   el.classList.add('pregunta-seccion');
   const fila=document.createElement('div');fila.className='chips-ia';
   for(const d of alternativas){
-    const b=document.createElement('button');b.className='chip-ia';b.textContent='📕 '+nombreDeSeccion(d);
+    const b=document.createElement('button');b.className='chip-ia';b.innerHTML=conIcono('libro',nombreDeSeccion(d));
     b.onclick=()=>{rutaForzada={q,doc:d};fila.querySelectorAll('button').forEach(x=>x.disabled=true);ask(q)};
     fila.appendChild(b);
   }
@@ -277,7 +289,8 @@ function lineaDeRuta(q,ruta,soloBotones){
   if(soloBotones&&!(ruta.alternativas||[]).length)return null;
   const wrap=document.createElement('div');wrap.className='ruta-seccion';
   const t=document.createElement('span');
-  t.textContent=soloBotones?'¿Era de otra sección?':`📕 Busqué en ${nombreDeSeccion(ruta.doc)} (${RUTA_ROTULO[ruta.motivo]})`;
+  if(soloBotones)t.textContent='¿Era de otra sección?';
+  else t.innerHTML=conIcono('libro',`Busqué en ${nombreDeSeccion(ruta.doc)} (${RUTA_ROTULO[ruta.motivo]})`);
   wrap.appendChild(t);
   for(const d of ruta.alternativas||[]){
     const b=document.createElement('button');b.className='chip-ia';b.textContent='¿Era de '+nombreDeSeccion(d)+'?';
@@ -851,6 +864,11 @@ function renderTablero(){
   }
 
   if(!res.total){
+    const vacio=el('div','tb-vacio');
+    vacio.innerHTML=PLIEGUES+(tablero.length
+      ?'<b>Nada en este periodo</b><span>Cambia a «Todo» para ver lo que se ha preguntado antes.</span>'
+      :'<b>Aquí aparece lo que pregunta tu equipo</b><span>Las dudas que más se repiten y las que el manual no contesta. Se queda en este teléfono.</span>');
+    cont.appendChild(vacio);
     const b=el('button','tb-btn primario',tablero.length?'No hay dudas en este periodo':'Ir a preguntar');b.type='button';
     if(tablero.length)b.disabled=true;else b.onclick=()=>switchTab('chat');
     const acc=el('div','tb-acciones');acc.appendChild(b);
@@ -1442,6 +1460,11 @@ function bloqueAprendido(cont){
 /* ════════════════════════════════════════════════
    TABS
 ════════════════════════════════════════════════ */
+/* Vibración con sentido: solo al enviar, al cambiar de pestaña y (en Revisar)
+   al dar el veredicto. Nunca de adorno, y nada con menos movimiento pedido. */
+function vibrarCorto(){
+  try{if(navigator.vibrate&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate(6)}catch{}
+}
 function switchTab(name){
   const pestanas=['chat','revisar','docs','memory','config'];
   /* El panel nuevo entra del lado de la pestaña tocada: desde la derecha si
@@ -1461,7 +1484,7 @@ function switchTab(name){
      no hubo un toque de la persona, y no se usa con «reducir movimiento». */
   if(barra)barra.style.setProperty('--tab-i',String(ahora));
   try{
-    if(navigator.vibrate&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate(6);
+    vibrarCorto();
   }catch{}
   if(name==='memory')renderTablero();
   /* En el celular, enfocar la caja abre el teclado, y el teclado tapa justo la
@@ -2019,7 +2042,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.20.0';
+const VERSION_APP='ap-v1.21.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2710,10 +2733,10 @@ async function handleFiles(fileList){
 
 function renderDocs(){
   const list=document.getElementById('doc-list'),ragInfo=document.getElementById('rag-info');
-  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">📘</div><span class="doc-name">Biblia Hombres — 12 manuales consolidados (M-01 a M-12, incluye Softline SL) · conocimiento sintético</span><span class="doc-tag">Integrado</span></div>`;
+  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">${ICO.libro}</div><span class="doc-name">Biblia Hombres — 12 manuales consolidados (M-01 a M-12, incluye Softline SL) · conocimiento sintético</span><span class="doc-tag">Integrado</span></div>`;
   const userHTML=docs.map((d,i)=>`
     <div class="doc-item">
-      <div class="doc-icon">📄</div>
+      <div class="doc-icon">${ICO.doc}</div>
       <span class="doc-name">${escapeHtml(d.name)}</span>
       <span class="doc-size">${escapeHtml(d.size)}</span>
       <span class="doc-chunks">${d.pageCount?d.pageCount+' pág. · ':''}${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}${estadoDeFicha(d.name)}${lecturaVieja(d)?' · <span class="doc-releer" title="Se guardó con una lectura anterior del PDF">↻ vuelve a elegir el PDF para leer mejor sus tablas</span>':''}</span>
@@ -2725,7 +2748,7 @@ function renderDocs(){
   const b=document.getElementById('badge');b.style.display=docs.length?'':'none';b.textContent=docs.length;
   if(docs.length>0){
     ragInfo.style.display='block';
-    ragInfo.textContent=`✦ RAG activo — ${docChunks.length} fragmentos y ${docFigures.length} figuras en ${docs.length} manual${docs.length>1?'es':''}.`;
+    ragInfo.textContent=`RAG activo — ${docChunks.length} fragmentos y ${docFigures.length} figuras en ${docs.length} manual${docs.length>1?'es':''}.`;
   }else ragInfo.style.display='none';
   renderSelectorSeccion();
   renderQuickBtns();
@@ -2821,9 +2844,9 @@ function getSourceInfo(query,contextBuilt,memUsed,hasPdfs,ampliada){
     const n=corta(nombreDeSeccion(ultimaSeccionUsada));
     /* Si la sección la eligió la pregunta y no el selector, se dice: responder
        por un manual que el asesor no eligió sin avisar es la misma trampa. */
-    sources.push({type:'seccion',label:ultimaSeccionPorPregunta?`📕 ${n} (${typeof ultimaSeccionPorPregunta==='string'?ultimaSeccionPorPregunta:'por tu pregunta'})`:'📕 '+n});
+    sources.push({type:'seccion',label:ultimaSeccionPorPregunta?`${n} (${typeof ultimaSeccionPorPregunta==='string'?ultimaSeccionPorPregunta:'por tu pregunta'})`:n});
   }
-  else if(hasPdfs&&docs.length>1)sources.push({type:'seccion',label:`📚 ${docs.length} manuales a la vez`});
+  else if(hasPdfs&&docs.length>1)sources.push({type:'seccion',label:`${docs.length} manuales a la vez`});
   /* Con la pregunta apuntando a otra sección, las páginas que se consultaron son
      las de la sección activa: enseñarlas debajo de un "esto es de otra sección"
      es mandar al asesor a la página equivocada de un manual equivocado. */
@@ -2988,10 +3011,10 @@ async function consultarTodosLosManuales(pregunta,btn){
   const frags=ultimosFragmentos.slice();
   if(!contexto){
     showToast('Eso tampoco aparece en tus otros manuales.','warn',4000);
-    btn.disabled=true;btn.textContent='🔎 Tampoco está en tus otros manuales';
+    btn.disabled=true;btn.innerHTML=conIcono('lupa','Tampoco está en tus otros manuales');
     return;
   }
-  btn.disabled=true;btn.textContent='🔎 Buscando en todas tus secciones…';
+  btn.disabled=true;btn.innerHTML=conIcono('lupa','Buscando en todas tus secciones…');
   const loaderEl=appendMsg('assistant','',true);
   try{
     const provider=PROVIDERS[appState.provider];
@@ -3016,13 +3039,13 @@ async function consultarTodosLosManuales(pregunta,btn){
     const cuantos=new Set(frags.map(c=>c.docName)).size;
     if(cuantos===1)renderEvidencia(loaderEl,figurasDeFragmentos(frags,verif.citadas,limpio,certeza),'cita');
     sessionTokens+=tokens||estimateTokens(text);updateTokenBar();
-    btn.textContent='🔎 Buscado en todas tus secciones';
+    btn.innerHTML=conIcono('lupa','Buscado en todas tus secciones');
   }catch(err){
     loaderEl.classList.remove('loading');
     const body=loaderEl.querySelector('.msg-body');
     body.style.color='var(--amber)';
     body.innerHTML=safeMarkdown(formatError(err));
-    btn.disabled=false;btn.textContent='🔎 Buscar en mis otros manuales';
+    btn.disabled=false;btn.innerHTML=conIcono('lupa','Buscar en mis otros manuales');
   }
   scrollToBottom();
 }
@@ -3292,7 +3315,7 @@ function responderSinModelo(q){
   if(nombrada&&docs.some(d=>d.name===nombrada.docName)){
     const cambiar=document.createElement('button');
     cambiar.className='ref-general';cambiar.type='button';
-    cambiar.textContent=`📕 Cambiar a ${nombrada.nombre} y repetir la pregunta`;
+    cambiar.innerHTML=conIcono('libro',`Cambiar a ${nombrada.nombre} y repetir la pregunta`);
     cambiar.onclick=()=>{
       cambiar.disabled=true;
       cambiarSeccion(nombrada.docName);
@@ -3412,7 +3435,7 @@ async function sendMessage(){
     const inputSinKey=document.getElementById('user-input');
     const qSinKey=inputSinKey.value.trim();
     if(!qSinKey)return;
-    inputSinKey.value='';ajustarAltura(inputSinKey);
+    inputSinKey.value='';ajustarAltura(inputSinKey);vibrarCorto();
     responderSinModelo(qSinKey);
     return;
   }
@@ -3426,7 +3449,7 @@ async function sendMessage(){
     appendMsg('user',q,false);preguntarSeccion(q,ruta.alternativas);
     return;
   }
-  input.value='';ajustarAltura(input);isGenerating=true;chatDescartado=false;
+  input.value='';ajustarAltura(input);isGenerating=true;chatDescartado=false;vibrarCorto();
   ocultarBannerRestaurar();
 
   const sendBtn=document.getElementById('send-btn');
@@ -3795,7 +3818,7 @@ function renderChatVacio(){
   const ejemplos=conPdf
     ?accesosConBasicos().slice(0,3).map(a=>({q:a.q,nota:'Una lámina de tu manual'})).concat([{q:'¿a qué hora abre la tienda?',nota:'Si el manual no lo dice, te lo dice'}])
     :EJEMPLOS_DEMO;
-  el.innerHTML='';
+  el.innerHTML=PLIEGUES;
   const t=document.createElement('div');t.className='vacio-titulo';
   t.textContent=conPdf?(seccion?`Estás en ${seccion}`:`${docs.length} manuales cargados`):'Pregunta como lo dirías en piso';
   const s=document.createElement('div');s.className='vacio-sub';
@@ -3844,7 +3867,7 @@ function renderChatVacio(){
    guarda en el dispositivo y se puede quitar como cualquier otro. */
 async function cargarManualDeEjemplo(btn){
   const rotulo=btn?btn.firstChild.textContent:'';
-  if(btn){btn.disabled=true;btn.firstChild.textContent='📕 Abriendo el manual de ejemplo…'}
+  if(btn){btn.disabled=true;btn.firstChild.textContent='Abriendo el manual de ejemplo…'}
   try{
     const r=await fetch('docs/manual-demo.pdf');
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -4187,7 +4210,7 @@ function renderEvidencia(container,figuras,origen){
     fig.appendChild(img);fig.appendChild(pie);
     /* Ampliar dentro del globo no alcanzaba: en el celular la lámina seguía del
        ancho del mensaje y las cotas del planograma no se leían. */
-    fig.onclick=()=>abrirVisor(f.dataUrl,pie.textContent,img.alt,{docName:f.docName,page:f.page});
+    fig.onclick=()=>abrirVisor(f.dataUrl,pie.textContent,img.alt,{docName:f.docName,page:f.page},img);
     tira.appendChild(fig);
   }
   wrap.appendChild(tira);
@@ -4197,7 +4220,19 @@ function renderEvidencia(container,figuras,origen){
 /* Visor a pantalla completa. Doble toque (o doble clic) acerca al doble y se
    recorre arrastrando; el pellizco nativo también funciona. */
 let visorLamina=null;   // {docName,page} de la lámina abierta, para «Explícame esta lámina»
-function abrirVisor(src,pie,alt,lamina){
+/* Con View Transitions, la miniatura crece hasta el visor como el mismo
+   elemento (y vuelve a su lugar al cerrar); sin ellas, abre como antes. */
+let visorDesde=null;
+const conTransicion=fn=>{
+  if(!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches){fn();return}
+  document.startViewTransition(fn);
+};
+function abrirVisor(src,pie,alt,lamina,desde){
+  if(desde&&!desde.__enTransicion){
+    visorDesde=desde;desde.style.viewTransitionName='lamina';
+    conTransicion(()=>{desde.style.viewTransitionName='';document.getElementById('visor-img').style.viewTransitionName='lamina';abrirVisor(src,pie,alt,lamina,Object.assign({},{__enTransicion:true}))});
+    return;
+  }
   const v=document.getElementById('visor'),img=document.getElementById('visor-img'),sc=document.getElementById('visor-scroll');
   visorLamina=lamina&&lamina.page?lamina:null;
   const explica=document.getElementById('visor-explica');
@@ -4218,9 +4253,17 @@ function explicarLamina(){
   ask(`Explícame la lámina de la pág. ${l.page}: qué muestra y cómo se monta.`);
 }
 function cerrarVisor(){
-  document.getElementById('visor').classList.remove('abierto');
-  document.getElementById('visor-img').removeAttribute('src');
-  document.body.style.overflow='';
+  const img=document.getElementById('visor-img'),desde=visorDesde&&visorDesde.isConnected?visorDesde:null;
+  visorDesde=null;
+  const cerrar=()=>{
+    document.getElementById('visor').classList.remove('abierto');
+    img.removeAttribute('src');img.style.viewTransitionName='';
+    if(desde)desde.style.viewTransitionName='lamina';
+    document.body.style.overflow='';
+  };
+  if(!desde){cerrar();return}
+  conTransicion(cerrar);
+  setTimeout(()=>{desde.style.viewTransitionName=''},400);
 }
 (function(){
   const sc=document.getElementById('visor-scroll');
@@ -4285,6 +4328,18 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   const msgLabel=loaderEl.querySelector('.msg-label');
   loaderEl.classList.remove('loading');
   msgBody.innerHTML=safeMarkdown(cleanFinal);
+  /* Arriba de la respuesta, de qué manual y qué página (como en el canvas):
+     el asesor ve la página antes que el dato. Solo las páginas que la
+     verificación encontró de verdad en lo que se le mandó al modelo. */
+  const pagsCitadas=[...verif.citadas].map(Number).sort((x,y)=>x-y);
+  if(contextoEnviado&&pagsCitadas.length&&certeza!=='GAP'){
+    const doc=(ultimosFragmentos||[]).find(c=>c.source==='pdf'&&verif.citadas.has(String(c.page)))?.docName;
+    const cab=document.createElement('div');cab.className='resp-cab';
+    cab.innerHTML=ICO.doc+`<span class="resp-manual">${escapeHtml(doc?nombreDeSeccion(doc):'Tu manual')}</span>`
+      +pagsCitadas.slice(0,3).map(n=>`<span class="resp-pag">pág. ${n}</span>`).join('');
+    /* Fuera del cuerpo: lo que se copia y lo que se califica es la respuesta. */
+    loaderEl.insertBefore(cab,msgBody);
+  }
   const insignia=CERTEZA_ROTULO[certeza];
   msgLabel.innerHTML=`Asistente ${insignia?`<span class="certeza ${insignia.cls}">${insignia.txt}</span> `:''}<span class="msg-tokens">~${tokens.toLocaleString('es-MX')} tk</span>`;
 
@@ -4335,7 +4390,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     const otra=ultimaOtraSeccion;
     const cambiar=document.createElement('button');
     cambiar.className='ref-general';
-    cambiar.textContent=`📕 Cambiar a ${otra.nombre} y repetir la pregunta`;
+    cambiar.innerHTML=conIcono('libro',`Cambiar a ${otra.nombre} y repetir la pregunta`);
     cambiar.onclick=()=>{
       cambiar.disabled=true;
       cambiarSeccion(otra.docName);
@@ -4353,7 +4408,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     const sug=ultimaSeccionSugerida;
     const btnSug=document.createElement('button');
     btnSug.className='ref-general';
-    btnSug.textContent=`📕 Buscar esto en ${sug.nombre}`;
+    btnSug.innerHTML=conIcono('libro',`Buscar esto en ${sug.nombre}`);
     btnSug.onclick=()=>{
       btnSug.disabled=true;
       cambiarSeccion(sug.docName);
@@ -4372,7 +4427,7 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
   if(docs.length>1&&esRespuestaSinDato(cleanFinal,certeza)){
     const refBtn=document.createElement('button');
     refBtn.className='ref-general';
-    refBtn.textContent='🔎 Buscar en mis otros manuales';
+    refBtn.innerHTML=conIcono('lupa','Buscar en mis otros manuales');
     refBtn.onclick=()=>consultarTodosLosManuales(originalQuestion,refBtn);
     footer.appendChild(refBtn);
   }
@@ -4523,12 +4578,15 @@ function presentarRespuestaAgente(loaderEl,r,q){
   return{texto:limpio,entendi:campos.entendi}
 }
 function filaDeChips(titulo,preguntas){
-  const wrap=document.createElement('div');wrap.className='chips-ia';
+  const wrap=document.createElement('div');wrap.className='chips-ia'+(/^Sigue en el manual/.test(titulo)?' chips-sigue':'');
   const t=document.createElement('span');t.className='chips-titulo';t.textContent=titulo;
   wrap.appendChild(t);
   for(const p of preguntas){
     const texto=typeof p==='string'?p:p.texto,q=typeof p==='string'?p:p.q;
     const b=document.createElement('button');b.className='chip-ia';b.textContent=texto;
+    /* La página del botón, como en el canvas: «Estilo nórdico  p. 15». */
+    const pag=typeof p==='string'?null:p.pagina;
+    if(pag&&!/pág\. \d+$/.test(texto)){const s=document.createElement('span');s.className='chip-pag';s.textContent='p. '+pag;b.appendChild(s)}
     b.onclick=()=>ask(q);
     wrap.appendChild(b);
   }
@@ -4942,6 +5000,7 @@ function loadTheme() {
    ARRANQUE
 ════════════════════════════════════════════════ */
 loadTheme();
+{const pv=document.getElementById('pie-version');if(pv)pv.textContent=VERSION_APP}
 initSystemPromptCounter();
 loadSaved();
 cargarTablero();

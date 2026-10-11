@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-FF5A6E?style=for-the-badge&labelColor=0D0E12"></a>
-  <a href="docs/como-funciona.mp4"><img alt="Cómo funciona" src="https://img.shields.io/badge/c%C3%B3mo%20funciona-13%20s-FF8A5B?style=for-the-badge&labelColor=0D0E12"></a>
+  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img alt="Demo pública" src="https://img.shields.io/badge/demo-abrir%20en%20el%20navegador-E5333A?style=for-the-badge&labelColor=0A0B0D"></a>
+  <a href="docs/como-funciona.mp4"><img alt="Cómo funciona" src="https://img.shields.io/badge/c%C3%B3mo%20funciona-13%20s-3B3F47?style=for-the-badge&labelColor=0A0B0D"></a>
   <a href="LICENCIA-COMERCIAL.md"><img alt="Licencia: PolyForm Noncommercial" src="https://img.shields.io/badge/licencia-PolyForm%20NC-B3B0B8?style=for-the-badge&labelColor=0D0E12"></a>
 </p>
 
@@ -140,7 +140,7 @@ Tres arreglos salieron de estas mediciones:
 ## Cómo funciona, en 13 segundos
 
 <p align="center">
-  <a href="docs/como-funciona.mp4"><img src="docs/preview.gif" alt="Animación: el manual entra al celular, se parte en láminas, llega una pregunta con faltas y sube la lámina que contesta, con su página" width="420"></a>
+  <a href="docs/como-funciona.mp4"><img src="docs/preview.gif" alt="La app real con el manual de ejemplo: una pregunta con faltas («a q altura va la alarma del pantalon») contesta con la lámina y su página; después Revisar mide un focal de ejemplo con su triángulo y sus alturas" width="420"></a>
 </p>
 
 Lee tu manual → lo parte en láminas → preguntas como hablas → responde con la página y la lámina. La pregunta, la lámina que gana, el texto y el dibujo salen del motor real corriendo sobre el manual de ejemplo: **[ver en MP4](docs/como-funciona.mp4)**.
