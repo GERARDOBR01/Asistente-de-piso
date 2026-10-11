@@ -59,7 +59,7 @@ lo que está en el repo es lo que corre.
 | 5b | Conversación y respuesta (lo que decide el modo manual y el contexto del modelo), con el historial como parámetro: el motor contesta en Node (`lab/motor-node.mjs`) | hecho |
 | 6 | Verificación | hecho |
 | 7a | IA sin pantalla (`src/ia/`): proveedores, SSE, parser, reintentos y el agente lector | hecho |
-| 7b | Lo demÃ¡s que es puro (Â«Sigue en el manualÂ», Aprende, Tablero, MediciÃ³n) y el almacenamiento | |
+| 7b | Lo demÃ¡s que es puro (Â«Sigue en el manualÂ», Aprende, Tablero, MediciÃ³n) y el almacenamiento | hecho |
 | 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
 
 ## Medido (paso 1)
@@ -248,6 +248,21 @@ Con la sección elegida, la búsqueda solo mira ese manual, pero BM25 pesa cada 
 - `tipos.d.ts` trae `fetch` y los temporizadores mÃ­nimos, sin abrir `lib: dom`. `src/ia/` entra a la prueba de frontera.
 - `app.js` baja de 7,572 a 6,597 lÃ­neas.
 - Golden master idÃ©ntico (667) en cada PR, arnÃ©s 305/305, agente simulado y gate idÃ©ntico. **129 pruebas en Node.** ap-v1.18.2 y ap-v1.18.3.
+
+## Medido (paso 7b)
+
+| MÃ³dulo | Contenido |
+|---|---|
+| `src/motor/sigue.js` | Â«Sigue en el manualÂ» (`siguientesDelManual`), la ficha y `paginasDelManual` |
+| `src/motor/aprende.js` | quÃ© se puede aprender, por quÃ© un par no, la limpieza de lo que llega de fuera y el recorte por secciÃ³n |
+| `src/piso/tablero.js` | el resumen del tablero y las preguntas reales con formato de examen |
+| `src/piso/medicion.js` | el examen, la calificaciÃ³n (la de `eval/modo-ia.mjs`), la capa de falla y el resumen |
+| `src/almacen/manuales.js` | IndexedDB: abrir, leer, listar, borrar y el hash del archivo |
+
+- Lo que es de la app entra como parÃ¡metro: en Â«SigueÂ», las imÃ¡genes, la ficha, los bÃ¡sicos ya preguntados y la cobertura, que se pide solo si hace falta porque cuesta.
+- `src/piso/` entra a `tsc` estricto y a la prueba de frontera. `src/almacen/` usa IndexedDB, asÃ­ que no entra.
+- `app.js` baja de 6,597 a 6,242 lÃ­neas.
+- Golden idÃ©ntico, arnÃ©s 305/305, agente simulado y gate. **135 pruebas en Node.** ap-v1.18.4.
 
 ## Consecuencias
 

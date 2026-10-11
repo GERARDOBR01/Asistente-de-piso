@@ -27,6 +27,11 @@ import * as conversacion from './motor/conversacion.js';
 import * as respuesta from './motor/respuesta.js';
 import * as basicos from './motor/basicos.js';
 import * as verificacion from './motor/verificacion.js';
+import * as aprende from './motor/aprende.js';
+import * as sigue from './motor/sigue.js';
+import * as tablero from './piso/tablero.js';
+import * as medicion from './piso/medicion.js';
+import * as almacen from './almacen/manuales.js';
 import * as errores from './ia/errores.js';
 import * as sse from './ia/sse.js';
 import * as proveedores from './ia/proveedores.js';
@@ -41,7 +46,7 @@ import './revision/ui.js';
 
 Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
   secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos, verificacion,
-  errores, sse, proveedores, iaRespuesta, reintentos, agente);
+  errores, sse, proveedores, iaRespuesta, reintentos, agente, aprende, sigue, tablero, medicion, almacen);
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre

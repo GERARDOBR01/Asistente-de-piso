@@ -18,14 +18,7 @@ import { envolverComoDato, textoComoDato, REGLA_DATO } from '../seguridad/inyecc
 import { errorDeProveedor } from './errores.js';
 import { PROVIDERS, razonamientoGemini } from './proveedores.js';
 import { jsonDeTexto } from './respuesta.js';
-
-/* Las páginas de un manual: las que tienen texto y las que solo traen imagen. */
-/** @param {string} docName @param {Map<string, PaginaGuardada[]>} [paginas] @returns {number[]} */
-export function paginasDelManual(docName,paginas=new Map()){
-  const s=new Set(corpus.docChunks.filter(c=>c.docName===docName&&c.page&&!c.isFicha).map(c=>/** @type {number} */(c.page)));
-  for(const p of paginas.get(docName)||[])s.add(p.page);
-  return[...s].sort((a,b)=>a-b)
-}
+import { paginasDelManual } from '../motor/sigue.js';
 
 /* ════════════════════════════════════════════════
    AGENTE LECTOR — el modo IA con la IA al mando
