@@ -36,7 +36,7 @@ const TEXTOS = {
 };
 const NOMBRE_TIPO = { tringla: 'Tringla', anaquel: 'Mesa o anaquel', focal: 'Focal' };
 const ARTICULO = { tringla: 'la tringla', anaquel: 'la mesa o el anaquel', focal: 'el focal' };
-const COLOR_NIVEL = { CUMPLE: '#3ECF8E', 'OBSERVACIÓN': '#F5B942', GRAVE: '#FF5A6E', NO_CALIFICA: '#A9BFE0', DEMO: '#A9BFE0' };
+const COLOR_NIVEL = { CUMPLE: '#5BC79A', 'OBSERVACIÓN': '#E2B755', GRAVE: '#F07878', NO_CALIFICA: '#A9BFE0', DEMO: '#A9BFE0' };
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
 
@@ -651,7 +651,7 @@ function dibujarFocal(ctx, k, u, e, z) {
     const pts = tri.map((/** @type {any} */ q) => ({ x: q.x * k, y: q.y * k }));
     const largo = pts.reduce((s, q, i) => s + Math.hypot(q.x - pts[(i + 1) % 3].x, q.y - pts[(i + 1) % 3].y), 0);
     ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
-    ctx.fillStyle = `rgba(255,90,110,${0.16 * e})`; ctx.fill();
+    ctx.fillStyle = `rgba(229,51,58,${0.16 * e})`; ctx.fill();
     ctx.setLineDash([largo * e, largo]); ctx.lineWidth = 3 * u;
     ctx.strokeStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (r.nivel)] || '#fff'; ctx.stroke();
     ctx.setLineDash([]);
@@ -678,7 +678,7 @@ function dibujarFocal(ctx, k, u, e, z) {
     const x = q.x * k, y = q.y * k, rad = 8 * u * (0.6 + 0.4 * s);
     ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
     ctx.fillStyle = '#fff'; ctx.fill();
-    ctx.lineWidth = 2.4 * u; ctx.strokeStyle = "#FF5A6E"; ctx.stroke();
+    ctx.lineWidth = 2.4 * u; ctx.strokeStyle = "#FF5C63"; ctx.stroke();
     ctx.fillStyle = '#16171B'; ctx.font = `700 ${Math.round(9 * u)}px Geist Mono, ui-monospace, monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5 * u);
   });

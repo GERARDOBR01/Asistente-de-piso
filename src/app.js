@@ -1918,10 +1918,19 @@ function bloqueAprendido(cont){
    TABS
 ════════════════════════════════════════════════ */
 function switchTab(name){
-  ['chat','revisar','docs','memory','config'].forEach((t,i)=>{
+  const pestanas=['chat','revisar','docs','memory','config'];
+  pestanas.forEach((t,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);
     document.getElementById('panel-'+t).classList.toggle('active',t===name);
   });
+  /* La pastilla de la barra se desliza a la pestaña activa (CSS: .tabs::before).
+     Un toque corto de vibración confirma el cambio; el navegador lo ignora si
+     no hubo un toque de la persona, y no se usa con «reducir movimiento». */
+  const barra=document.querySelector('.tabs');
+  if(barra)barra.style.setProperty('--tab-i',String(Math.max(0,pestanas.indexOf(name))));
+  try{
+    if(navigator.vibrate&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate(6);
+  }catch{}
   if(name==='memory')renderTablero();
   /* En el celular, enfocar la caja abre el teclado, y el teclado tapa justo la
      respuesta que se acaba de pedir: pasaba en cada envío y en cada acceso
@@ -2510,7 +2519,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.16.0';
+const VERSION_APP='ap-v1.17.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
