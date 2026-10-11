@@ -53,6 +53,7 @@ export const multiplicar = (m1, m2) => [
 export const LINE_GAP_RATIO=1.2;      // hueco que corta una línea, en múltiplos de la altura de fuente
 export const BLOCK_GAP_RATIO=1.7;     // separación vertical máxima dentro de un bloque
 export const BLOCK_OVERLAP_MIN=0.25;  // solape horizontal mínimo para seguir en el mismo bloque
+export const LINE_OTRA_LETRA=1.4;     // razón de tamaños de letra que, con hueco, separa dos celdas
 
 /** @param {ItemDeTexto[]} items @param {Vista} vp @returns {Linea[]} */
 export function textItemsToLines(items,vp){
@@ -88,9 +89,13 @@ export function textItemsToLines(items,vp){
     row.items.sort((a,b)=>a.x0-b.x0);
     /** @type {Linea|null} */
     let seg=null;
+    let hAnt=0;
     for(const it of row.items){
       const gapTol=Math.max(it.cw*2.5,row.h*LINE_GAP_RATIO);
-      if(seg&&it.x0-seg.x1<=gapTol){
+      /* Otra letra con hueco de por medio es otra celda: el rótulo «SMART
+         CASUAL» (22 pt) y la marca «Jack & Paul» (12 pt) a su derecha. */
+      const otraCelda=hAnt&&Math.max(it.h,hAnt)/Math.min(it.h,hAnt)>LINE_OTRA_LETRA&&it.x0-(seg?seg.x1:0)>Math.min(it.h,hAnt)*0.8;
+      if(seg&&it.x0-seg.x1<=gapTol&&!otraCelda){
         seg.text+=(it.x0-seg.x1>it.cw*0.4?' ':'')+it.str;
         seg.x1=Math.max(seg.x1,it.x1);
         seg.h=Math.max(seg.h,it.h);
@@ -98,6 +103,7 @@ export function textItemsToLines(items,vp){
         if(seg)lines.push(seg);
         seg={text:it.str,x0:it.x0,x1:it.x1,yBot:row.yBot,yTop:0,h:Math.max(it.h,row.h)};
       }
+      hAnt=it.h;
     }
     if(seg)lines.push(seg);
   }
@@ -285,6 +291,179 @@ export function tituloDePagina(blocks,altura){
   return''
 }
 
+/* ════════════════════════════════════════════════
+   TABLAS CON RÓTULO AL COSTADO — «MUNDO | Marca | lista»
+
+   Casi todos los manuales traen la lámina MUNDOS Y MARCAS como una tabla:
+   a la izquierda el mundo (PREMIUM, CONTEMPO…) centrado en su celda, y a la
+   derecha la lista de marcas en una o dos columnas. Leída como texto suelto,
+   el rótulo queda a media altura de su lista, así que el título «de encima»
+   le cae a la lista de la fila de abajo: Tommy salía como PREMIUM. Y las dos
+   columnas de marcas se intercalaban.
+
+   Aquí se reconoce esa forma —una columna que solo tiene rótulos en
+   mayúsculas, con contenido a su derecha— y cada fila se vuelve un bloque con
+   su rótulo de título: lo que está a la derecha de PREMIUM es de PREMIUM. Las
+   filas se separan por los huecos verticales del contenido, no por la mitad
+   entre rótulos: una fila alta junto a una baja no reparte bien a medias.
+════════════════════════════════════════════════ */
+export const TABLA_HUECO_FILA=0.9;   // hueco vertical que separa dos grupos de contenido, en alturas de letra
+/**
+ * @param {Linea[]} lines
+ * @returns {{ resto: Linea[], bloques: Bloque[] }}
+ */
+export function tablasDeRotulos(lines){
+  const sinCambio={resto:lines,bloques:/** @type {Bloque[]} */([])};
+  /* Un rótulo empieza con letra o número: «➔ STD» es una viñeta de lista. */
+  const rotulos=lines.filter(l=>isHeadingText(l.text)&&/^[A-Za-zÁÉÍÓÚÜÑ0-9(]/.test(l.text));
+  if(rotulos.length<2)return sinCambio;
+  const cy=/** @param {{yTop:number,yBot:number}} l */l=>(l.yTop+l.yBot)/2;
+  /** @param {{x0:number,x1:number}} a @param {{x0:number,x1:number}} b */
+  const solapeX=(a,b)=>Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0);
+  /** @param {Linea} l */
+  const conLetras=l=>/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]/.test(l.text);
+  /** @type {Set<Linea>} */
+  const usadas=new Set();
+  /** @type {Bloque[]} */
+  const bloques=[];
+
+  /* Un rótulo que no cabe se parte en dos renglones («CREMAS Y» / «LICORES»).
+     Solo se unen de dos en dos: tres apilados son una lista, no un rótulo. */
+  /** @type {Array<{text:string,x0:number,x1:number,yTop:number,yBot:number,h:number,lineas:Linea[]}>} */
+  const etiquetas=[];
+  const orden=[...rotulos].sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
+  /** @param {Linea} a @param {Linea} b */
+  const pegados=(a,b)=>{const h=Math.max(a.h,b.h),gap=b.yTop-a.yBot;
+    return gap>-h*0.3&&gap<h*0.6&&solapeX(a,b)>=0.5*Math.min(a.x1-a.x0,b.x1-b.x0)};
+  for(let i=0;i<orden.length;i++){
+    const a=orden[i],b=orden.find((o,j)=>j>i&&pegados(a,o));
+    const c=b&&orden.find(o=>o!==a&&o!==b&&(pegados(b,o)||pegados(o,a)));
+    if(b&&!c){
+      etiquetas.push({text:a.text+' '+b.text,x0:Math.min(a.x0,b.x0),x1:Math.max(a.x1,b.x1),yTop:a.yTop,yBot:b.yBot,h:Math.max(a.h,b.h),lineas:[a,b]});
+      orden.splice(orden.indexOf(b),1);
+    }else etiquetas.push({...a,lineas:[a]});
+  }
+
+  /* Columnas de rótulos: misma franja horizontal que TODOS los de la columna
+     (no en cadena: un título ancho encima no junta columnas vecinas) y ninguno
+     a la misma altura que otro. */
+  /** @type {Array<typeof etiquetas>} */
+  const columnas=[];
+  /** @param {typeof etiquetas[0]} o @param {typeof etiquetas[0]} e */
+  const misma=(o,e)=>(o.yBot<=e.yTop+1||e.yBot<=o.yTop+1)&&
+    (solapeX(o,e)>=0.5*Math.min(o.x1-o.x0,e.x1-e.x0)||Math.abs((o.x0+o.x1)/2-(e.x0+e.x1)/2)<2*Math.max(o.h,e.h));
+  for(const e of etiquetas){
+    const libres=columnas.filter(c=>c.every(o=>misma(o,e)));
+    for(const c of libres)c.push(e);
+    if(!libres.length)columnas.push([e]);
+  }
+
+  for(const col1 of columnas){
+    /* Un rótulo sin nada a su derecha (el pie «285 ROPA INTERIOR», que cae en
+       la misma franja) no es fila de la tabla. */
+    const col0=col1.filter(e=>lines.some(l=>!isHeadingText(l.text)&&l.x0>=e.x1-2&&l.yBot>e.yTop-2*e.h&&l.yTop<e.yBot+2*e.h)||
+      lines.some(l=>l.x0>=e.x1-2&&l.yBot>e.yTop-e.h*0.3&&l.yTop<e.yBot+e.h*0.3));
+    if(col0.length<2)continue;
+    const col=[...col0].sort((a,b)=>a.yTop-b.yTop);
+    if(col.some(e=>e.lineas.some(l=>usadas.has(l))))continue;
+    const colX0=Math.min(...col.map(e=>e.x0)),colX1=Math.max(...col.map(e=>e.x1));
+    const h=Math.max(...col.map(e=>e.h));
+    const enColumna=/** @param {Linea} l */l=>l.x0<colX1-2&&l.x1>colX0+2;
+    const aLaDerecha=/** @param {Linea} l */l=>l.x0>=colX1-2;
+    const deEtiqueta=new Set(col.flatMap(e=>e.lineas));
+    /* La columna de rótulos no tiene cuerpo entre ellos: si lo tiene, son
+       títulos con su texto debajo, no una tabla. Unos trozos sueltos sí
+       pasan (hay PDF que dejan una palabra de otra celda con coordenadas de
+       esta columna); una frase ya no. */
+    const yA=col[0].yTop,yZ=col[col.length-1].yBot;
+    const sueltas=lines.filter(l=>!deEtiqueta.has(l)&&enColumna(l)&&l.yTop>yA&&l.yBot<yZ);
+    if(sueltas.reduce((n,l)=>n+l.text.length,0)>30)continue;
+
+    /* Fila de encabezados: «MUNDO | MARCA | EXHIBICIÓN», todo en mayúsculas. */
+    const enFila=/** @param {{yTop:number,yBot:number,h:number}} e */e=>lines.filter(l=>!deEtiqueta.has(l)&&aLaDerecha(l)&&l.yBot>e.yTop-e.h*0.3&&l.yTop<e.yBot+e.h*0.3);
+    /** @type {{label:string,cols:Linea[]}|null} */
+    let encabezado=null;
+    const fila0=enFila(col[0]);
+    if(fila0.length&&fila0.every(l=>isHeadingText(l.text)))
+      encabezado={label:col[0].text,cols:fila0.sort((a,b)=>a.x0-b.x0)};
+    const filas=encabezado?col.slice(1):col;
+    if(filas.length<(encabezado?1:2))continue;
+
+    /* Límites de la tabla: arriba el encabezado (o una fila entera), abajo
+       una fila entera; y nunca pasar de una línea que cruza la columna de
+       rótulos (el párrafo de arriba, la nota o el pie de abajo). */
+    const fA=filas[0],fZ=filas[filas.length-1],alto=/** @param {{yTop:number,yBot:number}} e */e=>e.yBot-e.yTop;
+    const paso=filas.length>1?cy(filas[1])-cy(fA):2*(cy(fA)-cy(col[0]));
+    const pasoFin=filas.length>1?cy(fZ)-cy(filas[filas.length-2]):paso;
+    let arriba=encabezado?Math.max(col[0].yBot,...encabezado.cols.map(l=>l.yBot)):fA.yTop-Math.max(paso-alto(fA),h);
+    let abajo=fZ.yBot+Math.max(pasoFin-alto(fZ),h);
+    for(const l of lines){
+      if(deEtiqueta.has(l)||!enColumna(l))continue;
+      if(l.yBot<=filas[0].yTop&&l.yBot>arriba)arriba=l.yBot;
+      if(l.yTop>=filas[filas.length-1].yBot&&l.yTop<abajo)abajo=l.yTop;
+    }
+    const cuerpo=lines.filter(l=>!deEtiqueta.has(l)&&!usadas.has(l)&&aLaDerecha(l)&&l.yTop>=arriba-1&&l.yBot<=abajo+1&&!(encabezado&&encabezado.cols.includes(l)));
+    if(!cuerpo.length)continue;
+
+    /* Grupos de contenido separados por hueco vertical (en cualquier columna). */
+    cuerpo.sort((a,b)=>a.yTop-b.yTop);
+    /** @type {Array<{yTop:number,yBot:number,lineas:Linea[]}>} */
+    const grupos=[];
+    for(const l of cuerpo){
+      const g=grupos[grupos.length-1];
+      if(g&&l.yTop<=g.yBot+TABLA_HUECO_FILA*Math.max(l.h,h*0.6)){g.lineas.push(l);g.yBot=Math.max(g.yBot,l.yBot)}
+      else grupos.push({yTop:l.yTop,yBot:l.yBot,lineas:[l]});
+    }
+    /** @type {Map<typeof filas[0], typeof grupos>} */
+    const porFila=new Map(filas.map(f=>[f,[]]));
+    for(const g of grupos){
+      const dentro=filas.filter(f=>cy(f)>=g.yTop-1&&cy(f)<=g.yBot+1);
+      const f=dentro.length===1?dentro[0]:[...(dentro.length?dentro:filas)].sort((a,b)=>Math.abs(cy(a)-cy(g))-Math.abs(cy(b)-cy(g)))[0];
+      /** @type {typeof grupos} */(porFila.get(f)).push(g);
+    }
+    /* Cada rótulo tiene que titular algo con texto de verdad. */
+    if(filas.some(f=>!/** @type {typeof grupos} */(porFila.get(f)).some(g=>g.lineas.some(l=>conLetras(l)&&!isHeadingText(l.text)))))continue;
+
+    /* El título de la tabla: el más cercano encima, en su franja. */
+    const x1Tabla=Math.max(colX1,...cuerpo.map(l=>l.x1));
+    const arribaDe=lines.filter(l=>isHeadingText(l.text)&&!deEtiqueta.has(l)&&!(encabezado&&encabezado.cols.includes(l))&&l.yBot<=arriba+1&&solapeX(l,{x0:colX0,x1:x1Tabla})>0)
+      .sort((a,b)=>b.yBot-a.yBot)[0];
+    const prefijo=arribaDe?arribaDe.text.replace(/\s+/g,' ').trim()+' · ':'';
+
+    for(const f of filas){
+      const gs=/** @type {typeof grupos} */(porFila.get(f));
+      const partes=[];
+      /* La fila dice qué es su rótulo: «MUNDO VESTIR». Sin encabezado, lo dice
+         el título de la tabla cuando habla de mundos; así «el mundo vestir»
+         se encuentra con las palabras del piso. */
+      if(encabezado)partes.push(encabezado.label+' '+f.text+' — '+encabezado.cols.map(l=>l.text).join(', '));
+      else if(arribaDe&&/\bMUNDOS?\b/.test(arribaDe.text))partes.push('MUNDO '+f.text);
+      for(const g of gs){
+        /* Dentro del grupo, columna por columna y de arriba abajo: 1-4 y
+           luego 5-9, no 1, 5, 2, 6… */
+        const ls=g.lineas.filter(conLetras).sort((a,b)=>a.x0-b.x0);
+        /** @type {Linea[][]} */
+        const cols=[];
+        for(const l of ls){const c=cols[cols.length-1];if(c&&l.x0-c[0].x0<2*h)c.push(l);else cols.push([l])}
+        partes.push(cols.flatMap(c=>c.sort((a,b)=>a.yTop-b.yTop)).map(l=>l.text).join('\n'));
+      }
+      const todas=[...f.lineas,...gs.flatMap(g=>g.lineas)];
+      bloques.push({
+        text:partes.filter(Boolean).join('\n'),
+        heading:prefijo+f.text,isHeading:false,
+        hx0:f.x0,hx1:f.x1,hy1:f.yBot,
+        x0:Math.min(...todas.map(l=>l.x0)),y0:Math.min(...todas.map(l=>l.yTop)),
+        x1:Math.max(...todas.map(l=>l.x1)),y1:Math.max(...todas.map(l=>l.yBot))
+      });
+    }
+    for(const e of col)for(const l of e.lineas)usadas.add(l);
+    if(encabezado)for(const l of encabezado.cols)usadas.add(l);
+    for(const l of cuerpo)usadas.add(l);
+  }
+  if(!bloques.length)return sinCambio;
+  return{resto:lines.filter(l=>!usadas.has(l)),bloques}
+}
+
 /** @param {{items: ItemDeTexto[]}} content @param {Vista} vp @param {number} pageNum @returns {Pagina} */
 export function pageToBlocks(content,vp,pageNum){
   const lines=textItemsToLines(content.items,vp);
@@ -298,12 +477,20 @@ export function pageToBlocks(content,vp,pageNum){
 }
 /** @param {Linea[]} lines @returns {Bloque[]} */
 export function bloquesDeLineas(lines){
-  const blocks=orderBlocks(unirTitulosApilados(linesToBlocks(lines)));
-  return assignHeadings(blocks.map(b=>({
+  const {resto,bloques:tablas}=tablasDeRotulos(lines);
+  const blocks=orderBlocks(unirTitulosApilados(linesToBlocks(resto)));
+  const out=assignHeadings(blocks.map(b=>({
     text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
     heading:b.heading,
     isHeading:!b.lines.length&&!!b.heading,
     hx0:b.hx0,hx1:b.hx1,hy1:b.hy1,
     x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
-  })).filter(b=>b.text))
+  })).filter(b=>b.text));
+  /* Las filas de la tabla van donde empieza la tabla, en su orden. */
+  if(tablas.length){
+    const y=Math.min(...tablas.map(t=>t.y0));
+    const i=out.findIndex(b=>b.y0>=y);
+    out.splice(i<0?out.length:i,0,...tablas);
+  }
+  return out
 }
