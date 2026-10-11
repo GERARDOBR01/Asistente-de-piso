@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 a 5 hechos, y el motor ya contesta en Node; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 6 hechos, y el motor ya contesta en Node; los siguientes van en el orden de abajo.
 
 ## Contexto
 
@@ -57,7 +57,7 @@ lo que está en el repo es lo que corre.
 | 4 | Búsqueda y router de sección | hecho |
 | 5 | Puerta de evidencia y su contrato de decisión | hecho |
 | 5b | Conversación y respuesta (lo que decide el modo manual y el contexto del modelo), con el historial como parámetro: el motor contesta en Node (`lab/motor-node.mjs`) | hecho |
-| 6 | Verificación | |
+| 6 | Verificación | hecho |
 | 7 | IA (proveedores, prompt, agente), UI, almacenamiento | |
 | 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
 
@@ -209,6 +209,25 @@ Con la sección elegida, la búsqueda solo mira ese manual, pero BM25 pesa cada 
 - **Pasar a IDF por manual no se justifica:** rompe 2 preguntas y no arregla ninguna. Se queda el global.
 - **Los manuales ajenos ayudan a decir «no está»:** con su manual solo, 16 «no está» que hoy salen bien dejan de salir. Sin los otros manuales ya no se puede avisar «eso es de otra sección», y la decisión cambia en una de cada cinco. Eso es lo que debe cambiar, no una fuga.
 - Así que la invariante no es «idéntico»: es que la decisión casi no se mueva. Se vuelve a medir con cada cambio de la Fase 3, para que la puerta no se vuelva más sensible a lo que haya cargado.
+
+## Medido (paso 6)
+
+- **`src/motor/verificacion.js`**, sin DOM y con `tsc` estricto: el cotejo de cifras con su
+  unidad, las páginas citadas, los nombres que el manual no dice (`entidadesDelCorpus`) y la
+  atadura. El aviso en pantalla (`renderAvisoVerificacion`) se queda en `app.js`.
+- **La caché de nombres es del módulo** y se registra con `alReiniciar`; el arnés la olvida con
+  `reiniciarEntidades()` en vez de guardar y devolver la variable a mano.
+- `paginaComoLamina` recibe las imágenes de las páginas como parámetro: son de la app (las
+  guarda al cargar el PDF), no del corpus.
+- `app.js` baja de 7,958 a 7,572 líneas.
+- **Golden master** idéntico (667), arnés 305/305, agente simulado y eval-gate idéntico
+  (arregla 0, rompe 0).
+- **111 pruebas en Node.** Las 7 nuevas verifican sin navegador: la unidad como parte del dato,
+  el decimal que no se respalda con su parte entera, las páginas inventadas, las cifras
+  canónicas, los nombres de otro manual (y que la caché se olvida con el corpus), la atadura y
+  la página entera como lámina. Comprobadas con una mutación: sin el reinicio de la caché
+  fallan 3.
+- ap-v1.18.1.
 
 ## Consecuencias
 
