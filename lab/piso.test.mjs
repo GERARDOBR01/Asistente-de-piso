@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { conEstado, reiniciarCaches } from '../src/estado.js';
 import { indexChunk, reconstruirIndice } from '../src/motor/indice.js';
-import { siguientesDelManual, sugerenciasDeFicha, tituloDePagina, paginasDelManual } from '../src/motor/sigue.js';
+import { siguientesDelManual, sugerenciasDeFicha, tituloParaBoton, paginasDelManual } from '../src/motor/sigue.js';
 import { limpiarAprendido, palabraAprendible, recortarSeccion, motivoParaNoAprender, palabrasRaras } from '../src/motor/aprende.js';
 import { resumirTablero, preguntasRealesParaExamen, temaLegible } from '../src/piso/tablero.js';
 import { validarExamen, calificarMedicion, resumenMedicion, tieneAlternativaMed, claveDeExamen } from '../src/piso/medicion.js';
@@ -23,8 +23,8 @@ const conManual = fn => conEstado({ docs: [{ name: DOC }], docChunks: CHUNKS, ma
   fn, () => { reiniciarCaches(); reconstruirIndice(); });
 
 test('sigue: después de la clasificación, la lámina que esta enumera; nunca el check list', () => conManual(() => {
-  assert.equal(tituloDePagina(DOC, 3), 'Estilo nórdico');
-  assert.equal(tituloDePagina(DOC, 5), '', 'el check list no es algo que aprender');
+  assert.equal(tituloParaBoton(DOC, 3), 'Estilo nórdico');
+  assert.equal(tituloParaBoton(DOC, 5), '', 'el check list no es algo que aprender');
   const s = siguientesDelManual(DOC, [2], '¿cómo se clasifica?');
   assert.equal(s[0].pagina, 3);
   assert.ok(!s.some(x => x.pagina === 5));

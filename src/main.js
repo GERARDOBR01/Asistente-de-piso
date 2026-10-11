@@ -44,9 +44,56 @@ import { estado, CLAVES } from './estado.js';
    sola y no publica nada en globalThis salvo su gancho de medición. */
 import './revision/ui.js';
 
-Object.assign(globalThis, html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos,
-  secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos, verificacion,
-  errores, sse, proveedores, iaRespuesta, reintentos, agente, aprende, sigue, tablero, medicion, almacen);
+/* Capa de compatibilidad: lo que app.js (un script clásico), index.html,
+   src/revision y las herramientas de eval/ y lab/ todavía usan por su nombre
+   global, y nada más: lo demás se importa. eval/arnes.mjs falla si alguno de
+   ellos usa un nombre de un módulo que no está aquí. La lista se achica a
+   medida que app.js se parte. */
+const PUBLICO = {
+  html: ['escapeHtml', 'safeMarkdown'],
+  inyeccion: ['REGLA_DATO', 'instruccionesEnManual'],
+  texto: ['normalizeText', 'palabrasDeConsulta', 'tokenize', 'variantes'],
+  estadoDelCorpus: ['estado', 'montar'],
+  indice: ['indexChunk', 'reconstruirIndice'],
+  erratas: ['vocabDeDoc'],
+  layout: ['HEADING_MAX_DY', 'HEADING_OFFSET_PENALTY', 'pageToBlocks'],
+  fragmentos: ['buildChunks'],
+  secciones: ['nombreDeSeccion', 'secDe', 'seccionActiva'],
+  solidez: ['filtroSolidez', 'nivelDeEvidencia'],
+  aprendido: ['usarAprendido'],
+  busqueda: ['CHECKLIST', 'esVerbo', 'fragmentosDePagina', 'getPdfContext', 'jaccardTokens',
+    'retrieve', 'weightedTerms'],
+  puerta: ['esOperacionDeTienda', 'palabraOriginal'],
+  conversacion: ['RUTA_ROTULO', 'SEGUIMIENTO', 'assessQuestionScope', 'consultaAmpliada',
+    'esPreguntaDeEstado', 'isCreatorQuestion', 'rutaDeLaPregunta', 'seccionDeLaPregunta'],
+  respuesta: ['FALLBACK_MAX_SECCIONES', 'PDF_BUDGET', 'PDF_BUDGET_GEMINI', 'avisoVariasSecciones',
+    'contextoParaModelo', 'relevantesSinModelo', 'respuestaSinModelo'],
+  basicos: ['BASICOS', 'basicoDe'],
+  verificacion: ['paginaComoLamina', 'verificarContraContexto'],
+  errores: ['errorDeProveedor'],
+  sse: ['textoDeGemini'],
+  proveedores: ['PROVIDERS', 'PROV_ORDEN', 'proveedorValido', 'razonamientoGemini'],
+  iaRespuesta: ['GUARDRAIL_APPEND', 'NOTA_DEL_MODO', 'PROMPT_VERSION', 'certezaDe',
+    'debeRepetirPorCorte', 'getStreamingDisplayText', 'jsonDeTexto', 'lecturaDe', 'modoValido',
+    'parseAIResponse', 'promptDelModo', 'sanitizeFinalAnswer'],
+  reintentos: ['ESPERA_MAX', 'GEMINI_RESPALDO', 'LIMITE_MINUTO_ESPERAS',
+    'LIMITE_MINUTO_ESPERA_MAX', 'RESPALDO_MEMORIA', 'RESPALDO_TRAS', 'RETRY_DELAYS',
+    'esSaturacion', 'etiquetaDeModelo', 'isRetryable', 'modeloAlCargar', 'modeloDeRespaldo',
+    'nombreCortoDeModelo', 'sleep'],
+  agente: ['AGENTE_MAX_RONDAS', 'camposDelAgente', 'cicloAgente', 'extracto', 'glosarioDeSeccion',
+    'historialParaModelo', 'prepararAgente', 'verificarCitas'],
+  aprende: ['APRENDE_CONFIRMACIONES', 'APRENDE_JACCARD', 'APRENDE_MAX_ATAJOS',
+    'APRENDE_MAX_PALABRAS', 'APRENDE_VENTANA_REFORMULA', 'aprendidoVacio', 'idAprende',
+    'limpiarAprendido', 'motivoParaNoAprender', 'palabraActiva', 'palabraAprendible',
+    'palabrasDeAtajo', 'palabrasRaras', 'recortarSeccion', 'terminosDeAtajo'],
+  sigue: ['paginasDelManual', 'siguientesDelManual', 'sugerenciasDeFicha'],
+  tablero: ['preguntasRealesParaExamen', 'resumirTablero', 'temaLegible'],
+  medicion: ['calificarMedicion', 'claveDeExamen', 'paginasCitadasMed', 'resumenMedicion',
+    'validarExamen'],
+  almacen: ['borrarManual', 'hashArchivo', 'leerManual', 'listarManuales', 'txDB'],
+};
+const MODULOS = { html, inyeccion, texto, estadoDelCorpus, indice, erratas, layout, fragmentos, secciones, solidez, aprendido, busqueda, puerta, ruta, conversacion, respuesta, basicos, verificacion, errores, sse, proveedores, iaRespuesta, reintentos, agente, aprende, sigue, tablero, medicion, almacen };
+for (const [ns, nombres] of Object.entries(PUBLICO)) for (const n of nombres) globalThis[n] = MODULOS[ns][n];
 
 /* El estado del corpus (src/estado.js) sigue llamándose como antes para
    app.js y eval/: `docs`, `corpus`, `docChunks`… son accesores sobre

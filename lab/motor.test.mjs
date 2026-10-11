@@ -38,7 +38,7 @@ const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"
 test('frontera: el motor no usa APIs del navegador', () => {
   const archivos = [
     ...fs.readdirSync(path.join(RAIZ, 'src', 'motor'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => path.join('src', 'motor', f)),
-    /* La IA sin pantalla (src/ia/, paso 7 del ADR 0005): fetch sÃ­, DOM no. */
+    /* La IA sin pantalla (src/ia/, paso 7 del ADR 0005): fetch sí, DOM no. */
     ...fs.readdirSync(path.join(RAIZ, 'src', 'ia'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => path.join('src', 'ia', f)),
     ...fs.readdirSync(path.join(RAIZ, 'src', 'piso'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => path.join('src', 'piso', f)),
     path.join('src', 'seguridad', 'inyeccion.js'),

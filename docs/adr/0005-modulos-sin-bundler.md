@@ -1,6 +1,6 @@
 # ADR 0005 · Partir `index.html` en módulos ES, sin bundler
 
-- **Estado:** aceptada (5-oct-2026). Pasos 1 a 6 hechos, y el motor ya contesta en Node; los siguientes van en el orden de abajo.
+- **Estado:** aceptada (5-oct-2026). Pasos 1 a 8 hechos (11-oct-2026): el motor, la IA sin pantalla y lo puro del piso viven en módulos que se importan desde Node, y `app.js` queda en UI y orquestación.
 
 ## Contexto
 
@@ -59,8 +59,8 @@ lo que está en el repo es lo que corre.
 | 5b | Conversación y respuesta (lo que decide el modo manual y el contexto del modelo), con el historial como parámetro: el motor contesta en Node (`lab/motor-node.mjs`) | hecho |
 | 6 | Verificación | hecho |
 | 7a | IA sin pantalla (`src/ia/`): proveedores, SSE, parser, reintentos y el agente lector | hecho |
-| 7b | Lo demÃ¡s que es puro (Â«Sigue en el manualÂ», Aprende, Tablero, MediciÃ³n) y el almacenamiento | hecho |
-| 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | |
+| 7b | Lo demás que es puro («Sigue en el manual», Aprende, Tablero, Medición) y el almacenamiento | hecho |
+| 8 | Arnés a `src/pruebas/`, y se quita la capa de compatibilidad | hecho (la capa queda en lo que app.js usa) |
 
 ## Medido (paso 1)
 
@@ -232,37 +232,47 @@ Con la sección elegida, la búsqueda solo mira ese manual, pero BM25 pesa cada 
 
 ## Medido (paso 7a)
 
-- **`src/ia/`, sin DOM y con `tsc` estricto**, en dos PR para que el golden quede idÃ©ntico en cada uno:
+- **`src/ia/`, sin DOM y con `tsc` estricto**, en dos PR para que el golden quede idéntico en cada uno:
 
-  | MÃ³dulo | Contenido |
+  | Módulo | Contenido |
   |---|---|
-  | `errores.js` | la clase de cada error del proveedor (cuota del dÃ­a, lÃ­mite por minuto, saturaciÃ³n, key, red) |
+  | `errores.js` | la clase de cada error del proveedor (cuota del día, límite por minuto, saturación, key, red) |
   | `sse.js` | el streaming de OpenAI y Gemini |
   | `proveedores.js` | `PROVIDERS` y la perilla de razonamiento de cada familia |
   | `respuesta.js` | las reglas, el modo de respuesta, la certeza declarada, el parser y `jsonDeTexto` |
-  | `reintentos.js` | quÃ© se reintenta, quÃ© es saturaciÃ³n, el respaldo y el nombre de cada modelo |
-  | `agente.js` | el agente lector: herramientas, adaptadores, `prepararAgente`, `cicloAgente` y la verificaciÃ³n de citas |
+  | `reintentos.js` | qué se reintenta, qué es saturación, el respaldo y el nombre de cada modelo |
+  | `agente.js` | el agente lector: herramientas, adaptadores, `prepararAgente`, `cicloAgente` y la verificación de citas |
 
-- **Lo que es de la app entra como parÃ¡metro:** el historial (`historialParaModelo(history)`), las fichas, las imÃ¡genes de las pÃ¡ginas y el bucle de reintentos, que recuerda el respaldo activo y avisa en pantalla y por eso se queda en `app.js`.
-- **El agente corre entero en Node con un proveedor falso** (`lab/agente.test.mjs`): la lectura anticipada, el ciclo, la Ãºltima vuelta sin herramientas, el tope de tokens que se repite una vez, la imagen rechazada y las citas.
-- `tipos.d.ts` trae `fetch` y los temporizadores mÃ­nimos, sin abrir `lib: dom`. `src/ia/` entra a la prueba de frontera.
-- `app.js` baja de 7,572 a 6,597 lÃ­neas.
-- Golden master idÃ©ntico (667) en cada PR, arnÃ©s 305/305, agente simulado y gate idÃ©ntico. **129 pruebas en Node.** ap-v1.18.2 y ap-v1.18.3.
+- **Lo que es de la app entra como parámetro:** el historial (`historialParaModelo(history)`), las fichas, las imágenes de las páginas y el bucle de reintentos, que recuerda el respaldo activo y avisa en pantalla y por eso se queda en `app.js`.
+- **El agente corre entero en Node con un proveedor falso** (`lab/agente.test.mjs`): la lectura anticipada, el ciclo, la última vuelta sin herramientas, el tope de tokens que se repite una vez, la imagen rechazada y las citas.
+- `tipos.d.ts` trae `fetch` y los temporizadores mínimos, sin abrir `lib: dom`. `src/ia/` entra a la prueba de frontera.
+- `app.js` baja de 7,572 a 6,597 líneas.
+- Golden master idéntico (667) en cada PR, arnés 305/305, agente simulado y gate idéntico. **129 pruebas en Node.** ap-v1.18.2 y ap-v1.18.3.
 
 ## Medido (paso 7b)
 
-| MÃ³dulo | Contenido |
+| Módulo | Contenido |
 |---|---|
-| `src/motor/sigue.js` | Â«Sigue en el manualÂ» (`siguientesDelManual`), la ficha y `paginasDelManual` |
-| `src/motor/aprende.js` | quÃ© se puede aprender, por quÃ© un par no, la limpieza de lo que llega de fuera y el recorte por secciÃ³n |
+| `src/motor/sigue.js` | «Sigue en el manual» (`siguientesDelManual`), la ficha y `paginasDelManual` |
+| `src/motor/aprende.js` | qué se puede aprender, por qué un par no, la limpieza de lo que llega de fuera y el recorte por sección |
 | `src/piso/tablero.js` | el resumen del tablero y las preguntas reales con formato de examen |
-| `src/piso/medicion.js` | el examen, la calificaciÃ³n (la de `eval/modo-ia.mjs`), la capa de falla y el resumen |
+| `src/piso/medicion.js` | el examen, la calificación (la de `eval/modo-ia.mjs`), la capa de falla y el resumen |
 | `src/almacen/manuales.js` | IndexedDB: abrir, leer, listar, borrar y el hash del archivo |
 
-- Lo que es de la app entra como parÃ¡metro: en Â«SigueÂ», las imÃ¡genes, la ficha, los bÃ¡sicos ya preguntados y la cobertura, que se pide solo si hace falta porque cuesta.
-- `src/piso/` entra a `tsc` estricto y a la prueba de frontera. `src/almacen/` usa IndexedDB, asÃ­ que no entra.
-- `app.js` baja de 6,597 a 6,242 lÃ­neas.
-- Golden idÃ©ntico, arnÃ©s 305/305, agente simulado y gate. **135 pruebas en Node.** ap-v1.18.4.
+- Lo que es de la app entra como parámetro: en «Sigue», las imágenes, la ficha, los básicos ya preguntados y la cobertura, que se pide solo si hace falta porque cuesta.
+- `src/piso/` entra a `tsc` estricto y a la prueba de frontera. `src/almacen/` usa IndexedDB, así que no entra.
+- `app.js` baja de 6,597 a 6,242 líneas.
+- Golden idéntico, arnés 305/305, agente simulado y gate. **135 pruebas en Node.** ap-v1.18.4.
+
+## Medido (paso 8)
+
+- **El arnés sale a `src/pruebas/arnes.js`** (1,266 líneas) y se carga con `import()` solo con `?test=1`. El service worker no lo guarda: `eval/arnes.mjs` revisa que `src/pruebas/` no entre a `CODIGO`.
+- **Un módulo puede usar la app como antes:** las funciones de `app.js` son globales y sus variables de nivel superior (`history`, `docPaginas`…) están en el ámbito global que comparten los scripts y los módulos. Corre en modo estricto y sale 305/305.
+- **La capa de compatibilidad se retira hasta donde se puede:** `src/main.js` publicaba en `globalThis` todo lo de 30 módulos (330 nombres). Ahora publica 122, en una lista explícita (`PUBLICO`): los que `app.js`, `index.html`, `src/revision`, `eval/` y `lab/` usan por su nombre. Lo que solo usa el arnés (35 nombres) se importa.
+- **Guardia en el CI:** `eval/arnes.mjs` falla si alguno de ellos usa un nombre de un módulo que no está en `PUBLICO`, o si la lista nombra algo que no existe. Sin ella, el error sale en el navegador justo en la función que lo usa, que puede ser una que el arnés no toca. Comprobada con mutaciones; la primera versión no veía `...nombre`, y el agente simulado lo destapó.
+- El resto de la capa se va cuando `app.js` sea un módulo: queda como siguiente paso, fuera de este ADR.
+- `app.js` baja de 6,242 a 4,991 líneas: de 12,080 en un solo `index.html` a 4,991 de UI y orquestación.
+- Golden idéntico, arnés 305/305, agente simulado, gate y modo avión (con el service worker y sin red, contesta). ap-v1.18.5.
 
 ## Consecuencias
 
