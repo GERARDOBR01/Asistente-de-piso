@@ -198,5 +198,31 @@ declare const crypto: { getRandomValues<T extends ArrayBufferView>(a: T): T };
 /* Revisión con foto (src/revision/): lo mínimo de las APIs comunes a Node y al
    navegador que usan las piezas puras. */
 declare class TextEncoder { encode(s?: string): Uint8Array }
-declare class TextDecoder { constructor(etiqueta?: string, opciones?: { fatal?: boolean }); decode(b?: ArrayBufferView): string }
+declare class TextDecoder { constructor(etiqueta?: string, opciones?: { fatal?: boolean }); decode(b?: ArrayBufferView, opciones?: { stream?: boolean }): string }
+
+/* La IA (src/ia/): fetch y su respuesta por streaming, como las tienen el
+   navegador y Node â‰¥ 18. Solo lo que se usa. */
+interface AbortSignal { readonly aborted: boolean }
+interface RespuestaHttp {
+  ok: boolean;
+  status: number;
+  json(): Promise<any>;
+  body: { getReader(): { read(): Promise<{ value?: Uint8Array, done: boolean }> } };
+}
+declare function fetch(url: string, init?: { method?: string, headers?: Record<string, string>, body?: string, signal?: AbortSignal | null }): Promise<RespuestaHttp>;
+
+/** Un mensaje para el modelo, con el formato de OpenAI. */
+interface MensajeIA { role: string; content: any }
+/** El error de un proveedor, con su cÃ³digo HTTP y su clase (claseDeError). */
+interface ErrorDeProveedor extends Error { status?: number; clase?: string; espera?: number | null }
+/** Lo que recibe el streaming de cada proveedor. */
+interface ParamsStream {
+  key: string;
+  messages: MensajeIA[];
+  model: string;
+  maxTokens: number;
+  temperature?: number | null;
+  onDelta: (t: string) => void;
+  signal?: AbortSignal | null;
+}
 declare function atob(s: string): string;
