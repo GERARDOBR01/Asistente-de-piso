@@ -797,44 +797,11 @@ function votoManual(msgEl,id,{q=null,doc=null,pagina=null}={}){
   return footer
 }
 
-function temaLegible(h){
-  if(!h)return'';
-  return /[a-záéíóúñ]/.test(h)?h:h.charAt(0)+h.slice(1).toLowerCase()
-}
 function consultasDelPeriodo(){
   const dias={'7':7,'30':30}[tableroPeriodo];
   if(!dias)return tablero;
   const desde=Date.now()-dias*864e5;
   return tablero.filter(r=>r.t>=desde)
-}
-function resumirTablero(regs){
-  const total=regs.length;
-  const cubiertas=regs.filter(r=>r.ok);
-  const sirvieron=cubiertas.filter(r=>r.voto!=='mal');
-  const noSirvieron=regs.filter(r=>r.voto==='mal');
-  const temas=new Map();
-  for(const r of cubiertas){
-    if(!r.h)continue;
-    const k=(r.sec||'')+'|'+normalizeText(r.h).trim();
-    const t=temas.get(k)||{h:temaLegible(r.h),sec:r.sec,paginas:new Set(),n:0};
-    t.n++;if(r.p)t.paginas.add(r.p);temas.set(k,t);
-  }
-  /* La misma duda escrita dos veces es una sola cosa que falta en el manual. */
-  const gaps=new Map();
-  for(const r of regs.filter(x=>!x.ok)){
-    const k=normalizeText(r.q).replace(/[^\p{L}\p{N} ]/gu,'').replace(/\s+/g,' ').trim();
-    const g=gaps.get(k)||{q:r.q,sec:r.sec,n:0,t:0};
-    g.n++;if(r.t>g.t){g.t=r.t;g.q=r.q}gaps.set(k,g);
-  }
-  const secciones=new Map();
-  for(const r of regs){const k=r.sec||'Manual interno';secciones.set(k,(secciones.get(k)||0)+1)}
-  const orden=(a,b)=>b.n-a.n||b.t-a.t;
-  return{total,cubiertas:cubiertas.length,sirvieron:sirvieron.length,noSirvieron,
-    pct:total?Math.round(sirvieron.length*100/total):0,
-    temas:[...temas.values()].sort(orden),
-    gaps:[...gaps.values()].sort(orden),
-    secciones:[...secciones.entries()].map(([sec,n])=>({sec,n})).sort((a,b)=>b.n-a.n),
-    desde:total?Math.min(...regs.map(r=>r.t)):null,hasta:total?Math.max(...regs.map(r=>r.t)):null}
 }
 const fechaCorta=t=>new Date(t).toLocaleDateString('es-MX',{day:'numeric',month:'short'});
 function rangoDeFechas(res){
@@ -982,28 +949,6 @@ async function compartirResumen(){
     showToast('No se pudo copiar el resumen en este navegador.','error',4000);
   }
 }
-/* Las preguntas de verdad —como las escribe el piso, con sus faltas— son el
-   mejor examen: las que se escriben leyendo el manual usan sus palabras y
-   salen más fáciles. Se exportan con el formato del examen, sin respuesta:
-   la página y el dato esperados se anotan después, contra el manual. Lo que
-   la app vio (su página, si sirvió, la nota del 👎) va aparte, como pista. */
-function preguntasRealesParaExamen(regs){
-  const vistas=new Map();
-  for(const r of regs){
-    const k=normalizeText(r.q).replace(/\s+/g,' ').trim();
-    if(!k)continue;
-    const v=vistas.get(k);
-    if(v){v.visto.veces++;if(r.nota&&!v.visto.nota)v.visto.nota=r.nota;if(r.voto==='mal')v.visto.noSirvio=true;if(r.pl&&!v.visto.paginaDelPiso){v.visto.paginaDelPiso=r.pl;v.p=[r.pl]}continue}
-    /* Si el piso tocó la página que contestaba, ESA es la esperada: vale más
-       que la que eligió la app. */
-    const pag=r.pl||r.p||null;
-    vistas.set(k,{q:r.q,seccion:r.dl||r.sec||'',tipo:'dato',cat:'piso-real',k:[],p:pag?[pag]:[],
-      visto:{veces:1,encontro:!!r.ok,pagina:r.p||null,titulo:r.h||null,modo:r.modo||null,
-        noSirvio:r.voto==='mal',nota:r.nota||null,fecha:new Date(r.t).toISOString().slice(0,10),
-        ...(r.pl?{paginaDelPiso:r.pl}:{}),...(r.hueco?{noEstaSegunElPiso:true}:{})}});
-  }
-  return[...vistas.values()]
-}
 async function exportarPreguntasReales(){
   const preguntas=preguntasRealesParaExamen(consultasDelPeriodo());
   if(!preguntas.length){showToast('Todavía no hay dudas anotadas en este periodo.','warn',3000);return}
@@ -1051,16 +996,10 @@ function borrarTablero(){
    Vive en este teléfono (localStorage), como el tablero.
 ════════════════════════════════════════════════ */
 const APRENDIDO_KEY='ap_aprendido_v1';
-const APRENDE_CONFIRMACIONES=2;          // consultas distintas para activar una palabra
-const APRENDE_MAX_PALABRAS=60;           // por sección
-const APRENDE_MAX_ATAJOS=120;            // por sección
-const APRENDE_JACCARD=0.6;               // parecido de la pregunta con el atajo
-const APRENDE_VENTANA_REFORMULA=3*60e3;  // una reformulación llega en minutos
 let aprendido={v:1,palabras:[],atajos:[]};
 var indiceAprendido=null;
 let ultimaConsultaAprende=null;
 
-function aprendidoVacio(){return{v:1,palabras:[],atajos:[]}}
 function cargarAprendido(){
   /* La memoria vieja se va: sus notas del 👎 ya viajan en el tablero. */
   try{localStorage.removeItem('ap_memory_v5');localStorage.removeItem('ap_memory_enabled')}catch{}
@@ -1074,36 +1013,6 @@ function guardarAprendido(){
   const p=document.getElementById('panel-memory');
   if(p&&p.classList.contains('active'))renderTablero();
 }
-/* Lo que se carga —del teléfono o de un archivo compartido— se trata como dato
-   ajeno: solo campos conocidos, solo palabras, con tope. */
-function limpiarAprendido(d){
-  const out=aprendidoVacio();
-  if(!d||typeof d!=='object')return out;
-  const txt=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
-  const ids=v=>Array.isArray(v)?v.filter(x=>typeof x==='string').slice(-20):[];
-  for(const p of Array.isArray(d.palabras)?d.palabras:[]){
-    const piso=palabraAprendible(p&&p.piso),manual=palabraAprendible(p&&p.manual),sec=txt(p&&p.sec,120);
-    if(!piso||!manual||!sec||piso===manual)continue;
-    out.palabras.push({id:txt(p.id,24)||idAprende(),sec,piso,manual,conf:Math.max(0,Math.min(99,Number(p.conf)||0)),
-      consultas:ids(p.consultas),origen:['lamina','reformulacion','quisiste','ia','importada','tablero'].includes(p.origen)?p.origen:'importada',
-      propuesta:!!p.propuesta,t:Number(p.t)||Date.now()});
-  }
-  for(const a of Array.isArray(d.atajos)?d.atajos:[]){
-    const sec=txt(a&&a.sec,120),pagina=Number(a&&a.pagina);
-    const terminos=Array.isArray(a&&a.terminos)?[...new Set(a.terminos.map(palabraAprendible).filter(Boolean))].slice(0,12):[];
-    if(!sec||!(pagina>0&&pagina<10000)||!terminos.length)continue;
-    const ver=Array.isArray(a.ver)?a.ver.map(palabraAprendible).filter(Boolean).slice(0,8):[];
-    out.atajos.push({id:txt(a.id,24)||idAprende(),sec,terminos,ver,pagina,conf:Math.max(1,Math.min(99,Number(a.conf)||1)),
-      consultas:ids(a.consultas),t:Number(a.t)||Date.now()});
-  }
-  return out
-}
-function idAprende(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
-/* Una palabra suelta, sin dígitos: «burro» sí; «12», «30%» o «2do» no. */
-function palabraAprendible(w){
-  const n=normalizeText(String(w||'')).trim();
-  return /^[a-z]{3,30}$/.test(n)&&!STOPWORDS.has(n)?n:''
-}
 /* Leer lo aprendido y escribirlo son dos puertas distintas: una medición «con
    lo aprendido» lo usa, pero ninguna medición enseña nada. */
 function puedeUsarAprendido(){
@@ -1115,7 +1024,6 @@ function puedeAprender(){
   return!!appState.aprendeEnabled&&!(typeof midiendo!=='undefined'&&midiendo)
 }
 function docDeSec(sec){return(docs.find(d=>secDe(d.name)===sec)||{}).name||null}
-const palabraActiva=p=>!p.propuesta&&p.conf>=APRENDE_CONFIRMACIONES;
 function construirIndiceAprendido(){
   const pal=new Map();
   for(const p of aprendido.palabras){
@@ -1139,14 +1047,6 @@ function palabrasAprendidasPara(k,doc){
   const sec=doc?secDe(doc):null;
   return sec?lista.filter(p=>p.sec===sec):lista
 }
-/* Las raíces con las que se compara una pregunta con un atajo: las palabras de
-   tema, sin verbos ni el nombre de la sección («¿dónde van los burros en
-   MUEBLES?» y «burros» son la misma consulta dentro de MUEBLES). */
-function palabrasDeAtajo(q,doc){
-  const propio=new Set(doc?tokenize(secDe(doc)||''):[]);
-  return palabrasDeConsulta(q).filter(k=>!esVerbo(k)&&!/\d/.test(k)&&!propio.has(k)&&k.length>=3)
-}
-function terminosDeAtajo(q,doc){return[...new Set(palabrasDeAtajo(q,doc).map(raizCorta))]}
 function atajosPara(q,doc){
   if(!puedeUsarAprendido()||!aprendido.atajos.length)return[];
   const sec=doc?secDe(doc):null;
@@ -1177,28 +1077,6 @@ function lineaDeAprendido(q,doc){
 }
 
 /* ── Escribir ── */
-function recortarSeccion(lista,sec,max,activa){
-  const deSec=lista.filter(x=>x.sec===sec);
-  if(deSec.length<=max)return lista;
-  /* Se van primero las viejas sin confirmar; lo activo se queda. */
-  const fuera=new Set(deSec.filter(x=>!activa(x)).sort((a,b)=>a.t-b.t).slice(0,deSec.length-max).map(x=>x.id));
-  return lista.filter(x=>!fuera.has(x.id))
-}
-/* Por qué NO se aprende un par; vacío si se puede. Sirve también para no
-   ofrecer un «✓ Sí, eso» que no enseñaría nada. */
-function motivoParaNoAprender(doc,piso,manual){
-  const a=palabraAprendible(piso),b=palabraAprendible(manual);
-  if(!a||!b)return'no es una palabra';
-  if(a===b||variantes(a).includes(b)||raizCorta(a)===raizCorta(b))return'es la misma palabra';
-  if(esVerbo(a)||esVerbo(b))return'es un verbo';
-  if(doc){
-    const voc=vocabDeDoc(doc);
-    if(!variantes(b).some(v=>voc.has(v)))return'el manual no la usa';
-    if(variantes(a).some(v=>voc.has(v)))return'el manual ya la usa';
-  }
-  for(const v of variantes(a))for(const frase of expandKeywords([v]))if(tokenize(frase).includes(b))return'ya está en el diccionario';
-  return''
-}
 function aprenderPalabra(doc,piso,manual,origen,idConsulta,{propuesta=false}={}){
   if(!puedeAprender()||!doc)return null;
   if(motivoParaNoAprender(doc,piso,manual))return null;
@@ -1235,13 +1113,6 @@ function aprenderAtajo(doc,q,pagina,idConsulta){
   }
   guardarAprendido();
   return a
-}
-/* Las palabras de la pregunta que ese manual no usa: son las «raras» del piso. */
-function palabrasRaras(q,doc){
-  if(!doc)return[];
-  const voc=vocabDeDoc(doc),propio=new Set(tokenize(secDe(doc)||''));
-  return palabrasDeConsulta(q).filter(k=>palabraAprendible(k)&&k.length>=4&&!esVerbo(k)&&!propio.has(k)
-    &&!variantes(k).some(v=>voc.has(v)))
 }
 /* Las palabras con que el manual titula una página: a eso se refería el asesor
    cuando tocó esa página. */
@@ -2129,47 +2000,15 @@ async function extractPdf(file,onProgress){
   })
 }
 
+
+
+
 /* ════════════════════════════════════════════════
    MANUALES GUARDADOS EN EL DISPOSITIVO
 
-   Procesar 28 láminas cuesta ~20 s. Volver a pagarlos cada vez que
-   el asesor abre la página, desde el celular y de pie frente al
-   mueble, es la diferencia entre una herramienta y una demo.
-
-   Se guarda el índice ya cocinado —texto, fragmentos y figuras—
-   indexado por el hash del archivo. Vive en el dispositivo del
-   asesor, nunca sale a la red, y hay un botón visible para
-   borrarlo. Las API keys siguen en sessionStorage: aquí no entra
-   ninguna credencial.
+   Abrir, leer, listar y borrar viven en src/almacen/manuales.js. Aquí queda
+   qué se guarda de cada manual y cómo se restaura al abrir la app.
 ════════════════════════════════════════════════ */
-const DB_NOMBRE='asistente_piso',DB_STORE='manuales',DB_VERSION=1;
-
-function abrirDB(){
-  return new Promise((resolve,reject)=>{
-    if(!window.indexedDB)return reject(new Error('sin IndexedDB'));
-    const req=indexedDB.open(DB_NOMBRE,DB_VERSION);
-    req.onupgradeneeded=()=>{
-      const db=req.result;
-      if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE,{keyPath:'hash'});
-    };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error);
-  })
-}
-
-function txDB(modo,fn){
-  return abrirDB().then(db=>new Promise((resolve,reject)=>{
-    const tx=db.transaction(DB_STORE,modo);
-    const req=fn(tx.objectStore(DB_STORE));
-    tx.oncomplete=()=>{db.close();resolve(req&&req.result)};
-    tx.onerror=()=>{db.close();reject(tx.error)};
-    /* Sin cuota, la transacción se aborta SIN disparar error: la promesa no
-       terminaba nunca y la carga del manual se quedaba colgada en la barra de
-       progreso, sin procesar los siguientes. */
-    tx.onabort=()=>{db.close();reject(tx.error||new Error('transacción abortada'))};
-  }))
-}
-
 /* La lectura del PDF mejora con el tiempo: la 2 une los títulos de tabla de
    dos renglones («TENIS / CASUAL»). Un manual guardado con una lectura anterior
    se restaura tal cual al abrir la app —el PDF no se guarda, no hay de dónde
@@ -2180,7 +2019,7 @@ const LECTURA_VERSION=2;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.18.3';
+const VERSION_APP='ap-v1.18.4';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2192,11 +2031,6 @@ function heredarDescripciones(nuevas,viejas){
   return n
 }
 
-async function hashArchivo(file){
-  const buf=await file.arrayBuffer();
-  const digest=await crypto.subtle.digest('SHA-256',buf);
-  return[...new Uint8Array(digest)].slice(0,10).map(b=>b.toString(16).padStart(2,'0')).join('')
-}
 
 /* Los campos del índice invertido (tf, len) no se guardan: se recalculan al
    restaurar. Ocupan más que el texto del que salen y se derivan de él. */
@@ -2228,7 +2062,6 @@ function restaurarExtrasDeManual(docName,g){
     docChunks.push(...chunksDeFicha(docName,g.ficha));
   }
 }
-const leerManual=hash=>txDB('readonly',st=>st.get(hash)).catch(()=>null);
 
 /* Un manual indexado antes de que la firma visual existiera se restaura sin
    ella, y sin firma no hay forma de saber que dos láminas son la misma imagen.
@@ -2245,8 +2078,6 @@ async function firmarPendientes(figuras,hash,guardado){
     try{await guardarManual(hash,guardado.doc,guardado.chunks,figuras,{paginas:guardado.paginas,ficha:docFichas.get(guardado.doc.name)||guardado.ficha})}catch(e){console.warn('refirmar',e)}
   }
 }
-const listarManuales=()=>txDB('readonly',st=>st.getAll()).catch(()=>[]);
-const borrarManual=hash=>txDB('readwrite',st=>st.delete(hash));
 
 /* Los manuales se guardaban en el dispositivo, pero al abrir la app no se
    restauraba ninguno: el asesor tenía que volver a elegir sus PDFs cada vez, y
@@ -4682,7 +4513,7 @@ function presentarRespuestaAgente(loaderEl,r,q){
   loaderEl.insertBefore(traza,footer);
   if(campos.opciones.length)loaderEl.insertBefore(filaDeChips(esGap?'¿Quisiste decir…?':'También lo puedo entender como:',campos.opciones),footer);
   const citadas=[...new Set([...limpio.matchAll(/p[áa]g\.?\s*(\d+)/gi)].map(m=>Number(m[1])))];
-  const sugerencias=sugerenciasDeFicha(r.estado.doc,[...new Set([...citadas,...leidas])],q);
+  const sugerencias=sugerenciasDeFicha(docFichas.get(r.estado.doc),[...new Set([...citadas,...leidas])],q);
   anotarBasico(r.estado.doc,q);
   const sigue=esGap?[]:sigueEnElManual(r.estado.doc,citadas.length?citadas:leidas,q).filter(s=>!sugerencias.includes(s.q));
   const todas=[...sugerencias,...sigue].slice(0,Math.max(3,sugerencias.length));
@@ -4706,11 +4537,8 @@ function filaDeChips(titulo,preguntas){
 /* ════════════════════════════════════════════════
    «SIGUE EN EL MANUAL»
 
-   Lo que completa una lámina suele estar en las siguientes del mismo capítulo:
-   la clasificación de Muebles enumera «estilos de mobiliario», y cada estilo es
-   una de las láminas que siguen. Y quien pregunta en el piso sigue la ruta de
-   los básicos (src/motor/basicos.js): marcas, clasificación, liquidación…
-   Los botones solo apuntan a lo que el manual trae; nunca a temas de fuera.
+   Qué lámina leer después vive en src/motor/sigue.js. Aquí quedan los
+   básicos que ya se preguntaron en la sesión y cuáles cubre la sección.
 ════════════════════════════════════════════════ */
 const basicosPreguntados=new Map();      // sección → básicos preguntados en esta sesión
 let coberturaBasicos=new Map(),firmaCobertura='';
@@ -4719,14 +4547,6 @@ function anotarBasico(doc,q){
   if(!doc||!b)return;
   if(!basicosPreguntados.has(doc))basicosPreguntados.set(doc,new Set());
   basicosPreguntados.get(doc).add(b);
-}
-function tituloDePagina(doc,n){
-  const c=docChunks.find(x=>x.docName===doc&&x.page===n&&x.heading&&!x.isFicha&&!x.isFigure);
-  const h=c?c.heading.replace(/^#+\s*/,'').replace(/\s+/g,' ').trim():'';
-  /* Ni códigos, ni rótulos cortados («Vanguardista (2.6%):»), ni el check
-     list, que es un formato para llenar y no algo que aprender. */
-  if(h.length<4||h.length>60||/^\d|:$|%/.test(h)||/^check\s*list/i.test(h))return'';
-  return h===h.toUpperCase()?h.charAt(0)+h.slice(1).toLowerCase():h;
 }
 /* Qué básicos trae la sección y en qué página: la pregunta de cada uno,
    contestada por el motor local sin red, y solo cuenta si sale con su
@@ -4751,84 +4571,16 @@ function coberturaDeBasicos(doc){
   coberturaBasicos.set(doc,m);
   return m
 }
-/* Hasta 3 botones: la lámina que sigue y el siguiente básico, intercalados.
-   `paginas` va en el orden de la respuesta. Se miran las 3 láminas que siguen
-   a CADA una, y van primero las que esas páginas ya mencionan. Pesa más la
-   mención de una página con viñetas o corta, porque esa es un índice:
-   «● Estilos de mobiliario» en la clasificación de Muebles lleva a «Estilo
-   nórdico», la lámina de después. No cuentan las palabras de la pregunta ni
-   las del nombre de la sección: «muebles» sale en todo el manual de Muebles. */
+/* Los botones salen de src/motor/sigue.js con lo que sabe la app: las imágenes
+   de las páginas, la ficha, qué básicos cubre la sección y cuáles ya se
+   preguntaron. */
 function sigueEnElManual(doc,paginas,q,max=3){
-  paginas=[...new Set((paginas||[]).filter(n=>Number.isFinite(n)&&n>0))];
-  if(!doc||!paginas.length)return[];
-  const porPagina=paginas.map(n=>docChunks.filter(c=>c.docName===doc&&c.page===n&&!c.isFicha).map(c=>(c.heading||'')+' '+c.text).join('\n'));
-  const vistas=new Set(paginas);
-  const titulos=new Set(paginas.map(n=>normalizeText(tituloDePagina(doc,n))));
-  const propia=new Set(tokenize(q||''));
-  const raiz=(/** @type {string} */ w)=>w.slice(0,5);
-  const comunes=new Set([...tokenize(q||''),...tokenize(nombreDeSeccion(doc)||'')].map(raiz));
-  const menciones=paginas.map((_,i)=>{
-    const crudo=porPagina[i]||'',tk=tokenize(crudo);
-    const vinetas=(crudo.match(/[●•▪■]/g)||[]).length;
-    return{peso:vinetas>=2?3:tk.length<40?2:1,raices:new Set(tk.filter(w=>w.length>3).map(raiz))};
-  });
-  const todas=paginasDelManual(doc,docPaginas);
-  const ficha=docFichas.get(doc);
-  const candidatas=[];
-  paginas.forEach((p,i)=>todas.filter(n=>n>p).slice(0,3).forEach((n,k)=>{
-    if(vistas.has(n)||candidatas.some(c=>c.n===n))return;
-    const t=tituloDePagina(doc,n);
-    if(!t)return;
-    const rs=tokenize(t).filter(w=>w.length>3).map(raiz).filter(r=>!comunes.has(r));
-    const puntos=Math.max(0,...menciones.map(m=>rs.some(r=>m.raices.has(r))?m.peso:0));
-    candidatas.push({n,t,orden:i*3+k,puntos});
-  }));
-  candidatas.sort((a,b)=>b.puntos-a.puntos||a.orden-b.orden);
-  const siguen=[];
-  for(const{n,t}of candidatas){
-    const k=normalizeText(t);
-    if(titulos.has(k))continue;
-    titulos.add(k);
-    const tk=tokenize(t);
-    if(!tk.length||tk.every(w=>propia.has(w)))continue;
-    const p=ficha&&ficha.paginas[n]&&(ficha.paginas[n].preguntas||[])[0];
-    siguen.push({texto:p||`${t} · pág. ${n}`,q:p||`¿Qué dice el manual sobre ${t.toLowerCase()}?`,pagina:n});
-    vistas.add(n);
-    if(siguen.length>=2)break;
-  }
-  const cubiertos=coberturaDeBasicos(doc);
-  const basicos=[];
-  for(const b of siguientesBasicos(basicoDe(q||''),basicosPreguntados.get(doc)||new Set(),cubiertos)){
-    const n=cubiertos.get(b.id);
-    if(vistas.has(n))continue;
-    vistas.add(n);
-    basicos.push({texto:b.pregunta,q:b.pregunta,pagina:n});
-    if(basicos.length>=2)break;
-  }
-  const out=[];
-  for(let i=0;i<2;i++){if(siguen[i])out.push(siguen[i]);if(basicos[i])out.push(basicos[i])}
-  return out.slice(0,max)
+  return siguientesDelManual(doc,paginas,q,{paginasGuardadas:docPaginas,ficha:doc?docFichas.get(doc):null,
+    cubiertos:()=>coberturaDeBasicos(doc),preguntados:basicosPreguntados.get(doc)||new Set(),max})
 }
 function filaSigue(doc,paginas,q){
   const s=sigueEnElManual(doc,paginas,q);
   return s.length?filaDeChips('Sigue en el manual:',s):null;
-}
-/* De la ficha de las páginas que se leyeron: las preguntas que esas láminas
-   contestan y que no son la misma que ya se hizo. Una por página. */
-function sugerenciasDeFicha(doc,paginas,q,max=3){
-  const f=docFichas.get(doc);
-  if(!f)return[];
-  const propia=new Set(tokenize(q||''));
-  const out=[];
-  for(const n of paginas){
-    for(const p of(f.paginas[n]&&f.paginas[n].preguntas)||[]){
-      const t=tokenize(p);
-      if(!t.length||t.filter(w=>propia.has(w)).length/t.length>0.6)continue;
-      if(!out.includes(p)){out.push(p);break}
-    }
-    if(out.length>=max)break;
-  }
-  return out
 }
 
 /* ════════════════════════════════════════════════
@@ -4843,32 +4595,14 @@ function sugerenciasDeFicha(doc,paginas,q,max=3){
    entrega un archivo de resultados para compartir. La key nunca entra en ese
    archivo, y la medición no deja rastro en el tablero ni en la memoria.
 ════════════════════════════════════════════════ */
-const MEDICION_KEY='ap_medicion_v1';
+/* Lo puro —qué examen se acepta, cómo se califica, el resumen— vive en
+   src/piso/medicion.js. */
 const MEDICION_PAUSA_MS=6000;          // el plan gratis de Gemini corta por minuto
-const MEDICION_TIPOS=new Set(['dato','no-esta','trampa','otra']);
 let midiendo=false,medicionDetener=false,medicionActual=null;
 
 function abrirMedicion(){
   if(midiendo){mostrarPanelMedicion();return}
   document.getElementById('examen-input').click();
-}
-/* El examen viene de fuera: solo se toman los campos conocidos, como texto,
-   con tope. Un JSON raro no puede meter nada más. */
-function validarExamen(ex){
-  const lista=Array.isArray(ex)?ex:ex&&Array.isArray(ex.preguntas)?ex.preguntas:[];
-  const txt=(v,n)=>typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,n):'';
-  const out=[];
-  for(const x of lista.slice(0,400)){
-    if(!x||typeof x!=='object')continue;
-    const q=txt(x.q,300),tipo=MEDICION_TIPOS.has(x.tipo)?x.tipo:null,seccion=txt(x.seccion,120);
-    if(!q||!tipo)continue;
-    out.push({q,tipo,seccion,cat:txt(x.cat,40),otra:txt(x.otra,120),
-      k:Array.isArray(x.k)?x.k.map(v=>txt(v,120)).filter(Boolean).slice(0,12):[],
-      minK:Math.max(1,Math.min(12,parseInt(x.minK,10)||1)),
-      p:Array.isArray(x.p)?x.p.map(n=>parseInt(n,10)).filter(Number.isFinite).slice(0,12):[],
-      turnos:Array.isArray(x.turnos)?x.turnos.map(v=>txt(v,300)).filter(Boolean).slice(0,4):[]});
-  }
-  return out
 }
 /* La sección del examen se busca por el nombre que la app le da al manual
    («101 MUEBLES»), no por el archivo: cada quien lo descarga con otro nombre. */
@@ -4885,91 +4619,6 @@ function docDeSeccion(seccion){
   return parcial.length===1?parcial[0].name:null
 }
 
-/* ── Calificación: la misma regla que eval/modo-ia.mjs ── */
-const normMed=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-  .replace(/(\d)\s*[x×]\s*(\d)/g,'$1 x $2').replace(/(\d)\s*(cm|m)\b/g,'$1 $2').replace(/\s+/g,' ');
-function tieneAlternativaMed(resp,alt){
-  const r=normMed(resp),a=normMed(alt);
-  if(r.includes(a))return true;
-  const nums=a.match(/\d+(?:[.,]\d+)?/g)||[];
-  if(!nums.every(n=>new RegExp('(?<![\\d.,])'+n.replace(/[.,]/,'[.,]')+'(?![\\d])').test(r)))return false;
-  const pal=a.split(/[^a-zñ]+/).filter(w=>w.length>=4);
-  if(!pal.length)return nums.length>0;
-  return pal.filter(w=>r.includes(w.slice(0,5))).length>=Math.ceil(pal.length/2)
-}
-const SIN_DATO_MED=/nada(?:\s+de\s+esta\s+secci[óo]n|\s+del\s+manual)?\s+coincide|no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura|viene)\s+en\s+(?:el|los|tu|este|esta)\s+(?:manual|secci[óo]n)|no\s+hay\s+(?:una\s+|ning[úu]n[ao]?\s+)?(?:regla|dato|informaci[óo]n)|no\s+trae\s+(?:ese|esa|este|esta|el|la|ning[úu]n[ao]?|nada)|no\s+tengo\s+(?:esa|ese|la|el|ning[úu]n[ao]?)\s+(?:informaci[óo]n|dato)|no\s+(?:lo\s+)?(?:dice|menciona|indica)|solo puedo ayudarte/i;
-const paginasCitadasMed=t=>[...(t||'').matchAll(/p[áa]g(?:ina)?s?\.?\s*(\d+(?:\s*(?:,|y|-|–)\s*\d+)*)/gi)].flatMap(m=>m[1].match(/\d+/g).map(Number));
-function calificarMedicion(x,r){
-  const texto=r.cuerpo||'';
-  const dijoNoEsta=/no está en el manual/i.test(r.etiqueta||'')||SIN_DATO_MED.test(texto);
-  const base={dijoNoEsta,sinRespaldo:!!(r.avisos||'').trim(),error:!!r.error};
-  /* «Como el asesor»: además, ¿eligió bien la sección? En «no está» también
-     vale no elegir ninguna. */
-  if(r.ruta)base.seccionOk=r.ruta.seccion===r.esperado||((x.tipo==='no-esta'||x.tipo==='trampa')&&!r.ruta.seccion);
-  if(x.tipo==='otra'){
-    /* Bien si dice dónde está: la sección vecina en el texto o en el botón. */
-    const pal=normMed(x.otra).split(/[^a-zñ]+/).filter(w=>w.length>=5);
-    const dondeEsta=pal.length>0&&pal.some(w=>normMed(texto+' '+(r.botones||'')).includes(w));
-    const ok=!r.error&&dondeEsta;return{...base,ok,capa:ok?null:r.error?'error del proveedor':'no dijo en qué sección está'}
-  }
-  if(x.tipo!=='dato'){const ok=!r.error&&dijoNoEsta;return{...base,ok,capa:ok?null:r.error?'error del proveedor':'contestó algo que no está'}}
-  const dato=x.k.filter(k=>tieneAlternativaMed(texto,k)).length>=x.minK;
-  const pagina=!x.p.length||paginasCitadasMed(texto).some(n=>x.p.includes(n));
-  const ok=!r.error&&dato&&pagina&&!dijoNoEsta;
-  return{...base,dato,pagina,ok,capa:ok?null:capaDeFalla(x,r,{dato,pagina,dijoNoEsta})}
-}
-/* Dónde falló, para saber dónde trabajar. La lectura del PDF no se distingue
-   sola de la búsqueda: si el dato «no llegó», hay que mirar la página a mano. */
-function capaDeFalla(x,r,c){
-  if(r.error)return'error del proveedor';
-  if(r.ruta&&r.ruta.seccion!==r.esperado)return'sección';
-  const vistas=r.paginasVistas;
-  const llego=Array.isArray(vistas)&&x.p.length?x.p.some(n=>vistas.includes(n)):null;
-  if(llego===false)return'búsqueda (el dato no llegó)';
-  /* Sin modelo no hay a quién culpar de «contestar mal»: la tarjeta de la
-     página correcta no traía el dato (fragmento corto o cortado). */
-  const sinModelo=r.motor==='manual';
-  if(c.dijoNoEsta)return llego?(sinModelo?'tarjeta correcta con aviso de «no está»':'modelo (dijo «no está» teniéndolo)'):'«no está» sin saber si llegó';
-  if(!c.dato)return llego?(sinModelo?'tarjeta de la página correcta, sin el dato':'modelo (contestó otro dato)'):'dato distinto';
-  return'página citada';
-}
-function resumenMedicion(filas){
-  const pct=(xs,q)=>{if(!xs.length)return null;const s=[...xs].sort((a,b)=>a-b);return s[Math.min(s.length-1,Math.floor(q*s.length))]};
-  const seg=ms=>ms==null?'—':(ms/1000).toFixed(1)+' s';
-  const out={};
-  const grupo=f=>f.motor+(f.libre?' · sin sección':'')+(f.aprendido&&f.aprendido!=='apagado'?' · con lo aprendido':'');
-  for(const motor of[...new Set(filas.map(grupo))]){
-    const fm=filas.filter(f=>grupo(f)===motor);
-    const conRuta=fm.filter(f=>f.ruta);
-    const datos=fm.filter(f=>f.tipo==='dato'),huecos=fm.filter(f=>f.tipo==='no-esta'||f.tipo==='trampa'),otras=fm.filter(f=>f.tipo==='otra');
-    const sinError=fm.filter(f=>!f.error);
-    const ag=fm.map(f=>f.agente).filter(a=>a&&a.motor==='agente');
-    const porCat={};
-    for(const f of datos){const c=f.cat||'—';porCat[c]=porCat[c]||[0,0];porCat[c][1]++;if(f.ok)porCat[c][0]++}
-    out[motor]={
-      aciertos:`${datos.filter(f=>f.ok).length}/${datos.length}`,
-      datoCorrecto:`${datos.filter(f=>f.dato).length}/${datos.length}`,
-      paginaCorrecta:`${datos.filter(f=>f.pagina).length}/${datos.length}`,
-      noEstaBienDicho:`${huecos.filter(f=>f.ok).length}/${huecos.length}`,
-      otraSeccion:`${otras.filter(f=>f.ok).length}/${otras.length}`,
-      avisosSinRespaldo:fm.filter(f=>f.sinRespaldo).length,
-      errores:fm.filter(f=>f.error).length,
-      primerTextoP50:seg(pct(sinError.map(f=>f.tPrimer),0.5)),totalP50:seg(pct(sinError.map(f=>f.tTotal),0.5)),
-      ...(motor.startsWith('agente')?{contestoElAgente:`${ag.length}/${fm.length}`,
-        tokensPorPregunta:ag.length?Math.round(ag.reduce((s,a)=>s+(a.tokens||0),0)/ag.length):0}:{}),
-      ...(conRuta.length?{seccionElegidaBien:`${conRuta.filter(f=>f.seccionOk).length}/${conRuta.length}`,
-        toquesDeEmpate:fm.filter(f=>f.toque).length}:{}),
-      /* Cuántas veces avisó de una cifra mal atada, y cuántas de esas en una
-         respuesta que estaba bien: esa segunda cifra es la de falsas alarmas. */
-      fallasPorCapa:fm.filter(f=>!f.ok&&f.capa).reduce((o,f)=>(o[f.capa]=(o[f.capa]||0)+1,o),{}),
-      avisosDeAtadura:fm.filter(f=>f.atadura).length,
-      atadurasEnRespuestasBien:fm.filter(f=>f.atadura&&f.ok).length,
-      certezaBajada:fm.filter(f=>f.certezaBajada).length,
-      porCategoria:Object.fromEntries(Object.entries(porCat).map(([c,[a,b]])=>[c,`${a}/${b}`]))
-    };
-  }
-  return out
-}
 
 /* ── Una pregunta, como la haría el asesor ── */
 function limpiarChatSilencioso(){
@@ -5041,10 +4690,6 @@ async function medirPregunta(x,motor,doc,opc={}){
 }
 
 /* ── La tanda completa: fichas, preguntas, progreso guardado ── */
-function claveDeExamen(ex,preguntas){
-  let h=0;for(const ch of(ex&&ex.examen||'')+preguntas.map(x=>x.seccion+x.q).join('|'))h=(h*31+ch.charCodeAt(0))|0;
-  return MEDICION_KEY+':'+(h>>>0).toString(36)
-}
 async function cargarExamen(input){
   const f=input.files&&input.files[0];
   input.value='';

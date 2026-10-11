@@ -7,9 +7,10 @@ import { conEstado, reiniciarCaches } from '../src/estado.js';
 import { indexChunk, reconstruirIndice } from '../src/motor/indice.js';
 import {
   prepararAgente, cicloAgente, nuevoEstadoAgente, ejecutarHerramienta, leerPaginaAgente,
-  camposDelAgente, verificarCitas, convAGemini, historialParaModelo, paginasDelManual,
+  camposDelAgente, verificarCitas, convAGemini, historialParaModelo,
   AGENTE_MAX_RONDAS, AGENTE_MAX_PAGINAS, AGENTE_MAX_TOKENS, AGENTE_MAX_TOKENS_CORTE,
 } from '../src/ia/agente.js';
+import { paginasDelManual } from '../src/motor/sigue.js';
 
 const DOC = '950 VAJILLA DEMO.pdf';
 const pag = (page, heading, text) => indexChunk({ id: `${page}`, source: 'pdf', docName: DOC, page, heading, text });
