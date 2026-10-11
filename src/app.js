@@ -2033,16 +2033,17 @@ async function extractPdf(file,onProgress){
    qué se guarda de cada manual y cómo se restaura al abrir la app.
 ════════════════════════════════════════════════ */
 /* La lectura del PDF mejora con el tiempo: la 2 une los títulos de tabla de
-   dos renglones («TENIS / CASUAL»). Un manual guardado con una lectura anterior
+   dos renglones («TENIS / CASUAL»); la 3 lee las tablas «MUNDO | Marca» con el
+   rótulo al costado, fila por fila. Un manual guardado con una lectura anterior
    se restaura tal cual al abrir la app —el PDF no se guarda, no hay de dónde
    releerlo—, pero al volver a elegir el archivo se relee en vez de reusar lo
    guardado. La ficha y las descripciones de láminas, que costaron llamadas,
    pasan a la lectura nueva. */
-const LECTURA_VERSION=2;
+const LECTURA_VERSION=3;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.21.0';
+const VERSION_APP='ap-v1.22.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;

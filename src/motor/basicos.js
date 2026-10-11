@@ -21,11 +21,11 @@ import { normalizeText } from './texto.js';
 /** @type {Basico[]} */
 export const BASICOS = [
   { id: 'marcas', nombre: 'Marcas y mundos', pregunta: '¿Qué marcas hay y en qué mundo van?', claves: ['marca', 'mundo'] },
-  { id: 'clasificacion', nombre: 'Clasificación', pregunta: '¿Cómo se clasifica la sección?', claves: ['clasific', 'categor', 'tipo de mercancia', 'estructura de la seccion', 'estilo'] },
+  { id: 'clasificacion', nombre: 'Clasificación', pregunta: '¿Cómo se clasifica la sección?', claves: ['clasific', 'categor', 'tipo de mercancia', 'estructura de la seccion', 'estilo', 'perimetro'] },
   { id: 'liquidacion', nombre: 'Liquidación', pregunta: '¿Dónde va la liquidación?', claves: ['liquidac', 'remate', 'descontinuad'] },
   { id: 'etiquetas', nombre: 'Etiquetas y sensores', pregunta: '¿Cómo van las etiquetas de precio y los sensores?', claves: ['etiquet', 'sensor', 'cascabel', 'precio'] },
   { id: 'exhibicion', nombre: 'Básicos de exhibición', pregunta: '¿Cuáles son los básicos de exhibición?', claves: ['surtido', 'alineac', 'limpieza', 'planchad', 'doblad', 'basicos de exhibicion'] },
-  { id: 'display', nombre: 'Básicos de display', pregunta: '¿Cómo se hace la triangulación y las alturas del display?', claves: ['triangul', 'composic', 'altura', 'equilibri', 'display', 'focal'] },
+  { id: 'display', nombre: 'Básicos de display', pregunta: '¿Cómo se hace la triangulación y las alturas del display?', claves: ['triangul', 'composic', 'altura', 'equilibri', 'display', 'focal', 'formula'] },
   { id: 'pos', nombre: 'POS y caja', pregunta: '¿Cómo se exhibe el POS?', claves: ['pos', 'caja', 'punto de venta'] },
   { id: 'campanas', nombre: 'Campañas y cartulinas', pregunta: '¿Qué campañas y cartulinas van?', claves: ['campana', 'cartulin', 'senaliz'] },
 ];

@@ -15,7 +15,7 @@ import { estado, montar, conEstado, alReiniciar, reiniciarCaches } from '../src/
 import { indexChunk, bm25Score, reconstruirIndice } from '../src/motor/indice.js';
 import { masParecida, vocabDeDoc } from '../src/motor/erratas.js';
 import { buildChunks, CHUNK_MAX } from '../src/motor/fragmentos.js';
-import { bloquesDeLineas, multiplicar } from '../src/motor/layout.js';
+import { bloquesDeLineas, multiplicar, textItemsToLines } from '../src/motor/layout.js';
 import { retrieve, packChunks, chunkLabel } from '../src/motor/busqueda.js';
 import { usarAprendido } from '../src/motor/aprendido.js';
 import { nivelDeEvidencia } from '../src/motor/solidez.js';
@@ -202,6 +202,77 @@ test('layout: dos columnas a la misma altura no se funden en una línea', () => 
   const de = h => bloques.filter(b => b.heading === h && !b.isHeading).map(b => b.text).join('|');
   assert.equal(de('ALINEACIÓN'), 'Deja 80 cm entre muebles.');
   assert.equal(de('LIMPIEZA'), 'Limpia los cristales al abrir.');
+});
+
+/* La lámina MUNDOS Y MARCAS: el rótulo del mundo centrado a la izquierda y
+   las marcas en dos columnas a su derecha (marcas inventadas). */
+const lineaT = (text, x0, x1, yTop, h = 12) => ({ text, x0, x1, yTop, yBot: yTop + h, h });
+const MUNDOS_Y_MARCAS = () => [
+  lineaT('MUNDOS Y MARCAS', 190, 420, 100, 22),
+  lineaT('Verifica que cada marca esté en el espacio de su mundo dentro de la sección.', 20, 560, 150),
+  lineaT('Tresvik', 345, 400, 237), lineaT('Ondera', 486, 530, 244),
+  lineaT('PREMIUM', 53, 156, 248, 22), lineaT('Marca', 236, 297, 248, 22), lineaT('Kalinde', 345, 400, 252),
+  lineaT('Brunell', 486, 530, 273), lineaT('Saxo Real', 345, 410, 280),
+  lineaT('Vellut', 486, 530, 333),
+  lineaT('CONTEMPO', 42, 167, 337, 22), lineaT('Marca', 236, 297, 337, 22), lineaT('Ferrol', 345, 390, 340),
+  lineaT('Marabú', 486, 530, 362),
+  lineaT('Quintal', 345, 400, 417), lineaT('Arenzo', 486, 530, 424),
+  lineaT('URBANO', 58, 151, 436, 22), lineaT('Marca', 236, 297, 436, 22), lineaT('Duna Norte', 345, 420, 440),
+  lineaT('Pirca', 486, 530, 468),
+  lineaT('900 SECCIÓN DEMO', 63, 224, 747, 17),
+];
+
+test('tabla con rótulo al costado: cada marca queda con su mundo, no con el de arriba', () => {
+  const bl = bloquesDeLineas(MUNDOS_Y_MARCAS());
+  const de = m => bl.filter(b => b.heading === 'MUNDOS Y MARCAS · ' + m).map(b => b.text).join('\n');
+  for (const [m, marcas, ajenas] of [
+    ['PREMIUM', ['Tresvik', 'Ondera', 'Kalinde', 'Brunell', 'Saxo Real'], ['Ferrol', 'Quintal']],
+    ['CONTEMPO', ['Vellut', 'Ferrol', 'Marabú'], ['Tresvik', 'Quintal']],
+    ['URBANO', ['Quintal', 'Arenzo', 'Duna Norte', 'Pirca'], ['Ferrol', 'Vellut']],
+  ]) {
+    const t = de(m);
+    for (const x of marcas) assert.ok(t.includes(x), `${x} tendría que ir en ${m}: ${t}`);
+    for (const x of ajenas) assert.ok(!t.includes(x), `${x} no es de ${m}: ${t}`);
+  }
+  // Las dos columnas no se intercalan: la izquierda completa, luego la derecha.
+  assert.ok(de('PREMIUM').indexOf('Saxo Real') < de('PREMIUM').indexOf('Ondera'));
+  // El pie, en la misma franja que los rótulos, no es una fila.
+  assert.ok(!bl.some(b => /900 SECCIÓN DEMO$/.test(b.heading) && b.text.includes('Pirca')));
+});
+
+test('tabla con encabezado MUNDO | MARCA y una sola fila', () => {
+  const bl = bloquesDeLineas([
+    lineaT('MUNDOS Y MARCAS', 140, 470, 100, 22),
+    lineaT('MUNDO', 107, 190, 284, 22), lineaT('MARCA', 445, 487, 284, 22),
+    lineaT('Tresvik', 376, 418, 329), lineaT('Kalinde', 376, 420, 343), lineaT('Ondera', 376, 420, 358),
+    lineaT('FORMAL', 104, 194, 416, 22), lineaT('Brunell', 376, 438, 416, 22), lineaT('Vellut', 376, 420, 444),
+    lineaT('DKNY', 376, 408, 473), lineaT('Marabú', 376, 457, 502),
+  ]);
+  const fila = bl.find(b => b.heading === 'MUNDOS Y MARCAS · FORMAL');
+  assert.ok(fila, 'falta la fila FORMAL: ' + bl.map(b => b.heading).join(' | '));
+  for (const x of ['Tresvik', 'Ondera', 'Brunell', 'DKNY', 'Marabú']) assert.ok(fila.text.includes(x), x + ' en ' + fila.text);
+  assert.ok(fila.text.startsWith('MUNDO FORMAL — MARCA'), fila.text);
+  // Una marca en mayúsculas dentro de la tabla no se vuelve título.
+  assert.ok(!bl.some(b => b.heading === 'DKNY'));
+});
+
+test('títulos con su texto debajo no son una tabla', () => {
+  const bl = bloquesDeLineas([
+    lineaT('ALINEACIÓN', 40, 140, 100), lineaT('Deja 90 cm de pasillo entre muebles.', 40, 300, 116),
+    lineaT('LIMPIEZA', 40, 120, 160), lineaT('Limpia los cristales al abrir la tienda.', 40, 300, 176),
+    lineaT('Al cierre revisa el polvo de entrepaños.', 320, 560, 168),
+  ]);
+  assert.equal(bl.find(b => b.text.startsWith('Deja')).heading, 'ALINEACIÓN');
+  assert.ok(!bl.some(b => / · /.test(b.heading)), bl.map(b => b.heading).join(' | '));
+});
+
+test('lectura: el rótulo grande y la marca chica a su lado son dos celdas', () => {
+  const vp = { transform: [1, 0, 0, -1, 0, 792], height: 792, rotation: 0 };
+  const it = (str, x, y, h, width) => ({ str, transform: [h, 0, 0, h, x, 792 - y], width, height: h });
+  const lineas = textItemsToLines([it('SMART CASUAL', 148, 288, 22, 167), it('Tresvik & Co', 333, 285, 12, 63)], vp);
+  assert.deepEqual(lineas.map(l => l.text).sort(), ['SMART CASUAL', 'Tresvik & Co']);
+  // Misma letra y mismo hueco: sigue siendo una línea.
+  assert.equal(textItemsToLines([it('Coloca la', 40, 100, 12, 50), it('marca al frente', 95, 100, 12, 80)], vp).length, 1);
 });
 
 test('multiplicar es la composición afín: identidad y traslación', () => {
