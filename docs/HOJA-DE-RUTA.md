@@ -16,7 +16,7 @@ estamos y qué sigue, en orden.
 - **Los manuales reales no entran al repo** (ni sus marcas ni sus cifras): los exámenes y los
   resultados con datos reales viven fuera.
 
-## Dónde estamos (10-oct-2026)
+## Dónde estamos (11-oct-2026)
 
 | Capa | Estado |
 |---|---|
@@ -27,9 +27,10 @@ estamos y qué sigue, en orden.
 | Verificación | Cifras, nombres, páginas, citas y atadura; certeza baja a MEDIA si algo no se comprueba |
 | Seguridad | Instrucciones escondidas en un PDF: spotlighting, neutralización, aviso al cargar y enlaces con datos como texto (ADR 0004) |
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
-| Pruebas | Arnés 305, agente simulado, 104 pruebas en Node (laboratorio, frontera del motor, revisión con foto y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
+| Pruebas | Arnés 305, agente simulado, 144 pruebas en Node (laboratorio, frontera del motor, la IA sin pantalla, el agente con un proveedor falso, revisión con foto y propiedades con fast-check) y dos `tsc --checkJs` (el motor sin DOM, y Revisar con DOM), todo en el CI |
 | eval-gate | Corpus público ficticio (4 manuales, 99 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 81/84 datos y 14/15 «no está» |
-| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 6 de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección, la puerta de evidencia (con su contrato de decisión) y lo que decide cada respuesta fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso. El motor contesta en Node igual que en el navegador (`lab/motor-node.mjs`) |
+| Código | Módulos ES sin bundler (ADR 0005), **los 8 pasos hechos**: el motor, la verificación, la IA sin pantalla (`src/ia/`), lo puro del piso y el almacén salen de `app.js`, que queda en 4,991 líneas de UI y orquestación (empezó en 12,080 dentro de `index.html`). El arnés vive en `src/pruebas/` y solo baja con `?test=1`. La capa de compatibilidad publica 122 nombres en una lista explícita, con guardia en el CI. Golden master idéntico sobre 667 preguntas reales en cada paso |
+| Modo API (corpus ficticio, 11-oct) | Motor clásico con 3.5 Flash-Lite: **78/84 (92.9 %) dato con su página y 14/15 «no está»**, primer texto en 1.5 s. Las 6 fallas son de búsqueda; con el dato en el contexto, 78/78. El agente lector, primera medición: 67/73, empate con el clásico en las mismas preguntas; faltan 25 por la cuota del día |
 
 Las decisiones están en `docs/adr/`:
 - **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
@@ -39,13 +40,19 @@ Las decisiones están en `docs/adr/`:
 - **0006, puerta sin modelo:** el criterio de salida de la Fase 3, fijado antes de la corrida.
 - **0007, revisión con foto.**
 
-Lo último que salió (ap-v1.13 a v1.18):
+Lo último que salió (ap-v1.13 a v1.21):
 - **v1.13 a v1.15, Revisar:** SynthID revisado a mano cuando la app no puede probar el origen, y
   «Nueva foto» sin recargar.
 - **v1.14, ficha del manual:** 6 páginas por petición y tope diario, para no acabarse la cuota.
 - **v1.16, Preguntar:** «Sigue en el manual» con la ruta de los básicos, y el chat vuelve al recargar.
 - **v1.17 y v1.18, diseño:** vidrio neutro con un solo punto rojo, que marca la sección activa,
   y cascada de paneles.
+- **v1.18.1 a v1.18.7, técnico:** pasos 6 a 8 de módulos, seguimiento por sustitución y tipos de
+  Revisar.
+- **v1.19 y v1.20, Revisar:** «Sugerir» sobre el recorte de la zona (recall de 8/17 a 11/17,
+  precisión de 73 a 92 %), lupa, arrastre, bandas de nivel e imagen para compartir de 1080 px.
+- **v1.21, diseño:** brillo especular, la lámina crece al visor, tarjeta de respuesta del canvas,
+  y el icono, el banner y el gif nuevos.
 
 ## Ahora: tres niveles (oct-2026, el modelo local aparcado)
 
@@ -101,7 +108,10 @@ Si no se cumple, se itera en desarrollo, no en confirmación.
 
 - **Trazas con el estándar OpenTelemetry GenAI** y un «¿por qué esta respuesta?» en la app.
 - **Servidor MCP del motor.**
-- Terminar los pasos 6 a 8 de módulos.
+- **Hecho:** los pasos 6 a 8 de módulos (11-oct). Lo que queda de la capa de compatibilidad se va
+  cuando `app.js` sea un módulo.
+- Terminar la medición del agente lector con el corpus ficticio (25 preguntas, entre ellas las
+  15 «no está»).
 - Medir «Aprende del piso» (ver abajo).
 
 ### Nivel 3 · Podría: exploración
@@ -119,7 +129,9 @@ y con manuales ficticios. No toca el motor hasta que gane.
    - origen con C2PA validado y lista de confianza, y SynthID revisado a mano;
    - colorización, surtido, triangulación con toque inteligente, y alturas y niveles en el
      teléfono, con zonas en una foto;
-   - calibrada con 5 fotos de piso y 20 de referencia (desarrollo).
+   - calibrada con 5 fotos de piso y 20 de referencia (desarrollo);
+   - «Sugerir» sobre el recorte de la zona, afinado con la silueta (11-oct, `eval/revision.mjs
+     --sugerir`).
 
    Queda abierto:
    - el lote de confirmación, que se corre una sola vez;

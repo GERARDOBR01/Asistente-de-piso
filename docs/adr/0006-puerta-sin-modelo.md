@@ -54,6 +54,9 @@ vio deja de serlo: la siguiente necesita preguntas nuevas.
 - **Sinónimos:** «entallado» ya no se expande a «piezas». Quita tarjetas de relleno en 3
   preguntas y no cambia ninguna calificación.
 
+Con el sinónimo más estrecho, el `margenMinimo` del arnés (cuánto margen deja la búsqueda en las
+preguntas del manual interno, informativo) baja de 84 a 72 %; el recall sigue 15/15.
+
 Falta: la corrida única de la confirmación 2, cuando Gerardo revise la batería.
 
 ## Consecuencias
