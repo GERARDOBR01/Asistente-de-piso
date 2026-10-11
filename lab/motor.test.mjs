@@ -22,7 +22,7 @@ import { nivelDeEvidencia } from '../src/motor/solidez.js';
 import { nombreDeSeccion } from '../src/motor/secciones.js';
 import { rutaPorEvidencia, otraSeccionNombrada } from '../src/motor/ruta.js';
 import { terminosAusentes, contratoDeDecision, VERSION_POLITICA } from '../src/motor/puerta.js';
-import { consultaAmpliada, assessQuestionScope, rutaDeLaPregunta } from '../src/motor/conversacion.js';
+import { consultaAmpliada, sustituirObjeto, assessQuestionScope, rutaDeLaPregunta } from '../src/motor/conversacion.js';
 import { respuestaSinModelo, contextoParaModelo, coincidenciaFloja } from '../src/motor/respuesta.js';
 import { preguntar } from './motor-node.mjs';
 
@@ -438,7 +438,9 @@ test('coincidencia floja: no si otra palabra de la pregunta está en el manual p
    conversación entera se contesta en Node con el mismo código que el teléfono. */
 test('un seguimiento amplía la búsqueda con la pregunta anterior; una pregunta completa no', () => {
   const hist = [{ role: 'user', content: '¿cómo van las botellas?' }, { role: 'assistant', content: '…', seccion: 'cava.pdf' }];
-  assert.equal(consultaAmpliada('¿y las copas?', hist), '¿cómo van las botellas? ¿y las copas?');
+  /* «¿y las copas?» cambia el objeto de la anterior; sin conector, se pega. */
+  assert.equal(consultaAmpliada('¿y las copas?', hist), '¿cómo van las copas?');
+  assert.equal(consultaAmpliada('¿y si se rompe una?', hist), '¿cómo van las botellas? ¿y si se rompe una?');
   assert.equal(consultaAmpliada('copas', hist), '¿cómo van las botellas? copas');
   assert.equal(consultaAmpliada('¿cómo se cuelgan las copas?', hist), '¿cómo se cuelgan las copas?');
   assert.equal(consultaAmpliada('¿y las copas?', []), '¿y las copas?');
@@ -458,9 +460,10 @@ test('motor en Node: «¿y las copas?» después de una pregunta de la cava sigu
   const r = preguntar({ i: 0, q: '¿y las copas?', turnos: ['¿cómo van las botellas en la cava?'] });
   assert.equal(r.secDoc, 'cava.pdf');
   assert.ok(r.tarjetas.some(t => t.id === 'c3'), JSON.stringify(r.tarjetas.map(t => t.id)));
-  /* Hoy el seguimiento PEGA las dos preguntas, así que las botellas siguen
-     arriba: sustituir el objeto («botellas» → «copas») es de la Fase 3. */
-  assert.equal(r.consulta, '¿cómo van las botellas en la cava? ¿y las copas?');
+  /* El seguimiento cambia el objeto («botellas» → «copas») y conserva el
+     lugar: ya no busca las botellas otra vez. */
+  assert.equal(r.consulta, '¿cómo van las copas en la cava?');
+  assert.equal(r.tarjetas[0].id, 'c3', 'la primera tarjeta es la de copas');
   assert.equal(r.decisionManual.estado, 'respaldada');
   /* Y sin la conversación, la misma pregunta suelta no tiene de dónde seguir. */
   assert.equal(rutaDeLaPregunta('¿y las copas?', []).motivo === 'seguimiento', false);
@@ -482,3 +485,35 @@ test('modo manual: con tarjetas la decisión es respaldada o parcial; sin ellas,
   }));
   estado.manualActivo = null;
 }));
+
+test('seguimiento por sustitución: cambia el objeto, el lugar o el complemento; si pregunta otra cosa, nada', () => {
+  assert.equal(sustituirObjeto('¿cómo se doblan las toallas?', '¿y las sábanas?'), '¿cómo se doblan las sábanas?');
+  assert.equal(sustituirObjeto('cuantas camisas por fila en la mesa', 'y en los nichos?'), 'cuantas camisas por fila en los nichos');
+  assert.equal(sustituirObjeto('¿de qué color es la etiqueta de esencial?', '¿y la de lounge?'), '¿de qué color es la etiqueta de lounge?');
+  assert.equal(sustituirObjeto('¿cómo van las botellas en la cava?', '¿y las copas?'), '¿cómo van las copas en la cava?', '«en la cava» es el lugar, no el objeto');
+  assert.equal(sustituirObjeto('¿qué días hay degustación?', '¿a qué hora?'), null, 'sin conector');
+  assert.equal(sustituirObjeto('¿cuántas piezas por talla?', '¿y si falta una talla?'), null, 'con verbo es otra pregunta');
+  assert.equal(sustituirObjeto('¿cuántos ml por copa?', '¿y cuántas copas por cliente?'), null, 'con interrogativo es otra pregunta');
+  assert.equal(sustituirObjeto('¿qué va al frente?', '¿y las mesas?'), null, 'sin objeto que cambiar');
+  assert.equal(sustituirObjeto('¿cómo van las botellas?', '¿y copas?'), null, 'sin artículo no se adivina');
+});
+
+test('ordinales: «primera etapa» es la «1° ETAPA» del manual, no una frase de otra sección', () => {
+  const A = '388 MESA FINA DEMO.pdf', B = '210 BOUTIQUE DEMO.pdf';
+  const c = (doc, page, heading, text) => indexChunk({ id: doc + page, source: 'pdf', docName: doc, page, heading, text });
+  /* La otra sección dice «primera etapa» muchas veces: sin traducir el ordinal a
+     cifra, la pregunta salía con el aviso de que eso es de la boutique. */
+  const chunks = [
+    c(A, 3, 'FLUJO PRINCIPAL', '1° ETAPA: vajilla de diario al frente.\n2° ETAPA: cristalería en la góndola.'),
+    c(B, 2, 'PRIMERA COMPRA', 'En la primera visita la clienta recibe la tarjeta. Primera etapa del programa.'),
+    c(B, 3, 'ETAPA DE LEALTAD', 'La primera etapa de lealtad dura 30 días; la primera etapa termina con la segunda compra.'),
+    c(B, 4, 'ETAPAS', 'Primera etapa y segunda etapa del recorrido de la clienta en la boutique.'),
+  ];
+  conEstado({ docs: [{ name: A }, { name: B }], docChunks: chunks, manualActivo: A }, () => {
+    for (const q of ['¿qué va en la primera etapa?', '¿qué va en la segunda etapa?']) {
+      const r = respuestaSinModelo(q, [], x => rutaDeLaPregunta(x, []));
+      assert.ok(!r.avisoAusente, q + ': ' + r.avisoAusente);
+      assert.equal(r.tarjetas[0].c.page, 3);
+    }
+  }, () => { reiniciarCaches(); reconstruirIndice(); });
+});

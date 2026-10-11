@@ -1,15 +1,15 @@
 {
- "bateria": "a5f4f20f5767af70",
- "version": "ap-v1.7.6",
+ "bateria": "104669fa73cf3fab",
+ "version": "ap-v1.18.5",
  "resumen": {
-  "preguntas": 93,
-  "datoBien": 74,
-  "dato": 78,
+  "preguntas": 99,
+  "datoBien": 81,
+  "dato": 84,
   "noEstaBien": 14,
   "noEsta": 15,
-  "hit1": 0.9103,
-  "hit3": 0.9615,
-  "mrr": 0.9338
+  "hit1": 0.9286,
+  "hit3": 0.9643,
+  "mrr": 0.9444
  },
  "preguntas": [
   {
@@ -856,12 +856,11 @@
    "q": "¿y las sábanas?",
    "tipo": "dato",
    "cat": "conversación",
-   "ok": 0,
-   "top1": 0,
-   "hit1": 0,
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
    "hit3": 1,
-   "rr": 0.5,
-   "fallo": "página sin el dato"
+   "rr": 1
   },
   {
    "i": 77,
@@ -876,34 +875,100 @@
   },
   {
    "i": 78,
+   "q": "¿y en las camisas?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 79,
+   "q": "¿y los pantalones?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 80,
+   "q": "¿y la de Lounge?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 81,
+   "q": "¿y en el inferior?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 82,
+   "q": "¿y la mesa nido?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 83,
+   "q": "¿y cuántas copas por cliente?",
+   "tipo": "dato",
+   "cat": "conversación",
+   "ok": 1,
+   "top1": 1,
+   "hit1": 1,
+   "hit3": 1,
+   "rr": 1
+  },
+  {
+   "i": 84,
    "q": "¿cuántos maniquíes van en la boutique?",
    "tipo": "no-esta",
    "cat": "cuántos",
    "ok": 1
   },
   {
-   "i": 79,
+   "i": 85,
    "q": "¿a qué temperatura va la cerveza?",
    "tipo": "no-esta",
    "cat": "palabra parecida",
    "ok": 1
   },
   {
-   "i": 80,
+   "i": 86,
    "q": "¿cada cuánto se cambia el maniquí?",
    "tipo": "no-esta",
    "cat": "otra seccion lo trae",
    "ok": 1
   },
   {
-   "i": 81,
+   "i": 87,
    "q": "¿en qué volumen va la música?",
    "tipo": "trampa",
    "cat": "otra seccion lo trae",
    "ok": 1
   },
   {
-   "i": 82,
+   "i": 88,
    "q": "¿qué distancia lleva la góndola?",
    "tipo": "no-esta",
    "cat": "otra seccion lo trae",
@@ -911,70 +976,70 @@
    "fallo": "enseña tarjeta"
   },
   {
-   "i": 83,
+   "i": 89,
    "q": "¿qué marcas van en el mundo lounge?",
    "tipo": "trampa",
    "cat": "otra seccion lo trae",
    "ok": 1
   },
   {
-   "i": 84,
+   "i": 90,
    "q": "¿cuánto cuesta el vino tinto?",
    "tipo": "no-esta",
    "cat": "precio",
    "ok": 1
   },
   {
-   "i": 85,
+   "i": 91,
    "q": "¿cuántas piezas por talla?",
    "tipo": "trampa",
    "cat": "otra seccion lo trae",
    "ok": 1
   },
   {
-   "i": 86,
+   "i": 92,
    "q": "¿cuándo me tocan vacaciones?",
    "tipo": "trampa",
    "cat": "fuera del manual",
    "ok": 1
   },
   {
-   "i": 87,
+   "i": 93,
    "q": "¿qué hago con la mercancía dañada?",
    "tipo": "no-esta",
    "cat": "fuera del manual",
    "ok": 1
   },
   {
-   "i": 88,
+   "i": 94,
    "q": "¿cuántos litros tiene una botella de vino?",
    "tipo": "no-esta",
    "cat": "cifra parecida",
    "ok": 1
   },
   {
-   "i": 89,
+   "i": 95,
    "q": "¿de qué color es el uniforme de la asesora?",
    "tipo": "no-esta",
    "cat": "fuera del manual",
    "ok": 1
   },
   {
-   "i": 90,
+   "i": 96,
    "q": "¿cuántas velas lleva la mesa de entrada?",
    "tipo": "no-esta",
    "cat": "cuántos",
    "ok": 1
   },
   {
-   "i": 91,
+   "i": 97,
    "q": "¿cómo se hace el inventario?",
    "tipo": "no-esta",
    "cat": "fuera del manual",
    "ok": 1
   },
   {
-   "i": 92,
+   "i": 98,
    "q": "¿a qué temperatura va la cava?",
    "tipo": "trampa",
    "cat": "otra seccion lo trae",

@@ -28,7 +28,7 @@ estamos y qué sigue, en orden.
 | Seguridad | Instrucciones escondidas en un PDF: spotlighting, neutralización, aviso al cargar y enlaces con datos como texto (ADR 0004) |
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
 | Pruebas | Arnés 305, agente simulado, 104 pruebas en Node (laboratorio, frontera del motor, revisión con foto y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
-| eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 74/78 datos y 14/15 «no está» |
+| eval-gate | Corpus público ficticio (4 manuales, 99 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 81/84 datos y 14/15 «no está» |
 | Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 6 de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección, la puerta de evidencia (con su contrato de decisión) y lo que decide cada respuesta fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso. El motor contesta en Node igual que en el navegador (`lab/motor-node.mjs`) |
 
 Las decisiones están en `docs/adr/`:
@@ -78,7 +78,11 @@ motor mientras el nivel 1 no cumpla su criterio de salida.
    - Medido con `lab/comparar.mjs` en desarrollo: arregla 10 (4 de dato y 6 «no está» de las
      cruzadas), rompe 0; el gate pasa de 68 a 74 de 78
    - una sola decisión con estado: respaldada, parcial, aclarar o sin evidencia
-   - seguimiento que sustituye el objeto («¿y las sandalias?»), en vez de pegar las dos preguntas
+   - **Hecho:** seguimiento que sustituye el objeto («¿y las sábanas?»), en vez de pegar las dos
+     preguntas. Gate de 80 a 81 de 84 con 6 conversaciones nuevas; desarrollo, arregla 0 y rompe 0
+   - **Hecho:** ordinales («primera etapa» contra «1° ETAPA»): ya no daban aviso; queda una prueba
+   - **Hecho:** «entallado» ya no se expande a «piezas»: quita tarjetas de relleno, sin cambiar
+     ninguna calificación
    - fragmento hermano: el patrón de ventana o fusión padre-hijo, acotado a la misma página y región
    - rótulos en mayúsculas que hoy se pierden al leer el PDF
 

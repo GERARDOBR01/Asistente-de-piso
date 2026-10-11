@@ -96,7 +96,7 @@ export const SYNONYMS={
   'proyecto':['project','zona experimental','capsula'],
   'silueta':['outfit completo','look','coordinado'],
   'concepto':['familia','coleccion','linea','capsule'],
-  'entallado':['tallas ordenadas','size run','secuencia tallas','piezas','pieza','cuantas piezas'],
+  'entallado':['tallas ordenadas','size run','secuencia tallas'],
   'piezas':['entallado','pieza','cantidad entallado','cuantas piezas'],
   'pieza':['entallado','piezas','cantidad entallado'],
   'coloracion':['colorizar','bloque color','gradiente color','order color'],
