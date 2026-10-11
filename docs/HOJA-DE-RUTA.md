@@ -16,7 +16,7 @@ estamos y qué sigue, en orden.
 - **Los manuales reales no entran al repo** (ni sus marcas ni sus cifras): los exámenes y los
   resultados con datos reales viven fuera.
 
-## Dónde estamos (5-oct-2026)
+## Dónde estamos (10-oct-2026)
 
 | Capa | Estado |
 |---|---|
@@ -27,15 +27,25 @@ estamos y qué sigue, en orden.
 | Verificación | Cifras, nombres, páginas, citas y atadura; certeza baja a MEDIA si algo no se comprueba |
 | Seguridad | Instrucciones escondidas en un PDF: spotlighting, neutralización, aviso al cargar y enlaces con datos como texto (ADR 0004) |
 | Aprende del piso | Hecho. **Sin medir su efecto todavía** |
-| Pruebas | Arnés 305, agente simulado, 21 pruebas en Node (laboratorio, frontera del motor y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
-| eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 68/78 datos y 14/15 «no está» |
-| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 5 de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección, la puerta de evidencia (con su contrato de decisión) y lo que decide cada respuesta fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso. El motor contesta en Node igual que en el navegador (`lab/motor-node.mjs`) |
+| Pruebas | Arnés 305, agente simulado, 104 pruebas en Node (laboratorio, frontera del motor, revisión con foto y propiedades con fast-check) y `tsc --checkJs`, todo en el CI |
+| eval-gate | Corpus público ficticio (4 manuales, 93 preguntas): el CI falla si una pregunta pasa de bien a mal. Línea base 74/78 datos y 14/15 «no está» |
+| Código | Módulos ES sin bundler (ADR 0005), pasos 1 a 5b de 8: seguridad, texto, el estado del corpus, el índice (BM25, erratas, layout del PDF, fragmentos), la búsqueda, la ruta de sección, la puerta de evidencia (con su contrato de decisión) y lo que decide cada respuesta fuera de `index.html`, con golden master idéntico sobre 667 preguntas reales en cada paso. El motor contesta en Node igual que en el navegador (`lab/motor-node.mjs`) |
 
 Las decisiones están en `docs/adr/`:
 - **0002, búsqueda híbrida:** medida, con una mejora chica que nunca rompe una pregunta.
 - **0003, abstención conformal:** la garantía se cumple, pero la mejora no se confirmó. Está en revisión.
 - **0004, prompt injection.**
 - **0005, módulos sin bundler:** cómo se parte `index.html` y en qué orden.
+- **0006, puerta sin modelo:** el criterio de salida de la Fase 3, fijado antes de la corrida.
+- **0007, revisión con foto.**
+
+Lo último que salió (ap-v1.13 a v1.18):
+- **v1.13 a v1.15, Revisar:** SynthID revisado a mano cuando la app no puede probar el origen, y
+  «Nueva foto» sin recargar.
+- **v1.14, ficha del manual:** 6 páginas por petición y tope diario, para no acabarse la cuota.
+- **v1.16, Preguntar:** «Sigue en el manual» con la ruta de los básicos, y el chat vuelve al recargar.
+- **v1.17 y v1.18, diseño:** vidrio neutro con un solo punto rojo, que marca la sección activa,
+  y cascada de paneles.
 
 ## Ahora: tres niveles (oct-2026, el modelo local aparcado)
 
@@ -49,7 +59,7 @@ motor mientras el nivel 1 no cumpla su criterio de salida.
      ni la abstención que inventa una medida.
    - Falta: Gerardo revisa la batería de confirmación 2.
 2. **El motor separado y medible.**
-   - Terminar de partir `app.js` hasta la puerta (ADR 0005, pasos 2 a 5), con el golden master
+   - **Hecho:** partir `app.js` hasta la puerta (ADR 0005, pasos 2 a 5b), con el golden master
      idéntico en cada paso.
    - Hecho: `lab/motor-node.mjs`. El motor importado en Node contesta igual que el navegador
      (667/667, y el gate lo comprueba en cada PR) en 7 s en vez de ~5 min.
@@ -79,7 +89,7 @@ motor mientras el nivel 1 no cumpla su criterio de salida.
 - 0 preguntas rotas en desarrollo y en el gate;
 - los «no está» no empeoran;
 - mejora pareada en la confirmación con el IC 95 % por encima de cero;
-- el número tal cual en el ADR 0006.
+- el número tal cual en el [ADR 0006](adr/0006-puerta-sin-modelo.md), que fija este criterio antes de correr.
 
 Si no se cumple, se itera en desarrollo, no en confirmación.
 

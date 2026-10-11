@@ -55,13 +55,31 @@ if (!vSw || vSw !== vApp) {
   console.log(`✗ [versión] sw.js dice ${vSw} y src/app.js dice ${vApp}`);
   await b.close(); srv.close(); process.exit(1);
 }
-/* Un módulo que no esté en la lista del service worker no carga sin señal, y
-   la app no arranca: en modo avión se ve en blanco. */
-const enSw = (fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8').match(/const CODIGO=\[([^\]]*)\]/) || [])[1] || '';
-const modulos = fs.readdirSync(path.join(RAIZ, 'src'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => 'src/' + f.split(path.sep).join('/'));
-const faltan = modulos.filter(m => !enSw.includes(`'${m}'`));
-if (faltan.length) {
-  console.log(`✗ [sin señal] sw.js no guarda: ${faltan.join(', ')}`);
+/* La lista del service worker, en los dos sentidos:
+   - un módulo que no esté en CODIGO no carga sin señal, y la app no arranca:
+     en modo avión se ve en blanco. Lo mismo un archivo de src/ que no es
+     código (el .pem de C2PA) y no está en PAGINA;
+   - una entrada que apunta a un archivo borrado tumba `cache.addAll` y el
+     service worker no se instala nunca.
+   src/pruebas/ es la excepción: el arnés de ?test=1 no se guarda en el
+   teléfono. Los .d.ts no se sirven. */
+const sw = fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8');
+const lista = nombre => [...((sw.match(new RegExp(`const ${nombre}=\\[([^\\]]*)\\]`)) || [])[1] || '').matchAll(/'([^']+)'/g)].map(m => m[1]);
+const codigo = lista('CODIGO');
+const pagina = [...lista('PAGINA'), ...codigo];
+const enSrc = fs.readdirSync(path.join(RAIZ, 'src'), { recursive: true })
+  .map(f => 'src/' + f.split(path.sep).join('/'))
+  .filter(f => !f.startsWith('src/pruebas/') && !f.endsWith('.d.ts') && fs.statSync(path.join(RAIZ, f)).isFile());
+const faltan = [
+  ...enSrc.filter(f => f.endsWith('.js') && !codigo.includes(f)),
+  ...enSrc.filter(f => !f.endsWith('.js') && !pagina.includes(f)),
+];
+const sobran = pagina.filter(f => f !== './' && !fs.existsSync(path.join(RAIZ, f)));
+const deMas = codigo.filter(f => f.startsWith('src/pruebas/'));
+if (faltan.length || sobran.length || deMas.length) {
+  if (faltan.length) console.log(`✗ [sin señal] sw.js no guarda: ${faltan.join(', ')}`);
+  if (sobran.length) console.log(`✗ [sin señal] sw.js guarda archivos que no existen (cache.addAll falla): ${sobran.join(', ')}`);
+  if (deMas.length) console.log(`✗ [sin señal] el arnés no se guarda en el teléfono: ${deMas.join(', ')}`);
   await b.close(); srv.close(); process.exit(1);
 }
 let malas = [{}];
