@@ -28,7 +28,7 @@ Asistente conversacional de una sola página para el personal de piso de una tie
 responde dudas de montaje y estándar de exhibición desde el celular, parado frente al
 mueble, **sin instalar nada y sin cuenta**.
 
-**De dónde salió:** soy promotor visual en Liverpool (Guadalajara) y llegué a tener seis
+**De dónde salió:** soy promotor visual en una tienda departamental de Guadalajara y llegué a tener seis
 secciones a mi cargo, cada una con su propio manual de campaña. Nadie abre un manual de 40
 páginas frente al mueble, así que las dudas se resuelven preguntando o adivinando. Este
 asistente nació de ese problema, visto todos los días desde el piso. Más contexto en
@@ -36,8 +36,8 @@ asistente nació de ese problema, visto todos los días desde el piso. Más cont
 
 > **Demo con conocimiento 100 % sintético.** El cliente (*Mercadep*), las marcas
 > (`MarcaDemoA`–`MarcaDemoL`, y las cinco de la lámina de logos del manual demo), los mundos,
-> los porcentajes de piso y los números de manual son inventados. Ningún manual, marca, medida ni dato operativo de un cliente real vive en
-> este repositorio ni en su historial.
+> los porcentajes de piso y los números de manual son inventados. Ningún manual, medida ni dato operativo de un cliente real vive en
+> este repositorio.
 
 **[▶ Abrir el demo](https://gerardobr01.github.io/Asistente-de-piso/)** · sin API key funciona en modo manual; con tu propia key (Google AI Studio u OpenAI) activa el modo razonado.
 
@@ -756,7 +756,7 @@ búsqueda en todas las secciones—, que corren en `?test=1` con y sin manuales.
 Dos de esas preguntas no las escribí yo. Salieron del piso, con la API conectada y 101
 MUEBLES abierto, y sus respuestas venían marcadas con 👎:
 
-> «¿cuál es la marca propia?» → **«‹marca X› es la marca propia de liverpool»**
+> «¿cuál es la marca propia?» → **«‹marca X› es la marca propia de ‹la cadena›»**
 > «¿cuál es marca preferencial?» → **«‹marca X› es la marca preferencial»**
 
 Comprobado contra los manuales: «preferencial» no aparece en ninguno de los once, la marca
@@ -796,7 +796,7 @@ todo lo demás:
   detecta un razonamiento equivocado; detecta el dato traído de fuera del manual, que es el
   que llega al piso.
 - **Los nombres se reconocen por lo que sabe el corpus, no por las mayúsculas.** La respuesta
-  que falló decía la marca al principio de la frase y «liverpool» en minúscula, así que fiarse
+  que falló decía la marca al principio de la frase y el nombre de la cadena en minúscula, así que fiarse
   de la capitalización de la respuesta no habría servido para ninguna de las dos. Lo que sí
   sirve es cómo escribe el manual: un nombre propio aparece en mayúscula a mitad de frase —«la
   marca ‹X› Kids», «el sistema de ‹Nombre› de la cadena»— y no aparece nunca en minúscula.
@@ -868,7 +868,7 @@ Nada de esto es un problema, pero prefiero decirlo a que se descubra abriendo De
   guardado.
 - **Los manuales son de una cadena que existe, y el modelo la reconoce.** Es la vía de
   invención más difícil de tapar, porque lo que sale suena cierto y a veces lo es: «‹marca X› es la
-  marca propia de Liverpool» es verdad en el mundo y es falso en ese manual, que no dice ni
+  marca propia de ‹la cadena›» es verdad en el mundo y es falso en ese manual, que no dice ni
   una de las dos palabras. Hay tres defensas y ninguna es total: una regla del prompt que
   prohíbe usar lo que sepa de la cadena, un aviso en el contexto cuando una palabra de la
   pregunta no está en el manual activo, y la verificación de nombres, que es la única que no
