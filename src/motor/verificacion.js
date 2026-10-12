@@ -165,8 +165,8 @@ export function nombresSinRespaldo(respuesta,contexto){
 /* ── LO QUE SE LEYÓ EN UNA LÁMINA-IMAGEN ──────────
    Las láminas que casi no traen texto (MUNDOS Y MARCAS hecha de logos,
    «Clasificación de Departamentos» dibujada) van al modelo como imagen
-   (src/ia/laminas.js). Lo que lee ahí —JBE, Miniaturas, «Nuevo by Fashion
-   Fest»— no está en ningún texto que se pueda cotejar, y salía con «⚠ No pude
+   (src/ia/laminas.js). Lo que lee ahí —la marca que es un logo, la categoría
+   que está dibujada— no está en ningún texto que se pueda cotejar, y salía con «⚠ No pude
    verificar» y la certeza bajada: 7 de 42 respuestas correctas, medido con 15
    manuales reales el 11-oct-2026.
    Si la respuesta cita la página que vio como imagen, esos nombres se dicen
@@ -174,8 +174,9 @@ export function nombresSinRespaldo(respuesta,contexto){
    va debajo de la respuesta para compararlos. Se siguen enseñando: desde el
    texto no se distingue un logo leído de un nombre que el modelo trajo de lo
    que sabe. Se probó dejar con ⚠ los que el corpus tiene escritos en OTRO
-   manual, y no sirve: «barata», «regular» o JBE (logo en Accesorios, texto en
-   Zapatos) se quedaban marcados. Sin imagen citada, todo sigue como antes. */
+   manual, y no sirve: «barata», «regular» o una marca que es logo en una
+   sección y texto en otra se quedaban marcados. Sin imagen citada, todo sigue
+   como antes. */
 /**
  * @param {string[]} nombres  los que no están en el contexto de texto
  * @param {string} respuesta
@@ -190,6 +191,39 @@ export function separarNombresDeLamina(nombres,respuesta,laminas){
   const paginas=[...new Set(laminas.map(l=>String(l.page)).filter(p=>citadas.has(p)))];
   if(!paginas.length)return igual;
   return{nombres:[],deLamina:nombres,paginas}
+}
+
+/** «Se divide en 5 mundos:» y debajo los cinco. Ese 5 no está en el manual —lo
+   contó el modelo— y salía como «⚠ No pude verificar el dato 5» con la certeza
+   bajada (11-oct-2026, 15 manuales reales: la única falsa alarma que quedó).
+   Un número sin unidad que dice exactamente cuántos elementos enumera la
+   propia respuesta es un conteo de la respuesta, no un dato del manual: los
+   elementos sí se verifican uno por uno. Con unidad («5 cm») nunca es conteo.
+   @param {string} respuesta @returns {Set<string>} */
+export function conteosDeLista(respuesta){
+  /** @type {Set<string>} */
+  const out=new Set();
+  const lineas=(respuesta||'').split('\n');
+  const vineta=/^\s*(?:[-*•]|\d+[.)])\s+\S/;
+  for(let i=0;i<lineas.length;i++){
+    for(const m of lineas[i].matchAll(/(?<![\d.,$])(\d{1,2})(?![\d.,%)])\s+(?!cm\b|mm\b|m\b|mts?\b|metros?\b|cent|mil[ií]m|%|por\s*ciento|d[ií]as?\b|semanas?\b|mes|horas?\b|min)[a-záéíóúñ]+/gi)){
+      const n=Number(m[1]);
+      if(n<2)continue;
+      /* La lista de abajo: viñetas o números seguidos, saltando renglones vacíos. */
+      let items=0;
+      for(let j=i+1;j<lineas.length;j++){
+        if(!lineas[j].trim()){if(items)break;continue}
+        if(!vineta.test(lineas[j]))break;
+        items++;
+      }
+      /* O en el mismo renglón tras dos puntos: «en 3 mundos: A, B y C». */
+      const resto=lineas[i].slice((m.index||0)+m[0].length);
+      const dos=resto.indexOf(':');
+      const enLinea=dos<0?0:resto.slice(dos+1).replace(/\(.*?\)/g,'').split(/,|\s+y\s+|\s+e\s+/).map(x=>x.trim()).filter(x=>/\p{L}/u.test(x)).length;
+      if(items===n||enLinea===n)out.add(m[1]);
+    }
+  }
+  return out
 }
 
 /* «Vinos debe ser mayor a $1,200.00»: el cotejo partía la cifra en «1,200» y
@@ -270,7 +304,9 @@ export function verificarContraContexto(respuesta,contexto,{laminas=null}={}){
      «20[.[.,]]8», que no coincide con nada. Así, TODA cifra decimal se marcaba
      como no verificable aunque estuviera en el contexto —y estos manuales son
      decimales por todas partes: 20.8%, 38.5%, 11.5%—. Una sola pasada. */
+  const conteos=conteosDeLista(respuesta);
   const noVerificadas=[...cifras].filter(n=>{
+    if(conteos.has(n))return false;
     const esc=n.replace(/[.,]/g,'[.,]');
     /* Tampoco vale como coincidencia el principio de un decimal: «20» no es
        «20.8%», y el modelo que redondea una participación cambia el dato. */

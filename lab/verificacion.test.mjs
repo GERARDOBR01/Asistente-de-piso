@@ -7,7 +7,7 @@ import { conEstado, reiniciarCaches } from '../src/estado.js';
 import { indexChunk } from '../src/motor/indice.js';
 import {
   verificarContraContexto, verificarAtadura, cifrasCanonicas, nombresSinRespaldo,
-  entidadesDelCorpus, paginaComoLamina, separarNombresDeLamina,
+  entidadesDelCorpus, paginaComoLamina, separarNombresDeLamina, conteosDeLista,
 } from '../src/motor/verificacion.js';
 
 const D = '900 CALZADO DEMO.pdf';
@@ -105,3 +105,17 @@ test('verificación: lo leído en la lámina-imagen va aparte y no como aviso', 
     assert.deepEqual(separarNombresDeLamina(['Ondera'], resp, []), { nombres: ['Ondera'], deLamina: [], paginas: [] });
   }, reiniciarCaches);
 });
+
+/* «Se divide en 5 mundos» con los cinco debajo: el 5 lo contó el modelo. */
+test('verificación: el número que cuenta la propia lista no es un dato sin respaldo', () => conDocs(() => {
+  const ctx = bloque(14, 'MUNDOS', 'Colección\nBásicos\nKids\nMuebles\nMiniaturas');
+  const lista = 'La sección se divide en 5 mundos (pág. 14):\n\n- Colección\n- Básicos\n- Kids\n- Muebles\n- Miniaturas';
+  assert.deepEqual(verificarContraContexto(lista, ctx).cifras, []);
+  assert.deepEqual([...conteosDeLista('Hay 3 mundos: Colección, Básicos y Kids.')], ['3']);
+  assert.deepEqual([...conteosDeLista('1. Colección\n2. Básicos\n3. Kids')], [], 'los números de la lista no son conteos');
+  // Si no cuadra con la lista, sigue siendo un dato que hay que comprobar.
+  const mal = 'La sección se divide en 6 mundos (pág. 14):\n\n- Colección\n- Básicos\n- Kids\n- Muebles\n- Miniaturas';
+  assert.deepEqual(verificarContraContexto(mal, ctx).cifras, ['6']);
+  // Con unidad nunca es conteo.
+  assert.deepEqual([...conteosDeLista('Deja 3 cm:\n- a\n- b\n- c')], []);
+}));

@@ -28,7 +28,7 @@
 <meta property="og:image:type" content="image/jpeg"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="Asistente de piso: un globo de diálogo con una hoja de manual"/>
+<meta property="og:image:alt" content="Logo AP de Asistente de Piso: te contesta con la página y la lámina exacta del manual, y revisa tu montaje con una foto"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <title>Asistente de piso — Mercadep · Visual Merchandising</title>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet"/>
@@ -1672,15 +1672,15 @@ body::after{
 <!-- Las pestañas van abajo, al alcance del pulgar. El orden importa:
      switchTab() las enciende por posición (chat, revisar, docs, memory, config). -->
 <nav class="tabs" role="tablist" aria-label="Secciones de la app">
-  <button class="tab active" onclick="tocarPestana('chat')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Preguntar</button>
-  <button class="tab" onclick="tocarPestana('revisar')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Revisar</button>
-  <button class="tab" onclick="tocarPestana('docs')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span class="badge" id="badge" style="display:none">0</span></span>Manuales</button>
-  <button class="tab" onclick="tocarPestana('memory')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Tablero</button>
-  <button class="tab" onclick="tocarPestana('config')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>Ajustes</button>
+  <button class="tab active" onclick="tocarPestana('chat')" role="tab" aria-selected="true" aria-controls="panel-chat"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Preguntar</button>
+  <button class="tab" onclick="tocarPestana('revisar')" role="tab" aria-selected="false" aria-controls="panel-revisar"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Revisar</button>
+  <button class="tab" onclick="tocarPestana('docs')" role="tab" aria-selected="false" aria-controls="panel-docs"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span class="badge" id="badge" style="display:none">0</span></span>Manuales</button>
+  <button class="tab" onclick="tocarPestana('memory')" role="tab" aria-selected="false" aria-controls="panel-memory"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Tablero</button>
+  <button class="tab" onclick="tocarPestana('config')" role="tab" aria-selected="false" aria-controls="panel-config"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>Ajustes</button>
 </nav>
 
 <!-- REVISAR CON FOTO (ADR 0007): la maneja src/revision/ui.js -->
-<div class="panel" id="panel-revisar">
+<div class="panel" id="panel-revisar" role="tabpanel">
   <div class="rv" id="rv">
     <div class="rv-cab">
       <div>
@@ -1726,7 +1726,7 @@ body::after{
 </div>
 
 <!-- MANUALES -->
-<div class="panel" id="panel-docs">
+<div class="panel" id="panel-docs" role="tabpanel">
   <div class="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="ev(event)" ondrop="dropFile(event)">
     <span class="drop-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></span>
     <span class="drop-titulo">Agrega los manuales de temporada</span>
@@ -1762,7 +1762,7 @@ body::after{
 </div>
 
 <!-- CHAT -->
-<div class="panel active" id="panel-chat">
+<div class="panel active" id="panel-chat" role="tabpanel">
   <div class="quick-row">
     <span class="quick-label">Accesos rápidos</span>
     <button class="quick-edit-btn" onclick="toggleQuickEdit()">✏ Editar</button>
@@ -1818,12 +1818,12 @@ body::after{
 </div>
 
 <!-- TABLERO -->
-<div class="panel" id="panel-memory">
+<div class="panel" id="panel-memory" role="tabpanel">
   <div class="tablero" id="tablero"></div>
 </div>
 
 <!-- CONFIG -->
-<div class="panel" id="panel-config">
+<div class="panel" id="panel-config" role="tabpanel">
   <div class="card">
     <div class="config-fields">
     <div class="tema-row">
