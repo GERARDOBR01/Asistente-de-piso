@@ -1575,6 +1575,75 @@ body::after{
 .quick-btn,.status-pill,.hdr-marca{backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4)}
 @media (prefers-reduced-motion:reduce){body::after{animation:none;transition:none}}
 @media (prefers-reduced-transparency:reduce){body::after{display:none}}
+
+/* ════════════════════════════════════════════════
+   CELULAR FLUIDO (ap-v1.25.0)
+   Con 15 manuales la pestaña Manuales medía casi tres pantallas: zona de
+   carga de 200 px, una tarjeta de 115 px por manual y el selector de sección
+   al fondo. Ahora la lista es UNA tarjeta de vidrio con filas (un solo
+   desenfoque en vez de 16), la zona de carga se vuelve una fila cuando ya hay
+   manuales, y pasando de 6 filas el resto se despliega a pedido.
+════════════════════════════════════════════════ */
+.drop-zone.compacta{flex-direction:row;justify-content:center;gap:10px;padding:10px 16px;min-height:56px;border-style:dashed;border-radius:18px}
+.drop-zone.compacta::before,.drop-zone.compacta .drop-accion,.drop-zone.compacta .drop-sub{display:none}
+.drop-zone.compacta .drop-icon{width:34px;height:34px;margin:0;border-radius:11px}
+.drop-zone.compacta .drop-icon .ico{width:18px;height:18px}
+.drop-zone.compacta .drop-titulo{font-size:14.5px}
+#panel-docs.active .drop-zone.compacta .drop-icon{animation:none}
+#panel-docs .seccion-row{margin-top:12px}
+#panel-docs .rag-info{margin-top:8px}
+
+.doc-list{gap:0;margin-top:12px;background:var(--s1);border:1px solid var(--border2);border-radius:20px;overflow:hidden;box-shadow:var(--vidrio-sombra);
+  backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%)}
+.doc-list .doc-item,.doc-list .doc-item.builtin{display:flex;flex-wrap:nowrap;align-items:center;gap:12px;min-height:60px;padding:9px 6px 9px 14px;
+  margin:0;background:none;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+.doc-list .doc-item:last-child{border-bottom:0}
+.doc-list .doc-item[hidden]{display:none}
+.doc-list .doc-item.builtin{background:var(--gglow);padding-right:14px}
+.doc-list .doc-icon,.doc-list .doc-item.builtin .doc-icon{order:0;width:34px;height:34px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--text2);
+  display:flex;align-items:center;justify-content:center}
+.doc-list .doc-icon .ico-linea{width:18px;height:18px}
+.doc-texto{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.doc-list .doc-name{flex:none;order:0;margin:0;font-size:14px;font-weight:500;line-height:1.3;color:var(--text);white-space:normal;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.doc-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font-size:12px;line-height:1.35;color:var(--text3)}
+.doc-list .doc-tag,.doc-list .doc-item.builtin .doc-tag{order:0;margin:0}
+#panel-docs .seccion-select{flex:1 1 100%;min-width:0}
+.doc-list .doc-releer{color:var(--amber);font-weight:600}
+.doc-list .doc-remove{order:0;flex-shrink:0;width:44px;height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;border-radius:22px;font-size:14px;color:var(--text3)}
+.docs-aviso{margin-top:8px;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.45;color:var(--text2);
+  background:rgba(245,185,66,0.08);border:1px solid rgba(245,185,66,0.30)}
+.docs-ver-todos{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:8px;border:1px solid var(--border2);border-radius:999px;
+  background:var(--s1);color:var(--text2);font:500 13.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.docs-ver-todos:active{transform:scale(.985)}
+
+/* Cambiar de pestaña tiene que sentirse inmediato: la entrada del panel dura
+   .22 s y la cascada se corta en la 5.ª pieza (.12 s en total). */
+.panel.active{animation-duration:.22s}
+#panel-chat.active>*,#panel-chat.active .quick-btns>*,#panel-chat.active .vacio-ejemplos>*,
+#panel-revisar.active .rv>*,#panel-revisar.active .rv-acciones>*,
+#panel-docs.active>*,#panel-docs.active .doc-list>*,
+#panel-memory.active .tablero>*,#panel-memory.active .tb-tiles>*,
+#panel-config.active .config-fields>*,#panel-config.active .provider-tabs>*{animation-duration:.3s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(2){--d:.03s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(3){--d:.06s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(4){--d:.09s}
+:is(#panel-chat,.quick-btns,.vacio-ejemplos,.rv,.rv-acciones,#panel-docs,.doc-list,.tablero,.tb-tiles,.config-fields,.provider-tabs)>:nth-child(n+5){--d:.12s}
+
+/* En pantallas táctiles (el A54): la aurora se queda quieta —solo se corre al
+   cambiar de pestaña— y el desenfoque en vivo queda para lo que flota. Las
+   piezas repetidas usan un fondo un poco más opaco: con la aurora quieta y
+   desenfocada casi no se nota, y el scroll deja de recalcular un vidrio por
+   cada chip y cada tarjeta. */
+@media (pointer:coarse){
+  body::after{animation:none;transition:translate .5s var(--suave)}
+  .tb-tile,.tb-bloque,.quick-btn,.seccion-row,.doc-item,.rag-info,.restore-banner,.avanzado,.status-pill,.hdr-marca{
+    backdrop-filter:none;-webkit-backdrop-filter:none}
+  .tb-tile,.tb-bloque,.quick-btn,.seccion-row,.rag-info,.restore-banner,.avanzado,.status-pill{background:color-mix(in srgb,var(--solido) 60%,transparent)}
+}
+/* Los avisos se cierran con un toque. */
+.toast{pointer-events:auto;cursor:pointer}
 </style>
 </head>
 <body>
@@ -1597,11 +1666,11 @@ body::after{
 <!-- Las pestañas van abajo, al alcance del pulgar. El orden importa:
      switchTab() las enciende por posición (chat, revisar, docs, memory, config). -->
 <nav class="tabs" role="tablist" aria-label="Secciones de la app">
-  <button class="tab active" onclick="switchTab('chat')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Preguntar</button>
-  <button class="tab" onclick="switchTab('revisar')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Revisar</button>
-  <button class="tab" onclick="switchTab('docs')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span class="badge" id="badge" style="display:none">0</span></span>Manuales</button>
-  <button class="tab" onclick="switchTab('memory')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Tablero</button>
-  <button class="tab" onclick="switchTab('config')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>Ajustes</button>
+  <button class="tab active" onclick="tocarPestana('chat')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Preguntar</button>
+  <button class="tab" onclick="tocarPestana('revisar')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Revisar</button>
+  <button class="tab" onclick="tocarPestana('docs')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span class="badge" id="badge" style="display:none">0</span></span>Manuales</button>
+  <button class="tab" onclick="tocarPestana('memory')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Tablero</button>
+  <button class="tab" onclick="tocarPestana('config')"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>Ajustes</button>
 </nav>
 
 <!-- REVISAR CON FOTO (ADR 0007): la maneja src/revision/ui.js -->
@@ -1663,13 +1732,17 @@ body::after{
     <div class="proc-msg" id="proc-msg">⏳ Procesando…</div>
     <div class="proc-progress"><div class="proc-bar" id="proc-bar"></div></div>
   </div>
-  <div class="doc-list" id="doc-list"></div>
+  <!-- Con manuales cargados, lo que más se usa va arriba: la sección activa y el
+       resumen. La lista es una sola tarjeta y se recorta a 6 filas. -->
   <div class="seccion-row" id="seccion-activa-wrap" style="display:none">
     <span class="seccion-label">Sección que estás trabajando</span>
     <select class="seccion-select" id="seccion-activa" onchange="cambiarSeccion(this.value)"></select>
     <span class="seccion-hint">Solo se consulta ese manual: la cita y la lámina serán de ahí.</span>
   </div>
   <div class="rag-info" id="rag-info"></div>
+  <div class="docs-aviso" id="docs-aviso" style="display:none"></div>
+  <div class="doc-list" id="doc-list"></div>
+  <button class="docs-ver-todos" id="docs-ver-todos" type="button" onclick="alternarListaManuales()" style="display:none"></button>
   <div class="docs-acciones" id="docs-acciones" style="display:none">
     <span class="docs-nota" id="docs-nota"></span>
     <span class="docs-btns">

@@ -1255,11 +1255,73 @@ async function pruebasAgenteAisladas(){
     rebuildCorpus();
   }
 }
+/* Celular fluido (ap-v1.25.0): la lista de manuales compacta, el scroll de
+   cada pestaña y el botón atrás. Deja manuales, pestaña, historia y
+   almacenamiento como los encontró. */
+async function pruebasMovil(){
+  const filas=[];
+  const fila=(q,ok)=>filas.push({tipo:'movil',q,ok:!!ok,detalle:ok?'correcto':'falla'});
+  const g={docs,abierta:listaAbierta,tab:pestanaActiva()};
+  let guardada=null;try{guardada=sessionStorage.getItem('ap_lista_manuales')}catch{}
+  const esperaPop=()=>new Promise(r=>{
+    const f=()=>{removeEventListener('popstate',f);setTimeout(r,0)};
+    addEventListener('popstate',f);setTimeout(()=>{removeEventListener('popstate',f);r()},600);
+  });
+  try{
+    docs=Array.from({length:15},(_,i)=>({name:`Demo ${i}.pdf`,size:'3 MB',pageCount:20,chunkCount:40,figureCount:8,lectura:i<3?1:LECTURA_VERSION}));
+    listaAbierta=false;renderDocs();
+    const filasDoc=[...document.querySelectorAll('#doc-list .doc-item')];
+    const visibles=filasDoc.filter(f=>!f.hidden).length;
+    fila('con manuales cargados la zona de carga se vuelve una fila',document.querySelector('#panel-docs .drop-zone').classList.contains('compacta'));
+    fila('con 15 manuales se ven 6 filas (el integrado y 5) y «Ver los 15 manuales»',visibles===6&&document.getElementById('docs-ver-todos').textContent==='Ver los 15 manuales');
+    const sel=document.getElementById('seccion-activa-wrap'),lista=document.getElementById('doc-list');
+    fila('el selector de sección va antes de la lista',!!(sel.compareDocumentPosition(lista)&Node.DOCUMENT_POSITION_FOLLOWING));
+    const aviso=document.getElementById('docs-aviso');
+    fila('la lectura vieja se avisa una sola vez arriba y cada fila solo marca «↻ releer»',
+      aviso.style.display!=='none'&&aviso.textContent.includes('3 manuales')&&document.querySelectorAll('#doc-list .doc-releer').length===3
+      &&![...document.querySelectorAll('#doc-list .doc-releer')].some(x=>x.textContent.includes('tablas')));
+    alternarListaManuales();
+    fila('«Ver los 15» despliega todas las filas',[...document.querySelectorAll('#doc-list .doc-item')].every(f=>!f.hidden)&&document.getElementById('docs-ver-todos').textContent==='Ver menos');
+    alternarListaManuales();
+    docs=[];renderDocs();
+    fila('sin manuales la zona de carga vuelve a ser grande y no hay botón ni aviso',
+      !document.querySelector('#panel-docs .drop-zone').classList.contains('compacta')&&document.getElementById('docs-ver-todos').style.display==='none'&&aviso.style.display==='none');
+  }finally{
+    docs=g.docs;listaAbierta=g.abierta;
+    try{guardada===null?sessionStorage.removeItem('ap_lista_manuales'):sessionStorage.setItem('ap_lista_manuales',guardada)}catch{}
+    renderDocs();
+  }
+  /* Pestañas e historia. */
+  const largo0=window.history.length;
+  try{
+    if(pestanaActiva()!=='chat'){switchTab('chat');await esperaPop()}
+    switchTab('docs');
+    fila('salir de Preguntar deja una entrada en la historia',window.history.state&&window.history.state.tab==='docs'&&window.history.length===largo0+1);
+    scrollPorPestana.config=0;
+    switchTab('config');
+    fila('entre otras pestañas se reemplaza la entrada (la pila no crece)',window.history.state.tab==='config'&&window.history.length===largo0+1);
+    fila('cada pestaña guarda su scroll al salir',typeof scrollPorPestana.docs==='number');
+    const vuelta=esperaPop();window.history.back();await vuelta;
+    fila('atrás regresa a Preguntar',pestanaActiva()==='chat');
+    abrirVisor('icons/icon-192.png','pie','');
+    fila('abrir una lámina deja una entrada para que atrás la cierre',window.history.state&&window.history.state.visor===true);
+    const cierre=esperaPop();window.history.back();await cierre;
+    fila('atrás cierra la lámina y se queda en la pestaña',!document.getElementById('visor').classList.contains('abierto')&&pestanaActiva()==='chat');
+    abrirVisor('icons/icon-192.png','pie','');
+    const conX=esperaPop();cerrarVisor();await conX;
+    fila('cerrar la lámina con ✕ también quita su entrada',!(window.history.state&&window.history.state.visor)&&!ignorarPop);
+  }catch(e){fila('las pruebas de navegación terminan: '+e.message,false)}
+  finally{if(g.tab!==pestanaActiva())switchTab(g.tab,{desdeHistorial:true})}
+  return filas;
+}
 export async function renderPanelPruebas(){
   const{resumen,filas}=correrPruebasAisladas();
   const delAgente=await pruebasAgenteAisladas();
   filas.push(...delAgente);
   resumen.agente=`${delAgente.filter(f=>f.ok).length}/${delAgente.length}`;
+  const delMovil=await pruebasMovil();
+  filas.push(...delMovil);
+  resumen.movil=`${delMovil.filter(f=>f.ok).length}/${delMovil.length}`;
   window.__pruebas={resumen,filas};
   const fallos=filas.filter(f=>!f.ok).length;
   const wrap=document.createElement('div');
