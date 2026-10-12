@@ -197,6 +197,8 @@ const MEDIR = async ({ q, turnos, h, m, clave, modelo, variante, modo, motor }) 
     cuerpo: el?.querySelector('.msg-body')?.innerText || '',
     etiqueta: el?.querySelector('.msg-label')?.innerText || '',
     aviso: el?.querySelector('.verify-warn')?.innerText || '',
+    /* Lo leído en una lámina que es imagen: nota aparte, no aviso. */
+    notaLamina: el?.querySelector('.verify-lamina')?.innerText || '',
     contesto: el?.querySelector('.msg-modelo')?.textContent || '',
     error: !!el?.querySelector('.err-detail'),
     /* Lo que enseña la tarjeta además del texto: la cabecera (manual, páginas,
@@ -254,6 +256,7 @@ function resumir(filas) {
     datoEnContexto: datos.some(f => f.enContexto != null) ? cuenta(datos, f => f.enContexto) : '—',
     noEstaBienDicho: cuenta(huecos, f => f.ok),
     avisosSinRespaldo: filas.filter(f => f.sinRespaldo).length,
+    notasDeLamina: filas.filter(f => (f.notaLamina || '').trim()).length,
     errores: filas.filter(f => f.error).length,
     respaldo: filas.filter(f => /respaldo/.test(f.contesto || '')).length,
     fallos: tipos,

@@ -14,7 +14,8 @@ import { mismaCosa } from './puerta.js';
 /** @typedef {Cifra & {palabras: string[], propias: boolean, tramo: string}} CifraConTramo */
 /** @typedef {{valor: string, valores: string[], familia: string, txt: string, pagina: string | null, titulo: string, tit: string[], propias: string[], cerca: string[], rotulo: boolean}} Ocurrencia */
 /** @typedef {{cifra: string, sujeto: string, pagina: string | null, pegadaA: string, rival: string, paginaRival: string | null}} Atadura */
-/** @typedef {{cifras: string[], paginas: string[], nombres: string[], citadas: Set<string>, atadas: Atadura[]}} Verificacion */
+/** @typedef {{cifras: string[], paginas: string[], nombres: string[], nombresDeLamina: string[], paginasDeLamina: string[], citadas: Set<string>, atadas: Atadura[], certezaBajada?: boolean}} Verificacion */
+/** @typedef {{doc: string, page: number | string}} LaminaVista */
 
 /* ════════════════════════════════════════════════
    VERIFICACIÓN CONTRA EL CONTEXTO
@@ -161,6 +162,36 @@ export function nombresSinRespaldo(respuesta,contexto){
   return[...out.values()]
 }
 
+/* ── LO QUE SE LEYÓ EN UNA LÁMINA-IMAGEN ──────────
+   Las láminas que casi no traen texto (MUNDOS Y MARCAS hecha de logos,
+   «Clasificación de Departamentos» dibujada) van al modelo como imagen
+   (src/ia/laminas.js). Lo que lee ahí —JBE, Miniaturas, «Nuevo by Fashion
+   Fest»— no está en ningún texto que se pueda cotejar, y salía con «⚠ No pude
+   verificar» y la certeza bajada: 7 de 42 respuestas correctas, medido con 15
+   manuales reales el 11-oct-2026.
+   Si la respuesta cita la página que vio como imagen, esos nombres se dicen
+   aparte —«leído de la imagen de la pág. N»—, sin bajar la certeza, y la lámina
+   va debajo de la respuesta para compararlos. Se siguen enseñando: desde el
+   texto no se distingue un logo leído de un nombre que el modelo trajo de lo
+   que sabe. Se probó dejar con ⚠ los que el corpus tiene escritos en OTRO
+   manual, y no sirve: «barata», «regular» o JBE (logo en Accesorios, texto en
+   Zapatos) se quedaban marcados. Sin imagen citada, todo sigue como antes. */
+/**
+ * @param {string[]} nombres  los que no están en el contexto de texto
+ * @param {string} respuesta
+ * @param {LaminaVista[] | null | undefined} laminas  las páginas que el modelo vio como imagen
+ * @returns {{nombres: string[], deLamina: string[], paginas: string[]}}
+ */
+export function separarNombresDeLamina(nombres,respuesta,laminas){
+  const igual={nombres,deLamina:[],paginas:[]};
+  if(!nombres.length||!laminas||!laminas.length)return igual;
+  /* «pág. 17», «pág 17», «página 16», «[Manual.pdf · pág. 14]». */
+  const citadas=new Set([...respuesta.matchAll(/p[áa]g(?:\.|ina)?\s*(\d+)/gi)].map(m=>m[1]));
+  const paginas=[...new Set(laminas.map(l=>String(l.page)).filter(p=>citadas.has(p)))];
+  if(!paginas.length)return igual;
+  return{nombres:[],deLamina:nombres,paginas}
+}
+
 /* «Vinos debe ser mayor a $1,200.00»: el cotejo partía la cifra en «1,200» y
    «00» y no encontraba «1,200» porque detrás venía «.00». Se escriben igual de
    los dos lados antes de comparar: sin separador de miles y sin decimales en
@@ -187,10 +218,15 @@ function sinNumerosDeSeccion(texto){
   }
   return t
 }
-/** @param {string | null | undefined} respuesta @param {string | null | undefined} contexto @returns {Verificacion} */
-export function verificarContraContexto(respuesta,contexto){
+/**
+ * @param {string | null | undefined} respuesta
+ * @param {string | null | undefined} contexto
+ * @param {{laminas?: LaminaVista[] | null}} [opciones]  laminas: las páginas que el modelo vio como imagen
+ * @returns {Verificacion}
+ */
+export function verificarContraContexto(respuesta,contexto,{laminas=null}={}){
   /** @type {Verificacion} */
-  const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set(),atadas:[]};
+  const vacio={cifras:[],paginas:[],nombres:[],nombresDeLamina:[],paginasDeLamina:[],citadas:new Set(),atadas:[]};
   if(!respuesta||!contexto)return vacio;
 
   const texto=cifrasCanonicas(sinNumerosDeSeccion(respuesta
@@ -252,8 +288,9 @@ export function verificarContraContexto(respuesta,contexto){
      sacar las láminas que acompañan a la respuesta. */
   const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
 
+  const nombres=separarNombresDeLamina(nombresSinRespaldo(respuesta,contexto),respuesta,laminas);
   return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,
-    nombres:nombresSinRespaldo(respuesta,contexto),citadas,
+    nombres:nombres.nombres,nombresDeLamina:nombres.deLamina,paginasDeLamina:nombres.paginas,citadas,
     atadas:verificarAtadura(respuesta,contexto)}
 }
 

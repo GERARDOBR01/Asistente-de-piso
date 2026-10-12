@@ -1642,6 +1642,12 @@ body::after{
     backdrop-filter:none;-webkit-backdrop-filter:none}
   .tb-tile,.tb-bloque,.quick-btn,.seccion-row,.rag-info,.restore-banner,.avanzado,.status-pill{background:color-mix(in srgb,var(--solido) 60%,transparent)}
 }
+/* Lo que la respuesta leyó en una lámina que es imagen (renderNotaLamina):
+   nota neutra, no aviso; va justo antes de la lámina para compararla. */
+.verify-lamina{display:flex;gap:8px;align-items:flex-start;margin:10px 0 0;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.45;
+  color:var(--text2);background:var(--s1);border:1px solid var(--border2)}
+.verify-lamina::before{content:'';flex-shrink:0;width:15px;height:15px;margin-top:1px;background:currentColor;-webkit-mask:var(--i-hoja) center/contain no-repeat;mask:var(--i-hoja) center/contain no-repeat}
+.verify-lamina strong{color:var(--text);font-weight:600}
 /* Los avisos se cierran con un toque. */
 .toast{pointer-events:auto;cursor:pointer}
 </style>

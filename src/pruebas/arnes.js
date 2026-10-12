@@ -854,10 +854,11 @@ function pruebasRobustez(){
       midiendo=true;docFigures=[];
       ultimosFragmentos=[{source:'pdf',docName:D,page:12,heading:'TENIS CASUAL',text:'25% de\nparticipación'}];
       docPaginas.set(D,[{page:12,titulo:'Planograma',imagen:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]);
-      const burbuja=resp=>{
+      const burbuja=(resp,vistas)=>{
         const el=document.createElement('div');el.innerHTML='<div class="msg-label"></div><div class="msg-body"></div>';
-        renderAssistantMessage(el,'[PENSAMIENTO INTERNO]\nx\n[RESPUESTA FINAL]\n'+resp+'\nCERTEZA: ALTA',100,'¿qué porcentaje es?',ctx);
-        return{certeza:el.querySelector('.msg-label').textContent,bajada:el.dataset.certezaBajada==='1',laminas:el.querySelectorAll('.evidencia-fig').length}
+        renderAssistantMessage(el,'[PENSAMIENTO INTERNO]\nx\n[RESPUESTA FINAL]\n'+resp+'\nCERTEZA: ALTA',100,'¿qué porcentaje es?',ctx,vistas);
+        return{certeza:el.querySelector('.msg-label').textContent,bajada:el.dataset.certezaBajada==='1',laminas:el.querySelectorAll('.evidencia-fig').length,
+          aviso:!!el.querySelector('.verify-warn'),nota:el.querySelector('.verify-lamina')?.textContent||''}
       };
       const mal=burbuja('Para Sneakers va el 25% de participación (pág. 12).');
       fila('atadura','con la cifra mal atada, «certeza alta» pasa a media',/media/.test(mal.certeza)&&mal.bajada,mal.certeza);
@@ -866,6 +867,13 @@ function pruebasRobustez(){
       fila('atadura','bien atada, la certeza alta se queda',/alta/.test(bien.certeza)&&!bien.bajada,bien.certeza);
       const sinDato=burbuja('Tenis casual lleva el 27% de participación (pág. 12).');
       fila('atadura','una cifra que no está en el contexto también baja la certeza',/media/.test(sinDato.certeza),sinDato.certeza);
+      /* Lámina-imagen (ap-v1.25.1): el nombre leído en ella no es un aviso. */
+      const logo='En tenis casual va la marca Ondera (pág. 12).';
+      const sinImagen=burbuja(logo);
+      fila('lámina','sin imagen, un nombre que no está en el texto avisa y baja la certeza',sinImagen.aviso&&/media/.test(sinImagen.certeza),sinImagen.certeza);
+      const conImagen=burbuja(logo,[{doc:D,page:12}]);
+      fila('lámina','con la imagen citada: nota aparte, sin aviso y la certeza alta se queda',
+        !conImagen.aviso&&/Ondera/.test(conImagen.nota)&&/pág\. 12/.test(conImagen.nota)&&/alta/.test(conImagen.certeza),conImagen.nota||conImagen.certeza);
     }finally{
       midiendo=gM;ultimosFragmentos=gU;docFigures=gF;
       if(gP)docPaginas.set(D,gP);else docPaginas.delete(D);

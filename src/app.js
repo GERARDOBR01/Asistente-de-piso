@@ -2101,7 +2101,7 @@ const LECTURA_VERSION=4;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.25.0';
+const VERSION_APP='ap-v1.25.1';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -3768,7 +3768,7 @@ async function sendMessage(){
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
-    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context);
+    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context,laminas);
     marcarModelo(loaderEl,contesto,!!respaldo);
 
     sessionTokens+=tokens||estimateTokens(streamedText);updateTokenBar();
@@ -3790,7 +3790,7 @@ async function sendMessage(){
     if(err.name==='AbortError'&&sinRespuesta){
       const parcial=getStreamingDisplayText(streamedText);
       if(parcial&&parcial.trim().length>50){
-        renderAssistantMessage(loaderEl,streamedText+`\n\n_[${nombreModelo} dejó de mandar texto; la respuesta puede estar incompleta]_`,estimateTokens(streamedText),q,context);
+        renderAssistantMessage(loaderEl,streamedText+`\n\n_[${nombreModelo} dejó de mandar texto; la respuesta puede estar incompleta]_`,estimateTokens(streamedText),q,context,laminas);
       }else{
         loaderEl.classList.remove('loading');
         msgBody.style.color='var(--amber)';
@@ -3798,7 +3798,7 @@ async function sendMessage(){
       }
     }else if(err.name==='AbortError'){
       if(streamedText.length>50){
-        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context);
+        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context,laminas);
         history.push({role:'user',content:q});
         const{final}=parseAIResponse(streamedText);
         history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)+'\n\n_[Generación detenida por el usuario]_'});
@@ -4430,11 +4430,28 @@ function renderAvisoVerificacion(res){
   return el
 }
 
+/* Los nombres que la respuesta leyó en una lámina que es imagen: no hay texto
+   con qué cotejarlos, así que no son un aviso amarillo ni bajan la certeza,
+   pero se dicen —la verificación no calla— con la página para compararlos. */
+function renderNotaLamina(res){
+  const nombres=(res&&res.nombresDeLamina)||[];
+  if(!nombres.length)return null;
+  const pags=(res.paginasDeLamina||[]).map(p=>'pág. '+escapeHtml(p)).join(' y ');
+  const el=document.createElement('div');
+  el.className='verify-lamina';
+  const lista=nombres.slice(0,4).map(escapeHtml).join(', ')+(nombres.length>4?'…':'');
+  el.innerHTML=`Leído en la imagen de la ${pags}, que no trae texto para comprobarlo: <strong>${lista}</strong>. Compáralo con la lámina.`;
+  return el
+}
+
 const CERTEZA_ROTULO={ALTA:{txt:'certeza alta',cls:'alta'},MEDIA:{txt:'certeza media',cls:'media'},GAP:{txt:'no está en el manual',cls:'gap'}};
-function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
+/* laminasVistas: las páginas que el motor clásico le mandó al modelo como
+   imagen en ESTA pregunta (src/ia/laminas.js). Lo que la respuesta lee en ellas
+   no está en el texto y se dice aparte (renderNotaLamina). */
+function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado,laminasVistas){
   const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
-  const verif=verificarContraContexto(cleanFinal,contextoEnviado);
+  const verif=verificarContraContexto(cleanFinal,contextoEnviado,{laminas:laminasVistas});
   /* La certeza la declara el modelo, pero no puede ser ALTA con un dato que la
      app no pudo comprobar en lo que el modelo tenía delante —o que encontró
      pegado a otra cosa—. Un «certeza alta» encima de un aviso amarillo le dice
@@ -4503,6 +4520,9 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     const pag=paginaComoLamina(ultimosFragmentos,vista?vista.page:[...verif.citadas].map(Number).sort((x,y)=>x-y)[0],docPaginas);
     if(pag){figsApi=[pag];figsApi.origen='pagina'}
   }
+  /* Lo leído en la lámina-imagen va justo antes de la lámina, para compararlo. */
+  const notaLamina=renderNotaLamina(verif);
+  if(notaLamina)loaderEl.appendChild(notaLamina);
   if(contextoEnviado)renderEvidencia(loaderEl,figsApi);
   /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
      manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */
