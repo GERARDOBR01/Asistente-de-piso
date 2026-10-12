@@ -41,9 +41,9 @@ export function laminasParaVer(fragmentos, todos, imagenDe, { deMarcas = false }
     const k = c.docName + '#' + c.page;
     if (vistas.has(k)) continue;
     vistas.add(k);
-    /* Las marcas muchas veces son LOGOS: en la tabla de MUNDOS Y MARCAS de
-       Zapatos, «1. [logo]» es JBE, y en Nuestra Casa la fila entera son logos
-       de HAUS. A una pregunta de marcas va la lámina de marcas aunque traiga
+    /* Las marcas muchas veces son LOGOS: en una tabla de MUNDOS Y MARCAS el
+       «1.» puede ser un logo sin texto, y hay secciones donde la fila entera
+       son logos. A una pregunta de marcas va la lámina de marcas aunque traiga
        texto. */
     const deLaminaDeMarcas = deMarcas && /marca/i.test(c.heading || '');
     if (!deLaminaDeMarcas && (texto.get(k) || 0) >= LAMINA_POCO_TEXTO) continue;

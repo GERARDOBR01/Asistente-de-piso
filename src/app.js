@@ -1531,7 +1531,9 @@ function switchTab(name,opciones={}){
   const nuevo=document.getElementById('panel-'+name);
   if(nuevo)nuevo.dataset.dir=ahora<antes?'izq':'der';
   pestanas.forEach((t,i)=>{
-    document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);
+    const boton=document.querySelectorAll('.tab')[i];
+    boton.classList.toggle('active',t===name);
+    boton.setAttribute('aria-selected',String(t===name));
     document.getElementById('panel-'+t).classList.toggle('active',t===name);
   });
   /* La pastilla de la barra se desliza a la pestaña activa (CSS: .tabs::before).
@@ -2101,7 +2103,7 @@ const LECTURA_VERSION=4;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.25.0';
+const VERSION_APP='ap-v1.25.2';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -3192,14 +3194,33 @@ function resaltar(texto,terminos){
    corte: «¿a qué altura va el sensor?» enseñaba el principio de REGLAS
    GLOBALES —el gancho, los pantalones colgados— y el «12-18 cm» había que ir a
    buscarlo con «Ver todo». Se enseñan primero los renglones que coinciden con
-   la pregunta, en su orden, y el texto entero queda a un toque. */
+   la pregunta, en su orden, y el texto entero queda a un toque.
+   Y el que más coincide va delante aunque esté más abajo: con el orden del
+   manual, la primera pregunta del demo abría con ENGANCHADO —coincide por
+   «pantalones»— y el SENSORES que contesta quedaba en segundo lugar. */
 function renglonesClave(lineas,terminos,max){
   const pun=lineas.map((l,i)=>{
     let s=0;
     for(const m of l.matchAll(/[\p{L}\p{N}]+/gu)){const w=terminos.get(normalizeText(m[0]).trim());if(w!==undefined)s+=w}
     return{i,s}
   });
-  return pun.filter(p=>p.s>0).sort((a,b)=>b.s-a.s||a.i-b.i).slice(0,max).map(p=>p.i).sort((a,b)=>a-b)
+  const top=pun.filter(p=>p.s>0).sort((a,b)=>b.s-a.s||a.i-b.i).slice(0,max);
+  if(!top.length)return[];
+  const mejor=top[0],resto=top.slice(1).sort((a,b)=>a.i-b.i);
+  /* Solo si gana con claridad; en un empate manda el orden del manual. */
+  const gana=top.length>1&&top[1].s<mejor.s;
+  return(gana?[mejor,...resto]:resto.concat(mejor).sort((a,b)=>a.i-b.i)).map(p=>p.i)
+}
+/* Los renglones elegidos, con «…» donde se salta texto del manual. */
+function extractoDeRenglones(lineas,clave,terminos,destino){
+  let prev=-1;
+  for(const i of clave){
+    if(prev<0){if(i>0)destino.append('… ')}
+    else destino.append(i===prev+1?'\n':'\n… ');
+    destino.append(resaltar(lineas[i],terminos));
+    prev=i;
+  }
+  if(prev<lineas.length-1)destino.append(' …');
 }
 function lineasDeFragmento(c,texto){
   /* El título ya va en la cabecera de la tarjeta: repetido como «## …» en la
@@ -3223,21 +3244,14 @@ function tarjetaDeFragmento(c,texto,terminos){
   const clave=completo.length>420?renglonesClave(lineas,terminos,3):[];
   if(clave.length){
     const extracto=document.createDocumentFragment();
-    let prev=-1;
-    for(const i of clave){
-      if(i>prev+1)extracto.append(prev<0?'… ':'\n… ');
-      else if(prev>=0)extracto.append('\n');
-      extracto.append(resaltar(lineas[i],terminos));
-      prev=i;
-    }
-    if(prev<lineas.length-1)extracto.append(' …');
+    extractoDeRenglones(lineas,clave,terminos,extracto);
     body.appendChild(extracto);
     const mas=document.createElement('button');mas.className='frag-mas';mas.type='button';mas.textContent='Ver la sección completa ▾';
     let abierto=false;
     mas.onclick=()=>{
       abierto=!abierto;body.textContent='';
       if(abierto)body.appendChild(resaltar(completo,terminos));
-      else{let p=-1;for(const i of clave){if(i>p+1)body.append(p<0?'… ':'\n… ');else if(p>=0)body.append('\n');body.append(resaltar(lineas[i],terminos));p=i}if(p<lineas.length-1)body.append(' …')}
+      else extractoDeRenglones(lineas,clave,terminos,body);
       mas.textContent=abierto?'Ver menos ▴':'Ver la sección completa ▾';
     };
     card.appendChild(mas);
@@ -3768,7 +3782,7 @@ async function sendMessage(){
 
     // Forzar render final completo
     if(pendingSanitize){clearTimeout(pendingSanitize);}
-    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context);
+    renderAssistantMessage(loaderEl,streamedText,tokens||estimateTokens(streamedText),q,context,laminas);
     marcarModelo(loaderEl,contesto,!!respaldo);
 
     sessionTokens+=tokens||estimateTokens(streamedText);updateTokenBar();
@@ -3790,7 +3804,7 @@ async function sendMessage(){
     if(err.name==='AbortError'&&sinRespuesta){
       const parcial=getStreamingDisplayText(streamedText);
       if(parcial&&parcial.trim().length>50){
-        renderAssistantMessage(loaderEl,streamedText+`\n\n_[${nombreModelo} dejó de mandar texto; la respuesta puede estar incompleta]_`,estimateTokens(streamedText),q,context);
+        renderAssistantMessage(loaderEl,streamedText+`\n\n_[${nombreModelo} dejó de mandar texto; la respuesta puede estar incompleta]_`,estimateTokens(streamedText),q,context,laminas);
       }else{
         loaderEl.classList.remove('loading');
         msgBody.style.color='var(--amber)';
@@ -3798,7 +3812,7 @@ async function sendMessage(){
       }
     }else if(err.name==='AbortError'){
       if(streamedText.length>50){
-        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context);
+        renderAssistantMessage(loaderEl,streamedText+'\n\n_[Generación detenida por el usuario]_',estimateTokens(streamedText),q,context,laminas);
         history.push({role:'user',content:q});
         const{final}=parseAIResponse(streamedText);
         history.push({role:'assistant',content:sanitizeFinalAnswer(final,q)+'\n\n_[Generación detenida por el usuario]_'});
@@ -4148,7 +4162,7 @@ const MAX_EVIDENCIA=3;
    enseñar lámina sin cita, así que se comprueba explícitamente. */
 const SIN_DATO=/no\s+(?:lo\s+)?especifica|no\s+(?:lo\s+)?encontr|no\s+(?:est[áa]|aparece|figura)\s+en\s+(?:el|los)\s+manual|no\s+hay\s+(?:regla|dato|informaci[óo]n)/i;
 /* Solo cuenta si la respuesta ABRE diciendo que no está. «Las marcas de
-   CONTEMPO son Tommy y Guess (pág. 13); el manual no especifica en qué mueble
+   CONTEMPO son Tresvik y Kalinde (pág. 13); el manual no especifica en qué mueble
    van» trae el dato, y esconder la lámina por la segunda mitad dejaba al asesor
    sin la tabla de la que sale la primera. */
 function esRespuestaSinDato(respuesta,certeza){
@@ -4430,11 +4444,28 @@ function renderAvisoVerificacion(res){
   return el
 }
 
+/* Los nombres que la respuesta leyó en una lámina que es imagen: no hay texto
+   con qué cotejarlos, así que no son un aviso amarillo ni bajan la certeza,
+   pero se dicen —la verificación no calla— con la página para compararlos. */
+function renderNotaLamina(res){
+  const nombres=(res&&res.nombresDeLamina)||[];
+  if(!nombres.length)return null;
+  const pags=(res.paginasDeLamina||[]).map(p=>'pág. '+escapeHtml(p)).join(' y ');
+  const el=document.createElement('div');
+  el.className='verify-lamina';
+  const lista=nombres.slice(0,4).map(escapeHtml).join(', ')+(nombres.length>4?'…':'');
+  el.innerHTML=`<span>Leído en la imagen de la ${pags}, que no trae texto para comprobarlo: <strong>${lista}</strong>. Compáralo con la lámina.</span>`;
+  return el
+}
+
 const CERTEZA_ROTULO={ALTA:{txt:'certeza alta',cls:'alta'},MEDIA:{txt:'certeza media',cls:'media'},GAP:{txt:'no está en el manual',cls:'gap'}};
-function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado){
+/* laminasVistas: las páginas que el motor clásico le mandó al modelo como
+   imagen en ESTA pregunta (src/ia/laminas.js). Lo que la respuesta lee en ellas
+   no está en el texto y se dice aparte (renderNotaLamina). */
+function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,contextoEnviado,laminasVistas){
   const{thinking,final,parsed,cortada}=parseAIResponse(rawText);
   const cleanFinal=sanitizeFinalAnswer(final,originalQuestion);
-  const verif=verificarContraContexto(cleanFinal,contextoEnviado);
+  const verif=verificarContraContexto(cleanFinal,contextoEnviado,{laminas:laminasVistas});
   /* La certeza la declara el modelo, pero no puede ser ALTA con un dato que la
      app no pudo comprobar en lo que el modelo tenía delante —o que encontró
      pegado a otra cosa—. Un «certeza alta» encima de un aviso amarillo le dice
@@ -4503,6 +4534,9 @@ function renderAssistantMessage(loaderEl,rawText,tokens,originalQuestion,context
     const pag=paginaComoLamina(ultimosFragmentos,vista?vista.page:[...verif.citadas].map(Number).sort((x,y)=>x-y)[0],docPaginas);
     if(pag){figsApi=[pag];figsApi.origen='pagina'}
   }
+  /* Lo leído en la lámina-imagen va justo antes de la lámina, para compararlo. */
+  const notaLamina=renderNotaLamina(verif);
+  if(notaLamina)loaderEl.appendChild(notaLamina);
   if(contextoEnviado)renderEvidencia(loaderEl,figsApi);
   /* Al tablero va la respuesta terminada: una cortada o detenida no dice si el
      manual lo cubría. La lámina que cuenta es la citada; si no citó, la primera. */

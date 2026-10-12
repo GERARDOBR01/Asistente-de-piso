@@ -298,7 +298,8 @@ export function tituloDePagina(blocks,altura){
    a la izquierda el mundo (PREMIUM, CONTEMPO…) centrado en su celda, y a la
    derecha la lista de marcas en una o dos columnas. Leída como texto suelto,
    el rótulo queda a media altura de su lista, así que el título «de encima»
-   le cae a la lista de la fila de abajo: Tommy salía como PREMIUM. Y las dos
+   le cae a la lista de la fila de abajo: una marca de CONTEMPO salía como
+   PREMIUM. Y las dos
    columnas de marcas se intercalaban.
 
    Aquí se reconoce esa forma —una columna que solo tiene rótulos en

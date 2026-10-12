@@ -923,6 +923,7 @@ const CHIP = {
   fondo_pct: v => v ? `fondo ${v} %` : null,
   luz_corregida: v => v ? 'luz corregida' : null,
   balance_blancos: v => /^sin/.test(String(v)) ? null : 'blancos ajustados',
+  direccion: v => v === 'der-izq' ? 'de derecha a izquierda' : 'de izquierda a derecha',
   fuera_de_grupo: v => v ? `${v} fuera de su bloque` : 'bloques limpios',
   fuera_de_rueda: v => v ? `${v} fuera de la rueda` : null,
   grupos: () => null,

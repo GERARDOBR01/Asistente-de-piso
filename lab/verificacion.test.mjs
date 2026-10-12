@@ -7,7 +7,7 @@ import { conEstado, reiniciarCaches } from '../src/estado.js';
 import { indexChunk } from '../src/motor/indice.js';
 import {
   verificarContraContexto, verificarAtadura, cifrasCanonicas, nombresSinRespaldo,
-  entidadesDelCorpus, paginaComoLamina,
+  entidadesDelCorpus, paginaComoLamina, separarNombresDeLamina, conteosDeLista,
 } from '../src/motor/verificacion.js';
 
 const D = '900 CALZADO DEMO.pdf';
@@ -77,3 +77,45 @@ test('verificación: la página entera como lámina, solo si hay imagen', () => 
   assert.equal(paginaComoLamina(frag, null, paginas), null);
   assert.equal(paginaComoLamina(frag, 7, new Map()), null);
 });
+
+/* La lámina que el modelo vio como imagen (11-oct-2026: 7 de 42 respuestas
+   correctas con un «⚠ No pude verificar» de un logo leído en ella). */
+test('verificación: lo leído en la lámina-imagen va aparte y no como aviso', () => {
+  const chunks = [
+    indexChunk({ id: 'z1', source: 'pdf', docName: 'ZAPATOS.pdf', page: 16, heading: 'MUNDOS Y MARCAS', text: 'Marcas' }),
+    indexChunk({ id: 'z2', source: 'pdf', docName: 'ZAPATOS.pdf', page: 3, heading: 'EXHIBICIÓN', text: 'Coloca el par derecho al frente. La marca Tresvik va en la mesa central.' }),
+  ];
+  conEstado({ docs: [{ name: 'ZAPATOS.pdf' }], docChunks: chunks }, () => {
+    const ctx = '[ZAPATOS.pdf · pág. 16 · MUNDOS Y MARCAS]\nMarcas';
+    const resp = 'En el mundo vestir van Ondera, Tresvik y Kalinde (pág. 16).';
+    const lam = [{ doc: 'ZAPATOS.pdf', page: 16 }];
+    const sin = verificarContraContexto(resp, ctx);
+    assert.ok(sin.nombres.includes('Ondera'), 'sin imagen, el nombre que no está en el texto se avisa');
+    const con = verificarContraContexto(resp, ctx, { laminas: lam });
+    assert.deepEqual(con.nombres, [], 'con la imagen citada no hay aviso');
+    assert.ok(con.nombresDeLamina.includes('Ondera') && con.nombresDeLamina.includes('Kalinde'));
+    assert.deepEqual(con.paginasDeLamina, ['16']);
+    // «página 16» también cita la imagen.
+    assert.deepEqual(separarNombresDeLamina(['Ondera'], 'La lámina de la página 16 incluye a Ondera.', lam).deLamina, ['Ondera']);
+    // Si la respuesta no cita la página de la imagen, el aviso se queda.
+    const otra = verificarContraContexto('El par de Ondera va al frente (pág. 3).', '[ZAPATOS.pdf · pág. 3 · EXHIBICIÓN]\nColoca el par derecho al frente.', { laminas: lam });
+    assert.deepEqual(otra.nombres, ['Ondera']);
+    assert.deepEqual(otra.nombresDeLamina, []);
+    // Sin láminas, nada cambia.
+    assert.deepEqual(separarNombresDeLamina(['Ondera'], resp, []), { nombres: ['Ondera'], deLamina: [], paginas: [] });
+  }, reiniciarCaches);
+});
+
+/* «Se divide en 5 mundos» con los cinco debajo: el 5 lo contó el modelo. */
+test('verificación: el número que cuenta la propia lista no es un dato sin respaldo', () => conDocs(() => {
+  const ctx = bloque(14, 'MUNDOS', 'Colección\nBásicos\nKids\nMuebles\nMiniaturas');
+  const lista = 'La sección se divide en 5 mundos (pág. 14):\n\n- Colección\n- Básicos\n- Kids\n- Muebles\n- Miniaturas';
+  assert.deepEqual(verificarContraContexto(lista, ctx).cifras, []);
+  assert.deepEqual([...conteosDeLista('Hay 3 mundos: Colección, Básicos y Kids.')], ['3']);
+  assert.deepEqual([...conteosDeLista('1. Colección\n2. Básicos\n3. Kids')], [], 'los números de la lista no son conteos');
+  // Si no cuadra con la lista, sigue siendo un dato que hay que comprobar.
+  const mal = 'La sección se divide en 6 mundos (pág. 14):\n\n- Colección\n- Básicos\n- Kids\n- Muebles\n- Miniaturas';
+  assert.deepEqual(verificarContraContexto(mal, ctx).cifras, ['6']);
+  // Con unidad nunca es conteo.
+  assert.deepEqual([...conteosDeLista('Deja 3 cm:\n- a\n- b\n- c')], []);
+}));

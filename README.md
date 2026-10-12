@@ -20,7 +20,7 @@
   <img alt="Búsqueda local" src="https://img.shields.io/badge/b%C3%BAsqueda-100%25%20local%20(BM25)-F4F2F0?labelColor=0D0E12">
   <img alt="Sin backend" src="https://img.shields.io/badge/backend-ninguno-F4F2F0?labelColor=0D0E12">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-cero-F4F2F0?labelColor=0D0E12">
-  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 305 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20305%20pruebas&labelColor=0D0E12"></a>
+  <a href="https://github.com/GERARDOBR01/Asistente-de-piso/actions/workflows/arnes.yml"><img alt="Arnés interno: 320 pruebas en cada push" src="https://img.shields.io/github/actions/workflow/status/GERARDOBR01/Asistente-de-piso/arnes.yml?branch=main&label=arn%C3%A9s%20%C2%B7%20320%20pruebas&labelColor=0D0E12"></a>
   <img alt="Probado con 30 manuales reales" src="https://img.shields.io/badge/30%20manuales%20reales-top%203%3A%2089%25-F4F2F0?labelColor=0D0E12">
 </p>
 
@@ -141,7 +141,7 @@ con hash y corridas una sola vez. Todo queda fuera del repo.
 Tres arreglos lo explican:
 - **Las tablas «MUNDO | Marca» se leen fila por fila** (`tablasDeRotulos` en
   `src/motor/layout.js`). Antes el rótulo del mundo le caía a la lista de la fila de abajo, y el
-  contexto decía que Tommy era PREMIUM.
+  contexto ponía en PREMIUM una marca de otro mundo.
 - **La lámina que es una imagen va como imagen** (`src/ia/laminas.js`). Si en el contexto llega
   una página con casi todo dibujado, como «Clasificación de Departamentos», el modelo recibe
   también su imagen. Lo mismo pasa con la lámina de MARCAS en una pregunta de marcas, porque
@@ -165,6 +165,27 @@ prompt:
 
 Modo manual: desarrollo 35 → **36/42**, confirmación 16 → **17/19**; dato en contexto,
 desarrollo 38 → **39/42**. Golden de 667: arregla 1, rompe 0.
+
+**Con la API, otra vez, después de esos arreglos (ap-v1.25, 11-oct, noche).** Mismos 15
+manuales, misma batería de desarrollo, tres corridas:
+
+| 3.5 Flash-Lite, razonado | ap-v1.25.0 | ap-v1.25.2 |
+|---|---|---|
+| Dato con su página (40) | 38/40 + 2 esperas cortadas (al repetirlas, bien) | **39/40** |
+| Página correcta | 38/40 | **40/40** |
+| «No está» bien dicho | 2/2 | **2/2** |
+| Respuestas correctas con un aviso falso | 7 | **0** |
+| Primer texto, mediana / 95 % | 2.1 s / 21.9 s | **1.9 s / 2.8 s** |
+
+- **Las dos que fallaban con la API en ap-v1.23 ya salen**, y las fallas que quedan son del modelo, no de la
+  búsqueda: con el mismo contexto, a veces transcribe la lámina entera y a veces no.
+- **El aviso falso era un logo.** Lo que el modelo lee en una lámina que es imagen (una marca que
+  solo está como logo, una categoría dibujada) no está en ningún texto, y la verificación lo
+  marcaba como «no pude verificar» y bajaba la certeza. Ahora, si la respuesta cita la página que
+  vio como imagen, esos nombres van en una nota aparte —«Leído en la imagen de la pág. 16…
+  compáralo con la lámina»— justo encima de la lámina, y la certeza no baja. Sin imagen citada, el
+  aviso sigue igual. Tampoco se marca el número que cuenta la propia lista («se divide en 5
+  mundos» con los cinco debajo).
 
 ### Dos modos de respuesta, y el modelo de fábrica
 
@@ -643,9 +664,15 @@ red, sobre las mismas funciones que usa el chat.
 
 **Corre solo en cada cambio.** El CI (`.github/workflows/arnes.yml`) abre la app en un
 Chromium sin ventana con `eval/arnes.mjs` y marca en rojo el push o el pull request si
-alguna de las 305 filas falla. La app no se compila: el `package.json` es solo para las
+alguna de las 320 filas falla. La app no se compila: el `package.json` es solo para las
 herramientas de desarrollo, y en el CI Playwright se instala solo. En local: `npm run arnes`
 (con `CANAL=chrome` si no tienes el Chromium de Playwright).
+
+El mismo CI corre `eval/despliegue-sw.mjs`: un servidor que se porta como GitHub Pages
+(`max-age=600`) publica una versión nueva a media sesión y comprueba que llegue **entera**, a la
+página y a la caché sin señal. Antes el service worker pedía el código con la caché HTTP del
+navegador, y durante diez minutos podía arrancar con un `app.js` nuevo y un módulo viejo; ahora
+revalida con el servidor (`cache:'no-cache'`).
 
 Si hay manuales cargados corre además una segunda tanda **contra ellos**. No puede comprobar
 respuestas concretas —cada manual dice lo suyo—, así que mide lo que es igual en cualquier

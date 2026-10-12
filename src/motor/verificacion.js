@@ -14,7 +14,8 @@ import { mismaCosa } from './puerta.js';
 /** @typedef {Cifra & {palabras: string[], propias: boolean, tramo: string}} CifraConTramo */
 /** @typedef {{valor: string, valores: string[], familia: string, txt: string, pagina: string | null, titulo: string, tit: string[], propias: string[], cerca: string[], rotulo: boolean}} Ocurrencia */
 /** @typedef {{cifra: string, sujeto: string, pagina: string | null, pegadaA: string, rival: string, paginaRival: string | null}} Atadura */
-/** @typedef {{cifras: string[], paginas: string[], nombres: string[], citadas: Set<string>, atadas: Atadura[]}} Verificacion */
+/** @typedef {{cifras: string[], paginas: string[], nombres: string[], nombresDeLamina: string[], paginasDeLamina: string[], citadas: Set<string>, atadas: Atadura[], certezaBajada?: boolean}} Verificacion */
+/** @typedef {{doc: string, page: number | string}} LaminaVista */
 
 /* ════════════════════════════════════════════════
    VERIFICACIÓN CONTRA EL CONTEXTO
@@ -161,6 +162,70 @@ export function nombresSinRespaldo(respuesta,contexto){
   return[...out.values()]
 }
 
+/* ── LO QUE SE LEYÓ EN UNA LÁMINA-IMAGEN ──────────
+   Las láminas que casi no traen texto (MUNDOS Y MARCAS hecha de logos,
+   «Clasificación de Departamentos» dibujada) van al modelo como imagen
+   (src/ia/laminas.js). Lo que lee ahí —la marca que es un logo, la categoría
+   que está dibujada— no está en ningún texto que se pueda cotejar, y salía con «⚠ No pude
+   verificar» y la certeza bajada: 7 de 42 respuestas correctas, medido con 15
+   manuales reales el 11-oct-2026.
+   Si la respuesta cita la página que vio como imagen, esos nombres se dicen
+   aparte —«leído de la imagen de la pág. N»—, sin bajar la certeza, y la lámina
+   va debajo de la respuesta para compararlos. Se siguen enseñando: desde el
+   texto no se distingue un logo leído de un nombre que el modelo trajo de lo
+   que sabe. Se probó dejar con ⚠ los que el corpus tiene escritos en OTRO
+   manual, y no sirve: «barata», «regular» o una marca que es logo en una
+   sección y texto en otra se quedaban marcados. Sin imagen citada, todo sigue
+   como antes. */
+/**
+ * @param {string[]} nombres  los que no están en el contexto de texto
+ * @param {string} respuesta
+ * @param {LaminaVista[] | null | undefined} laminas  las páginas que el modelo vio como imagen
+ * @returns {{nombres: string[], deLamina: string[], paginas: string[]}}
+ */
+export function separarNombresDeLamina(nombres,respuesta,laminas){
+  const igual={nombres,deLamina:[],paginas:[]};
+  if(!nombres.length||!laminas||!laminas.length)return igual;
+  /* «pág. 17», «pág 17», «página 16», «[Manual.pdf · pág. 14]». */
+  const citadas=new Set([...respuesta.matchAll(/p[áa]g(?:\.|ina)?\s*(\d+)/gi)].map(m=>m[1]));
+  const paginas=[...new Set(laminas.map(l=>String(l.page)).filter(p=>citadas.has(p)))];
+  if(!paginas.length)return igual;
+  return{nombres:[],deLamina:nombres,paginas}
+}
+
+/** «Se divide en 5 mundos:» y debajo los cinco. Ese 5 no está en el manual —lo
+   contó el modelo— y salía como «⚠ No pude verificar el dato 5» con la certeza
+   bajada (11-oct-2026, 15 manuales reales: la única falsa alarma que quedó).
+   Un número sin unidad que dice exactamente cuántos elementos enumera la
+   propia respuesta es un conteo de la respuesta, no un dato del manual: los
+   elementos sí se verifican uno por uno. Con unidad («5 cm») nunca es conteo.
+   @param {string} respuesta @returns {Set<string>} */
+export function conteosDeLista(respuesta){
+  /** @type {Set<string>} */
+  const out=new Set();
+  const lineas=(respuesta||'').split('\n');
+  const vineta=/^\s*(?:[-*•]|\d+[.)])\s+\S/;
+  for(let i=0;i<lineas.length;i++){
+    for(const m of lineas[i].matchAll(/(?<![\d.,$])(\d{1,2})(?![\d.,%)])\s+(?!cm\b|mm\b|m\b|mts?\b|metros?\b|cent|mil[ií]m|%|por\s*ciento|d[ií]as?\b|semanas?\b|mes|horas?\b|min)[a-záéíóúñ]+/gi)){
+      const n=Number(m[1]);
+      if(n<2)continue;
+      /* La lista de abajo: viñetas o números seguidos, saltando renglones vacíos. */
+      let items=0;
+      for(let j=i+1;j<lineas.length;j++){
+        if(!lineas[j].trim()){if(items)break;continue}
+        if(!vineta.test(lineas[j]))break;
+        items++;
+      }
+      /* O en el mismo renglón tras dos puntos: «en 3 mundos: A, B y C». */
+      const resto=lineas[i].slice((m.index||0)+m[0].length);
+      const dos=resto.indexOf(':');
+      const enLinea=dos<0?0:resto.slice(dos+1).replace(/\(.*?\)/g,'').split(/,|\s+y\s+|\s+e\s+/).map(x=>x.trim()).filter(x=>/\p{L}/u.test(x)).length;
+      if(items===n||enLinea===n)out.add(m[1]);
+    }
+  }
+  return out
+}
+
 /* «Vinos debe ser mayor a $1,200.00»: el cotejo partía la cifra en «1,200» y
    «00» y no encontraba «1,200» porque detrás venía «.00». Se escriben igual de
    los dos lados antes de comparar: sin separador de miles y sin decimales en
@@ -187,10 +252,15 @@ function sinNumerosDeSeccion(texto){
   }
   return t
 }
-/** @param {string | null | undefined} respuesta @param {string | null | undefined} contexto @returns {Verificacion} */
-export function verificarContraContexto(respuesta,contexto){
+/**
+ * @param {string | null | undefined} respuesta
+ * @param {string | null | undefined} contexto
+ * @param {{laminas?: LaminaVista[] | null}} [opciones]  laminas: las páginas que el modelo vio como imagen
+ * @returns {Verificacion}
+ */
+export function verificarContraContexto(respuesta,contexto,{laminas=null}={}){
   /** @type {Verificacion} */
-  const vacio={cifras:[],paginas:[],nombres:[],citadas:new Set(),atadas:[]};
+  const vacio={cifras:[],paginas:[],nombres:[],nombresDeLamina:[],paginasDeLamina:[],citadas:new Set(),atadas:[]};
   if(!respuesta||!contexto)return vacio;
 
   const texto=cifrasCanonicas(sinNumerosDeSeccion(respuesta
@@ -234,7 +304,9 @@ export function verificarContraContexto(respuesta,contexto){
      «20[.[.,]]8», que no coincide con nada. Así, TODA cifra decimal se marcaba
      como no verificable aunque estuviera en el contexto —y estos manuales son
      decimales por todas partes: 20.8%, 38.5%, 11.5%—. Una sola pasada. */
+  const conteos=conteosDeLista(respuesta);
   const noVerificadas=[...cifras].filter(n=>{
+    if(conteos.has(n))return false;
     const esc=n.replace(/[.,]/g,'[.,]');
     /* Tampoco vale como coincidencia el principio de un decimal: «20» no es
        «20.8%», y el modelo que redondea una participación cambia el dato. */
@@ -252,8 +324,9 @@ export function verificarContraContexto(respuesta,contexto){
      sacar las láminas que acompañan a la respuesta. */
   const citadas=new Set([...paginasCitadas].filter(p=>paginasReales.has(p)));
 
+  const nombres=separarNombresDeLamina(nombresSinRespaldo(respuesta,contexto),respuesta,laminas);
   return{cifras:marcadosPorUnidad.concat(noVerificadas),paginas:paginasInventadas,
-    nombres:nombresSinRespaldo(respuesta,contexto),citadas,
+    nombres:nombres.nombres,nombresDeLamina:nombres.deLamina,paginasDeLamina:nombres.paginas,citadas,
     atadas:verificarAtadura(respuesta,contexto)}
 }
 
