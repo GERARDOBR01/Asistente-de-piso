@@ -17,11 +17,21 @@ function showToast(message, type='info', duration=4500) {
   t.className = `toast ${type}`;
   t.textContent = message;
   t.style.whiteSpace = 'pre-line';
-  wrap.appendChild(t);
-  setTimeout(() => {
+  /* En el celular los avisos salen arriba, encima de la cabecera: se cierran
+     con un toque y no se apilan más de dos (se va el más viejo). */
+  const cerrar = () => {
+    if (t.dataset.cerrando) return;
+    t.dataset.cerrando = '1';
     t.style.animation = 'toast-out .2s ease forwards';
     setTimeout(() => t.remove(), 220);
-  }, duration);
+  };
+  t.addEventListener('click', cerrar);
+  wrap.appendChild(t);
+  if (window.matchMedia && window.matchMedia('(max-width:600px)').matches) {
+    const vivos = [...wrap.children].filter(x => !x.dataset.cerrando);
+    vivos.slice(0, Math.max(0, vivos.length - 2)).forEach(x => x.click());
+  }
+  setTimeout(cerrar, duration);
 }
 
 /* Los proveedores (Gemini, OpenAI) y la clase de cada error viven en
@@ -1465,8 +1475,53 @@ function bloqueAprendido(cont){
 function vibrarCorto(){
   try{if(navigator.vibrate&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate(6)}catch{}
 }
-function switchTab(name){
-  const pestanas=['chat','revisar','docs','memory','config'];
+const PESTANAS=['chat','revisar','docs','memory','config'];
+/* Cada pestaña guarda dónde se quedó: bajar en Manuales y pasar a Ajustes
+   abría Ajustes a media página, y al volver la lista empezaba de cero. */
+const scrollPorPestana={};
+/* El botón atrás de Android (y el gesto) cerraba la app desde cualquier
+   pestaña, incluso con una lámina abierta. Ahora atrás cierra el visor y, en
+   las pestañas, regresa a Preguntar; desde Preguntar sale, como en cualquier
+   app. Entre pestañas se reemplaza la entrada, así la pila nunca crece.
+   Ojo: aquí `history` es el arreglo de la conversación; la del navegador es
+   window.history. */
+let ignorarPop=false;
+const estadoNav=()=>window.history.state||{};
+function pestanaActiva(){
+  const barra=document.querySelector('.tabs');
+  return PESTANAS[barra?Number(barra.style.getPropertyValue('--tab-i')||0):0]||'chat';
+}
+/* El toque en la barra: en la pestaña que ya está abierta, sube al inicio. */
+function tocarPestana(name){
+  if(name!==pestanaActiva()){switchTab(name);return}
+  const quieto=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({top:0,behavior:quieto?'instant':'smooth'});
+}
+function navegarAPestana(previa,name){
+  try{
+    if(name==='chat'){
+      /* Volver a Preguntar con la barra deshace la entrada que se empujó al salir. */
+      if(estadoNav().tab&&estadoNav().tab!=='chat'){ignorarPop=true;window.history.back()}
+    }else if(previa==='chat'&&!(estadoNav().tab&&estadoNav().tab!=='chat'))window.history.pushState({tab:name},'');
+    else window.history.replaceState({tab:name},'');
+  }catch{}
+}
+window.addEventListener('popstate',e=>{
+  if(ignorarPop){ignorarPop=false;return}
+  const visor=document.getElementById('visor');
+  if(visor&&visor.classList.contains('abierto')){cerrarVisor({desdeHistorial:true});return}
+  const tab=(e.state&&e.state.tab)||'chat';
+  if(tab!==pestanaActiva())switchTab(tab,{desdeHistorial:true});
+});
+/* Al recargar con la lámina abierta, el visor ya no está: se quita su entrada. */
+try{if(estadoNav().visor){const{visor,...resto}=estadoNav();window.history.replaceState(resto,'')}}catch{}
+function switchTab(name,opciones={}){
+  const pestanas=PESTANAS;
+  const previa=pestanaActiva();
+  if(previa!==name){
+    scrollPorPestana[previa]=window.scrollY;
+    if(!opciones.desdeHistorial)navegarAPestana(previa,name);
+  }
   /* El panel nuevo entra del lado de la pestaña tocada: desde la derecha si
      está a la derecha de la anterior (CSS: .panel.active[data-dir]). Se marca
      antes de activarlo para que la animación arranque ya con su dirección. */
@@ -1483,6 +1538,7 @@ function switchTab(name){
      Un toque corto de vibración confirma el cambio; el navegador lo ignora si
      no hubo un toque de la persona, y no se usa con «reducir movimiento». */
   if(barra)barra.style.setProperty('--tab-i',String(ahora));
+  if(previa!==name)window.scrollTo({top:scrollPorPestana[name]||0,behavior:'instant'});
   /* La aurora del fondo (index.html, AURORA) se corre según la pestaña. */
   document.documentElement.style.setProperty('--seccion-i',String(ahora));
   try{
@@ -2045,7 +2101,7 @@ const LECTURA_VERSION=4;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.24.0';
+const VERSION_APP='ap-v1.25.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
@@ -2736,16 +2792,37 @@ async function handleFiles(fileList){
 
 function renderDocs(){
   const list=document.getElementById('doc-list'),ragInfo=document.getElementById('rag-info');
-  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">${ICO.libro}</div><span class="doc-name">Biblia Hombres — 12 manuales consolidados (M-01 a M-12, incluye Softline SL) · conocimiento sintético</span><span class="doc-tag">Integrado</span></div>`;
+  /* En el celular, 15 manuales en tarjetas sueltas eran casi tres pantallas y el
+     selector de sección quedaba al fondo. Ahora cada manual es una fila de una
+     sola tarjeta (nombre arriba, datos en una línea) y pasando de 6 filas el
+     resto se despliega con «Ver los N manuales». */
+  const builtinHTML=`<div class="doc-item builtin"><div class="doc-icon">${ICO.libro}</div><div class="doc-texto"><span class="doc-name">Biblia Hombres — 12 manuales consolidados (M-01 a M-12, incluye Softline SL) · conocimiento sintético</span><span class="doc-meta"><span class="doc-tag">Integrado</span></span></div></div>`;
   const userHTML=docs.map((d,i)=>`
-    <div class="doc-item">
+    <div class="doc-item"${i>=LISTA_CORTA-1&&!listaManualesAbierta()&&docs.length>LISTA_CORTA-1?' hidden':''}>
       <div class="doc-icon">${ICO.doc}</div>
-      <span class="doc-name">${escapeHtml(d.name)}</span>
-      <span class="doc-size">${escapeHtml(d.size)}</span>
-      <span class="doc-chunks">${d.pageCount?d.pageCount+' pág. · ':''}${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}${estadoDeFicha(d.name)}${lecturaVieja(d)?' · <span class="doc-releer" title="Se guardó con una lectura anterior del PDF">↻ vuelve a elegir el PDF para leer mejor sus tablas</span>':''}</span>
-      <button class="doc-remove" onclick="removeDoc(${i})">✕</button>
+      <div class="doc-texto">
+        <span class="doc-name">${escapeHtml(d.name)}</span>
+        <span class="doc-meta">${escapeHtml(d.size)}${d.pageCount?' · '+d.pageCount+' pág.':''} · ${d.chunkCount} frag.${d.figureCount?' · '+d.figureCount+' fig.':''}${estadoDeFicha(d.name)}${lecturaVieja(d)?' <span class="doc-releer" title="Se guardó con una lectura anterior del PDF: vuelve a elegirlo para leer mejor sus tablas">↻ releer</span>':''}</span>
+      </div>
+      <button class="doc-remove" onclick="removeDoc(${i})" aria-label="Quitar ${escapeHtml(d.name)}">✕</button>
     </div>`).join('');
   list.innerHTML=builtinHTML+userHTML;
+  /* Con manuales ya cargados, la zona de carga se vuelve una fila: ya cumplió. */
+  const zona=document.querySelector('#panel-docs .drop-zone');
+  if(zona)zona.classList.toggle('compacta',docs.length>0);
+  const verTodos=document.getElementById('docs-ver-todos');
+  if(verTodos){
+    const sobran=docs.length>LISTA_CORTA-1;
+    verTodos.style.display=sobran?'':'none';
+    verTodos.textContent=listaManualesAbierta()?'Ver menos':`Ver los ${docs.length} manuales`;
+    verTodos.setAttribute('aria-expanded',String(listaManualesAbierta()));
+  }
+  /* El aviso de lectura vieja va una sola vez arriba; en la fila queda «↻ releer». */
+  const aviso=document.getElementById('docs-aviso'),viejos=docs.filter(lecturaVieja).length;
+  if(aviso){
+    aviso.style.display=viejos?'':'none';
+    aviso.textContent=viejos?`↻ ${viejos===1?'1 manual se leyó':viejos+' manuales se leyeron'} con una versión anterior: vuelve a elegir ${viejos===1?'su PDF':'sus PDF'} para leer mejor sus tablas.`:'';
+  }
   /* El contador vive en la pestaña de manuales y cuenta los del asesor. En la
      del chat, «1» con cero manuales cargados parecía un mensaje sin leer. */
   const b=document.getElementById('badge');b.style.display=docs.length?'':'none';b.textContent=docs.length;
@@ -2756,6 +2833,18 @@ function renderDocs(){
   renderSelectorSeccion();
   renderQuickBtns();
   renderAccionesDocs();
+}
+/* Filas visibles con la lista cerrada, contando el manual integrado. */
+const LISTA_CORTA=6;
+/* Se recuerda en la sesión; si el almacenamiento falla, vale lo de esta visita. */
+let listaAbierta=(()=>{try{return sessionStorage.getItem('ap_lista_manuales')==='1'}catch{return false}})();
+const listaManualesAbierta=()=>listaAbierta;
+function alternarListaManuales(){
+  const abrir=listaAbierta=!listaAbierta;
+  try{sessionStorage.setItem('ap_lista_manuales',abrir?'1':'0')}catch{}
+  renderDocs();
+  /* Al cerrar, el botón se quedaba muy abajo de donde estaba el dedo. */
+  if(!abrir)document.getElementById('docs-ver-todos')?.scrollIntoView({block:'nearest'});
 }
 
 /* ── SELECTOR DE SECCIÓN ACTIVA ───────────────────
@@ -4267,6 +4356,8 @@ function abrirVisor(src,pie,alt,lamina,desde){
   sc.classList.remove('zoom');
   v.classList.add('abierto');
   document.body.style.overflow='hidden';
+  /* Una entrada en la historia: el botón atrás cierra la lámina, no la app. */
+  try{if(!estadoNav().visor)window.history.pushState({...estadoNav(),visor:true},'')}catch{}
 }
 /* La lámina abierta, explicada por el agente: la mira (ver_lamina) y la
    cuenta con su texto. Si es de otra sección cargada, se cambia a esa. */
@@ -4277,7 +4368,10 @@ function explicarLamina(){
   if(appState.manualActivo!==l.docName&&docs.length>1)cambiarSeccion(l.docName);
   ask(`Explícame la lámina de la pág. ${l.page}: qué muestra y cómo se monta.`);
 }
-function cerrarVisor(){
+function cerrarVisor(opciones={}){
+  if(!opciones.desdeHistorial&&estadoNav().visor){
+    try{ignorarPop=true;window.history.back()}catch{ignorarPop=false}
+  }
   const img=document.getElementById('visor-img'),desde=visorDesde&&visorDesde.isConnected?visorDesde:null;
   visorDesde=null;
   const cerrar=()=>{
