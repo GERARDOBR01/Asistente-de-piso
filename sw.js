@@ -12,8 +12,15 @@
      guardado no caduca: primero la caché.
    - El código de la app (src/) va igual que la página: si se sirviera primero
      de la caché, un index.html nuevo podría arrancar con un app.js viejo.
+   - Y «la red» es el servidor, no la caché HTTP del navegador: la página y el
+     código se piden con cache:'no-cache' (revalida; casi siempre es un 304).
+     Sin eso, medido el 11-oct, la pestaña arrancó con app.js 1.25.1 y
+     verificacion.js de la versión anterior: GitHub Pages da max-age=600, y en
+     esos diez minutos el navegador contestaba con lo que ya tenía. Lo mismo al
+     instalar: la caché de la versión nueva podía guardar archivos viejos y
+     servirlos sin señal hasta la siguiente.
    - Las llamadas a las API (OpenAI, Gemini, GitHub) no se tocan nunca. */
-const VERSION='ap-v1.25.1';
+const VERSION='ap-v1.25.2';
 /* Todo archivo de src/ tiene que estar aquí o no carga sin señal: lo revisa
    eval/arnes.mjs. */
 const CODIGO=['src/main.js','src/app.js','src/seguridad/html.js','src/seguridad/inyeccion.js','src/motor/texto.js','src/estado.js','src/motor/indice.js','src/motor/erratas.js','src/motor/layout.js','src/motor/fragmentos.js','src/motor/secciones.js','src/motor/solidez.js','src/motor/aprendido.js','src/motor/busqueda.js','src/motor/puerta.js','src/motor/ruta.js','src/motor/conversacion.js','src/motor/respuesta.js','src/motor/basicos.js','src/motor/verificacion.js','src/motor/aprende.js','src/motor/sigue.js','src/piso/tablero.js','src/piso/medicion.js','src/almacen/manuales.js','src/ia/errores.js','src/ia/sse.js','src/ia/proveedores.js','src/ia/respuesta.js','src/ia/reintentos.js','src/ia/agente.js','src/ia/laminas.js','src/revision/veredicto.js','src/revision/procedencia.js','src/revision/color.js','src/revision/surtido.js','src/revision/triangulo.js','src/revision/demo.js','src/revision/ui.js','src/revision/detector.js','src/revision/c2pa.js','src/revision/silueta.js','src/revision/sugerir.js'];
@@ -49,7 +56,7 @@ async function guardarFuentes(cache){
 self.addEventListener('install',e=>{
   e.waitUntil((async()=>{
     const cache=await caches.open(VERSION);
-    await cache.addAll(PAGINA);
+    await cache.addAll(PAGINA.map(u=>new Request(u,{cache:'no-cache'})));
     await Promise.all(CDN.map(u=>fetch(u,{mode:'cors',credentials:'omit'}).then(r=>{if(!r.ok)throw new Error(u);return cache.put(u,r)})));
     /* Sin fuentes la app funciona igual (cae a las del sistema): que no
        tumben la instalación. */
@@ -96,7 +103,7 @@ self.addEventListener('fetch',e=>{
     e.respondWith((async()=>{
       const cache=await caches.open(VERSION);
       const clave=esPagina?'index.html':req;
-      const red=fetch(req).then(r=>{if(r.ok)cache.put(clave,r.clone());return r});
+      const red=fetch(req,{cache:'no-cache'}).then(r=>{if(r.ok)cache.put(clave,r.clone());return r});
       try{return await conTope(red,3000)}
       catch{
         const guardada=await cache.match(clave);

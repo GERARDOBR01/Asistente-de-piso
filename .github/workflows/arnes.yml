@@ -35,6 +35,10 @@ jobs:
         run: node --test "lab/*.test.mjs"
       - name: Arnés
         run: node eval/arnes.mjs
+      # Como GitHub Pages (max-age=600): una versión nueva tiene que llegar
+      # entera a la página y a la caché sin señal, sin mezclar archivos viejos.
+      - name: Despliegue del service worker
+        run: node eval/despliegue-sw.mjs
       - name: Agente lector contra proveedores simulados
         run: node eval/agente-simulado.mjs
       # La app real contra los manuales ficticios de eval/corpus-publico: falla si

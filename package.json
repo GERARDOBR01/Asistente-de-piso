@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node --test \"lab/*.test.mjs\"",
     "arnes": "node eval/arnes.mjs",
+    "despliegue": "node eval/despliegue-sw.mjs",
     "simulado": "node eval/agente-simulado.mjs",
     "lab": "node lab/correr.mjs",
     "gate": "node lab/gate.mjs",
