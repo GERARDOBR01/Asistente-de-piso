@@ -73,16 +73,16 @@ function paresConUnidad(texto){
 
 /* ── LOS NOMBRES QUE EL MANUAL NO DICE ────────────
    Medido en el piso, con 101 MUEBLES activo y la API conectada: a «¿cuál es la
-   marca propia?» contestó «‹marca X› es la marca propia de liverpool». Ninguna de
+   marca propia?» contestó «‹marca X› es la marca propia de ‹la cadena›». Ninguna de
    las dos palabras está en ese manual —comprobado sobre el texto crudo del PDF,
-   38 páginas: cero de la marca, cero «liverpool»—. Esa marca sale en otra
-   sección y Liverpool es la cadena de la que son estos manuales. El modelo la
+   38 páginas: cero de la marca, cero de la cadena—. Esa marca sale en otra
+   sección, y la cadena es de la que son estos manuales. El modelo la
    reconoció y completó con lo que sabe de ella, que es la única vía de
    invención que quedaba abierta: la verificación comprobaba cifras y páginas, y
    un nombre pasaba limpio.
 
    La capitalización de la RESPUESTA no sirve para detectarlo: la marca iba al
-   principio de la frase y «liverpool» en minúscula. Lo que sí sirve es lo que el
+   principio de la frase y el nombre de la cadena en minúscula. Lo que sí sirve es lo que el
    corpus sabe que es un nombre. Un nombre propio en estos manuales se reconoce
    por dos cosas a la vez: aparece en mayúscula a mitad de frase —«la marca Vestra
    Kids», «sistema de Mercaderías de Delmar», «la marca propia Damaia»— y no
