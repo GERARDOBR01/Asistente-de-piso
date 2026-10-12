@@ -2041,11 +2041,11 @@ async function extractPdf(file,onProgress){
    releerlo—, pero al volver a elegir el archivo se relee en vez de reusar lo
    guardado. La ficha y las descripciones de láminas, que costaron llamadas,
    pasan a la lectura nueva. */
-const LECTURA_VERSION=3;
+const LECTURA_VERSION=4;
 /* La versión de la app viaja en cada resultado de medición: dos corridas solo
    se comparan sabiendo con qué código salió cada una. Es la misma de sw.js
    (eval/arnes.mjs comprueba que coincidan). */
-const VERSION_APP='ap-v1.23.0';
+const VERSION_APP='ap-v1.24.0';
 const lecturaVieja=d=>((d&&d.lectura)||1)<LECTURA_VERSION;
 function heredarDescripciones(nuevas,viejas){
   let n=0;
