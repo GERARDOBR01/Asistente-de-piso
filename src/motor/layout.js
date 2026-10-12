@@ -308,6 +308,55 @@ export function tituloDePagina(blocks,altura){
    entre rótulos: una fila alta junto a una baja no reparte bien a medias.
 ════════════════════════════════════════════════ */
 export const TABLA_HUECO_FILA=0.9;   // hueco vertical que separa dos grupos de contenido, en alturas de letra
+
+/* Columnas de contenido por su borde izquierdo, cada una de arriba abajo. */
+/** @param {Linea[]} ls @param {number} h @returns {Linea[][]} */
+function columnasDe(ls,h){
+  /** @type {Linea[][]} */
+  const cols=[];
+  for(const l of [...ls].sort((a,b)=>a.x0-b.x0)){const c=cols[cols.length-1];if(c&&l.x0-c[0].x0<2*h)c.push(l);else cols.push([l])}
+  return cols.map(c=>c.sort((a,b)=>a.yBot-b.yBot))   // por línea base: pdf.js da alturas de letra infladas
+}
+
+/* Una celda que no cabe se parte: «Tipo de» / «producto», «Pre-» /
+   «elaborados». El renglón de abajo sigue al de arriba si este acaba en
+   guion o en conector, o si aquel empieza en minúscula. Una lista de marcas
+   no: cada marca empieza en mayúscula. */
+const CONECTOR_FINAL=/(?:^|\s)(?:de|del|y|e|o|la|el|los|las|en|a|al|con|por|para)$/i;
+/** @param {string} arriba @param {string} abajo */
+const sigueRenglon=(arriba,abajo)=>/-$/.test(arriba)||CONECTOR_FINAL.test(arriba)||/^[a-záéíóúüñ]/.test(abajo);
+/** @param {string[]} textos @returns {string[]} */
+export function unirRenglones(textos){
+  /** @type {string[]} */
+  const out=[];
+  for(const t of textos){
+    const i=out.length-1;
+    if(i>=0&&sigueRenglon(out[i],t))out[i]+=(/-$/.test(out[i])?'':' ')+t;
+    else out.push(t);
+  }
+  return out
+}
+
+/* A qué encabezado va cada columna de contenido. Uno alineado a la izquierda
+   la solapa; uno centrado sobre una celda ancha («MARCA» sobre dos columnas
+   de marcas) empieza a la derecha de donde empieza su contenido, así que la
+   columna que no solapa a nadie es del primer encabezado a su derecha. */
+/** @param {Linea[]} ls @param {Linea[]} encabezados @param {number} h @returns {Array<[Linea, Linea[]]>} */
+function celdasPorEncabezado(ls,encabezados,h){
+  const hs=[...encabezados].sort((a,b)=>a.x0-b.x0);
+  /** @type {Map<Linea, Linea[]>} */
+  const de=new Map(hs.map(c=>[c,[]]));
+  for(const col of columnasDe(ls,h)){
+    const x0=Math.min(...col.map(l=>l.x0)),x1=Math.max(...col.map(l=>l.x1));
+    /** @type {Linea|undefined} */
+    let mejor,mejorS=0;
+    for(const c of hs){const s=Math.min(c.x1,x1)-Math.max(c.x0,x0);if(s>mejorS){mejor=c;mejorS=s}}
+    if(!mejor)mejor=hs.find(c=>c.x0>x0)||hs[hs.length-1];
+    /** @type {Linea[]} */(de.get(mejor)).push(...col);
+  }
+  return [...de].filter(([,v])=>v.length)
+}
+
 /**
  * @param {Linea[]} lines
  * @returns {{ resto: Linea[], bloques: Bloque[] }}
@@ -433,19 +482,25 @@ export function tablasDeRotulos(lines){
     for(const f of filas){
       const gs=/** @type {typeof grupos} */(porFila.get(f));
       const partes=[];
+      /* Con dos o más encabezados, cada celda va con el suyo: «EXHIBICIÓN:
+         Por color». Suelto entre las marcas, «Por color» no decía que es como se
+         exhibe el mundo, y el modelo contestaba otra regla. */
+      const celdas=encabezado&&encabezado.cols.length>1?celdasPorEncabezado(gs.flatMap(g=>g.lineas).filter(conLetras),encabezado.cols,h):null;
       /* La fila dice qué es su rótulo: «MUNDO VESTIR». Sin encabezado, lo dice
          el título de la tabla cuando habla de mundos; así «el mundo vestir»
          se encuentra con las palabras del piso. */
-      if(encabezado)partes.push(encabezado.label+' '+f.text+' — '+encabezado.cols.map(l=>l.text).join(', '));
-      else if(arribaDe&&/\bMUNDOS?\b/.test(arribaDe.text))partes.push('MUNDO '+f.text);
-      for(const g of gs){
+      if(celdas&&encabezado){
+        partes.push(encabezado.label+' '+f.text);
+        for(const [c,ls] of celdas){
+          const v=unirRenglones(ls.map(l=>l.text));
+          partes.push(c.text+':'+(v.length===1?' '+v[0]:'\n'+v.join('\n')));
+        }
+      }else{
+        if(encabezado)partes.push(encabezado.label+' '+f.text+' — '+encabezado.cols.map(l=>l.text).join(', '));
+        else if(arribaDe&&/\bMUNDOS?\b/.test(arribaDe.text))partes.push('MUNDO '+f.text);
         /* Dentro del grupo, columna por columna y de arriba abajo: 1-4 y
            luego 5-9, no 1, 5, 2, 6… */
-        const ls=g.lineas.filter(conLetras).sort((a,b)=>a.x0-b.x0);
-        /** @type {Linea[][]} */
-        const cols=[];
-        for(const l of ls){const c=cols[cols.length-1];if(c&&l.x0-c[0].x0<2*h)c.push(l);else cols.push([l])}
-        partes.push(cols.flatMap(c=>c.sort((a,b)=>a.yTop-b.yTop)).map(l=>l.text).join('\n'));
+        for(const g of gs)partes.push(columnasDe(g.lineas.filter(conLetras),h).flat().map(l=>l.text).join('\n'));
       }
       const todas=[...f.lineas,...gs.flatMap(g=>g.lineas)];
       bloques.push({
@@ -464,6 +519,133 @@ export function tablasDeRotulos(lines){
   return{resto:lines.filter(l=>!usadas.has(l)),bloques}
 }
 
+/* ════════════════════════════════════════════════
+   REJILLAS DE CELDAS — «Botones | Material | Tamaño»
+
+   La clasificación de una sección suele ser una rejilla: a la izquierda el
+   tipo de producto, a la derecha sus criterios, una caja por celda y todo en
+   minúsculas. tablasDeRotulos pide rótulos en mayúsculas, así que la rejilla
+   salía como palabras sueltas —«Hilos Grosor Color Botones…»— y «cómo se
+   clasifican los botones» no la encontraba.
+
+   Se reconoce por la forma, no por la letra: cuatro o más filas de celdas
+   cortas, con la primera y la segunda celda alineadas de fila en fila, sin
+   frases de por medio. Y por lo que dice: los rótulos no se repiten y los
+   valores sí (Material, Tamaño, Color…); un planograma con una prenda por caja
+   no es una clasificación. Cada fila se vuelve un bloque titulado por su
+   primera celda, y el rótulo grande a la izquierda de toda la rejilla
+   («Tipo de producto») dice qué son.
+════════════════════════════════════════════════ */
+export const REJILLA_FILAS_MIN=4;
+export const REJILLA_CELDA_MAX=28;      // caracteres de una celda
+export const REJILLA_VALORES_DISTINTOS=0.6;
+/**
+ * @param {Linea[]} lines
+ * @returns {{ resto: Linea[], bloques: Bloque[] }}
+ */
+export function tablaDeCeldas(lines){
+  const sinCambio={resto:lines,bloques:/** @type {Bloque[]} */([])};
+  /** @param {Linea} l */
+  const corta=l=>l.text.length<=REJILLA_CELDA_MAX&&l.text.split(' ').length<=4&&
+    !/[.;:•●➔]/.test(l.text)&&/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(l.text);
+  const cand=lines.filter(corta);
+  if(cand.length<REJILLA_FILAS_MIN*2)return sinCambio;
+  /** @param {{x0:number,x1:number}} a @param {{x0:number,x1:number}} b */
+  const solapeX=(a,b)=>Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0);
+  /** @param {{yTop:number,yBot:number}} l */
+  const cy=l=>(l.yTop+l.yBot)/2;
+  /** @param {{x0:number,x1:number}} l */
+  const cx=l=>(l.x0+l.x1)/2;
+
+  /* Celdas de dos renglones. */
+  /** @typedef {{text:string,x0:number,x1:number,yTop:number,yBot:number,h:number,lineas:Linea[]}} Celda */
+  /** @type {Celda[]} */
+  const celdas=[];
+  /** @type {Set<Linea>} */
+  const tomadas=new Set();
+  const orden=[...cand].sort((a,b)=>a.yTop-b.yTop||a.x0-b.x0);
+  for(const a of orden){
+    if(tomadas.has(a))continue;
+    tomadas.add(a);
+    const b=orden.find(o=>!tomadas.has(o)&&o.yTop-a.yBot<a.h*0.6&&o.yTop-a.yBot>-a.h*0.3&&
+      solapeX(a,o)>=0.5*Math.min(a.x1-a.x0,o.x1-o.x0)&&sigueRenglon(a.text,o.text));
+    if(b){
+      tomadas.add(b);
+      celdas.push({text:unirRenglones([a.text,b.text]).join(' '),x0:Math.min(a.x0,b.x0),x1:Math.max(a.x1,b.x1),
+        yTop:a.yTop,yBot:b.yBot,h:Math.max(a.h,b.h),lineas:[a,b]});
+    }else celdas.push({text:a.text,x0:a.x0,x1:a.x1,yTop:a.yTop,yBot:a.yBot,h:a.h,lineas:[a]});
+  }
+
+  /* Filas: celdas a la misma altura, de izquierda a derecha. */
+  /** @type {Celda[][]} */
+  const filas=[];
+  for(const c of [...celdas].sort((a,b)=>cy(a)-cy(b))){
+    const f=filas[filas.length-1];
+    if(f&&Math.abs(cy(c)-cy(f[0]))<=0.5*Math.max(c.h,f[0].h))f.push(c);else filas.push([c]);
+  }
+  for(const f of filas)f.sort((a,b)=>a.x0-b.x0);
+
+  /** @param {Celda} a @param {Celda} b */
+  const alineadas=(a,b)=>{const h=Math.max(a.h,b.h);return Math.abs(cx(a)-cx(b))<2*h||Math.abs(a.x0-b.x0)<h};
+  /* Corridas de filas seguidas con primera y segunda celda alineadas. */
+  /** @type {Celda[][][]} */
+  const corridas=[];
+  /** @type {Celda[][]} */
+  let corrida=[];
+  /** @type {Celda[]} */
+  const fuera=[];   // lo que cae en una fila pero a la izquierda de los rótulos (el rótulo de la rejilla)
+  for(let f of filas){
+    if(f.length<2)continue;
+    const ant=corrida[corrida.length-1];
+    if(ant){
+      const k=f.findIndex((c,i)=>i+1<f.length&&alineadas(ant[0],c)&&alineadas(ant[1],f[i+1]));
+      if(k>0){fuera.push(...f.slice(0,k));f=f.slice(k)}
+    }
+    const paso=corrida.length>1?cy(ant[0])-cy(corrida[corrida.length-2][0]):0;
+    if(ant&&alineadas(ant[0],f[0])&&alineadas(ant[1],f[1])&&cy(f[0])-cy(ant[0])<=Math.max(4*Math.max(f[0].h,ant[0].h),1.6*paso))corrida.push(f);
+    else{if(corrida.length)corridas.push(corrida);corrida=[f]}
+  }
+  if(corrida.length)corridas.push(corrida);
+
+  /** @type {Set<Linea>} */
+  const usadas=new Set();
+  /** @type {Bloque[]} */
+  const bloques=[];
+  for(const run of corridas){
+    if(run.length<REJILLA_FILAS_MIN)continue;
+    const rotulos=run.map(f=>f[0].text.toLowerCase());
+    if(new Set(rotulos).size<rotulos.length)continue;
+    const valores=run.flatMap(f=>f.slice(1).map(c=>c.text.toLowerCase()));
+    if(new Set(valores).size>REJILLA_VALORES_DISTINTOS*valores.length)continue;
+    const yA=Math.min(...run[0].map(c=>c.yTop)),yZ=Math.max(...run[run.length-1].map(c=>c.yBot));
+    const x0=Math.min(...run.map(f=>f[0].x0)),x1=Math.max(...run.flatMap(f=>f.map(c=>c.x1)));
+    const deRun=new Set(run.flatMap(f=>f.flatMap(c=>c.lineas)));
+    /* Una frase dentro de la rejilla: no es una rejilla. */
+    if(lines.some(l=>!deRun.has(l)&&!corta(l)&&l.yTop<yZ&&l.yBot>yA&&l.x0<x1&&l.x1>x0))continue;
+    /* El rótulo de toda la rejilla, solo a su izquierda y a media altura. */
+    const eje=[...filas.filter(f=>f.length===1).map(f=>f[0]),...fuera].filter(c=>c.x1<=x0+2&&cy(c)>yA&&cy(c)<yZ);
+    const nombre=eje.map(c=>c.text).join(' ');
+    /* El título de la rejilla: el más cercano encima, en su franja. */
+    const arribaDe=lines.filter(l=>isHeadingText(l.text)&&!deRun.has(l)&&l.yBot<=yA+1&&solapeX(l,{x0,x1})>0)
+      .sort((a,b)=>b.yBot-a.yBot)[0];
+    const prefijo=arribaDe?arribaDe.text.replace(/\s+/g,' ').trim()+' · ':'';
+    for(const f of run){
+      const todas=f.flatMap(c=>c.lineas);
+      bloques.push({
+        text:(nombre?nombre+': ':'')+f[0].text+' — '+f.slice(1).map(c=>c.text).join(', '),
+        heading:prefijo+f[0].text,isHeading:false,
+        hx0:f[0].x0,hx1:f[0].x1,hy1:f[0].yBot,
+        x0:Math.min(...todas.map(l=>l.x0)),y0:Math.min(...todas.map(l=>l.yTop)),
+        x1:Math.max(...todas.map(l=>l.x1)),y1:Math.max(...todas.map(l=>l.yBot))
+      });
+    }
+    for(const l of deRun)usadas.add(l);
+    for(const c of eje)for(const l of c.lineas)usadas.add(l);
+  }
+  if(!bloques.length)return sinCambio;
+  return{resto:lines.filter(l=>!usadas.has(l)),bloques}
+}
+
 /** @param {{items: ItemDeTexto[]}} content @param {Vista} vp @param {number} pageNum @returns {Pagina} */
 export function pageToBlocks(content,vp,pageNum){
   const lines=textItemsToLines(content.items,vp);
@@ -477,7 +659,8 @@ export function pageToBlocks(content,vp,pageNum){
 }
 /** @param {Linea[]} lines @returns {Bloque[]} */
 export function bloquesDeLineas(lines){
-  const {resto,bloques:tablas}=tablasDeRotulos(lines);
+  const conRotulos=tablasDeRotulos(lines);
+  const {resto,bloques:rejillas}=tablaDeCeldas(conRotulos.resto);
   const blocks=orderBlocks(unirTitulosApilados(linesToBlocks(resto)));
   const out=assignHeadings(blocks.map(b=>({
     text:(b.lines.length?b.lines.join('\n'):b.heading).trim(),
@@ -487,9 +670,10 @@ export function bloquesDeLineas(lines){
     x0:b.x0,y0:b.yTop,x1:b.x1,y1:b.yBot
   })).filter(b=>b.text));
   /* Las filas de la tabla van donde empieza la tabla, en su orden. */
-  if(tablas.length){
+  for(const tablas of [conRotulos.bloques,rejillas]){
+    if(!tablas.length)continue;
     const y=Math.min(...tablas.map(t=>t.y0));
-    const i=out.findIndex(b=>b.y0>=y);
+    const i=out.findIndex(b=>b.y0>=y&&!tablas.includes(b));
     out.splice(i<0?out.length:i,0,...tablas);
   }
   return out

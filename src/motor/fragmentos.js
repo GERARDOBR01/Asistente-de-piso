@@ -5,6 +5,7 @@
 // Salió de app.js en el paso 3 del ADR 0005, sin cambiar nada de lo que hace
 // (golden master idéntico). Sin DOM: se importa igual desde Node.
 import { indexChunk } from './indice.js';
+import { normalizeText } from './texto.js';
 
 /** @typedef {{ page: number, titulo?: string, blocks: import('./layout.js').Bloque[] }} PaginaLeida */
 
@@ -16,6 +17,7 @@ import { indexChunk } from './indice.js';
    la respuesta verificable, y arrastra el título de su sección.
 ════════════════════════════════════════════════ */
 export const CHUNK_MAX=900;
+export const TITULO_HUERFANO_RENGLON=40;   // renglón más largo de una lámina «solo listas»
 
 /** @param {string} text @returns {string[]} */
 export function splitLongBlock(text){
@@ -40,15 +42,16 @@ export function buildChunks(pages,docName){
   const chunks=[];
   let heading='';
   let n=0;
+  /** @type {Array<{page:number,heading:string,text:string}>} */
+  let trozos=[];
   /** @param {number} page @param {string} text */
   const push=(page,text)=>{
     const clean=text.trim();
     if(clean.length<15)return;
-    chunks.push(indexChunk({
-      id:docName+'#'+(n++),source:'pdf',docName,page,heading,text:clean,figureIds:[]
-    }));
+    trozos.push({page,heading,text:clean});
   };
   for(const pg of pages){
+    trozos=[];
     let buf='';
     /* El título arrancaba con el documento y no con la página, así que una
        lámina sin títulos en mayúsculas heredaba el de la anterior: el fragmento
@@ -73,6 +76,25 @@ export function buildChunks(pages,docName){
       buf+=(buf?'\n':'')+b.text;
     }
     if(buf.trim())push(pg.page,buf);
+    /* El nombre de la lámina («Básicos de Vitrina») se perdía si todo lo que
+       hay debajo trae su propio título en mayúsculas (FOCAL, AMBIENTE):
+       ningún fragmento lo llevaba y «cuáles son los básicos de vitrina» no
+       encontraba la página. Si ningún fragmento lo usa y la lámina es solo de
+       listas cortas (una infografía, no reglas con su explicación), va delante
+       del título de cada uno, salvo donde ya está («Marcas» en MUNDOS Y
+       MARCAS). En una lámina con frases no: «Básicos de Vitrina · SIMETRÍA»
+       le ganaba a la página de BÁSICOS en «dónde van los básicos». */
+    const t=(pg.titulo||'').replace(/\s+/g,' ').trim();
+    /* Renglón de lista: corto, o la fila de una tabla («Botones — Material, Tamaño»). */
+    const deLista=/** @param {string} l */l=>l.length<=TITULO_HUERFANO_RENGLON||(/ — /.test(l)&&!/\.\s/.test(l));
+    const soloListas=trozos.every(x=>x.text.split('\n').every(deLista));
+    if(t&&soloListas&&!trozos.some(x=>x.heading===t)){
+      const tn=normalizeText(t).replace(/\s+/g,' ').trim();
+      for(const x of trozos)if(x.heading&&!normalizeText(x.heading).replace(/\s+/g,' ').includes(tn))x.heading=t+' · '+x.heading;
+    }
+    for(const x of trozos)chunks.push(indexChunk({
+      id:docName+'#'+(n++),source:'pdf',docName,page:x.page,heading:x.heading,text:x.text,figureIds:[]
+    }));
   }
   return chunks
 }

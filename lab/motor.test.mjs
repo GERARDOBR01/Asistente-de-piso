@@ -588,3 +588,89 @@ test('ordinales: «primera etapa» es la «1° ETAPA» del manual, no una frase 
     }
   }, () => { reiniciarCaches(); reconstruirIndice(); });
 });
+
+/* ── Tablas con encabezado, rejillas y el nombre de la lámina (ap-v1.24) ──
+   Marcas y familias inventadas. */
+test('tabla con dos encabezados: cada celda va con el suyo, también bajo un encabezado centrado', () => {
+  const bl = bloquesDeLineas([
+    lineaT('MUNDOS Y MARCAS', 190, 420, 60, 22),
+    lineaT('MUNDO', 40, 140, 120, 22), lineaT('EXHIBICIÓN', 184, 251, 120, 22), lineaT('MARCA', 470, 520, 120, 22),
+    lineaT('Tresvik', 300, 360, 170), lineaT('Ondera', 520, 570, 170),
+    lineaT('Por', 184, 224, 190), lineaT('material', 184, 232, 204),
+    lineaT('URBANO', 50, 130, 196, 22), lineaT('Kalinde', 300, 360, 190), lineaT('Brunell', 520, 570, 190),
+    lineaT('Saxo Real', 300, 370, 210), lineaT('Vellut', 520, 570, 210),
+    lineaT('Ferrol', 300, 350, 280), lineaT('Marabú', 520, 570, 280),
+    lineaT('CONTEMPO', 40, 140, 300, 22), lineaT('Por color', 184, 237, 300), lineaT('Quintal', 300, 360, 300),
+    lineaT('Arenzo', 300, 360, 320), lineaT('Pirca', 520, 570, 320),
+  ]);
+  const fila = m => bl.find(b => b.heading === 'MUNDOS Y MARCAS · ' + m);
+  assert.ok(fila('CONTEMPO').text.includes('EXHIBICIÓN: Por color'), fila('CONTEMPO').text);
+  assert.ok(fila('URBANO').text.includes('EXHIBICIÓN: Por material'), fila('URBANO').text);
+  // La columna de marcas que no solapa a «MARCA» sigue siendo de MARCA, no de EXHIBICIÓN.
+  const urbano = fila('URBANO').text;
+  assert.ok(urbano.indexOf('MARCA:') < urbano.indexOf('Tresvik'), urbano);
+  assert.ok(!/EXHIBICIÓN:[^\n]*Tresvik/.test(urbano), urbano);
+});
+
+const REJILLA = () => [
+  lineaT('Clasificación', 300, 420, 40, 24),
+  lineaT('Hilos', 186, 220, 120), lineaT('Grosor', 284, 330, 120), lineaT('Color', 384, 420, 120),
+  lineaT('Botones', 184, 236, 166), lineaT('Material', 286, 340, 166), lineaT('Tamaño', 384, 430, 166),
+  lineaT('Agujas', 182, 226, 212), lineaT('Tamaño', 284, 330, 212), lineaT('Color', 384, 420, 212),
+  lineaT('Pre-', 193, 222, 250), lineaT('cortados', 180, 236, 263), lineaT('Tipo de', 284, 340, 250), lineaT('tela', 288, 336, 263),
+  lineaT('Color', 387, 420, 257), lineaT('Tamaño', 465, 510, 257),
+  lineaT('Cierres', 182, 230, 304), lineaT('Marca', 291, 330, 304), lineaT('Tamaño', 379, 425, 304),
+  lineaT('Tipo de', 62, 110, 205, 13), lineaT('producto', 58, 116, 220, 13),
+];
+
+test('rejilla en minúsculas: cada fila es un bloque con su rótulo, y el rótulo de la izquierda dice qué son', () => {
+  const bl = bloquesDeLineas(REJILLA());
+  const fila = r => bl.find(b => b.heading === r);
+  assert.equal(fila('Botones')?.text, 'Tipo de producto: Botones — Material, Tamaño', bl.map(b => b.heading + '=' + b.text).join(' | '));
+  assert.equal(fila('Pre-cortados')?.text, 'Tipo de producto: Pre-cortados — Tipo de tela, Color, Tamaño');
+  assert.equal(fila('Cierres')?.text, 'Tipo de producto: Cierres — Marca, Tamaño');
+});
+
+test('una prenda por caja no es una rejilla de clasificación: los valores no se repiten', () => {
+  const nombres = ['Saco', 'Camisa', 'Corbata', 'Chaleco', 'Pañuelo', 'Gemelos', 'Tirantes', 'Cinturón', 'Bufanda', 'Sombrero', 'Guantes', 'Calcetín'];
+  const ls = [];
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) ls.push(lineaT(nombres[i * 3 + j], 180 + j * 100, 230 + j * 100, 100 + i * 46));
+  assert.ok(!bloquesDeLineas(ls).some(b => / — /.test(b.text)));
+});
+
+test('el nombre de una lámina de solo listas va delante de sus títulos; en una con frases no', () => {
+  const bloque = (heading, text) => ({ text, heading, isHeading: false, hx0: 0, hx1: 1, hy1: 0, x0: 0, y0: 0, x1: 1, y1: 1 });
+  const [focal, vida] = buildChunks([{ page: 1, titulo: 'Básicos de Vitrina', blocks: [
+    bloque('FOCAL', 'Luz\nAltura\nRitmo'), bloque('AMBIENTE', 'Mesa\nRepisa\nPared'),
+  ] }], 'B.pdf');
+  assert.equal(focal.heading, 'Básicos de Vitrina · FOCAL');
+  assert.equal(vida.heading, 'Básicos de Vitrina · AMBIENTE');
+  const [prosa] = buildChunks([{ page: 1, titulo: 'Básicos de Vitrina', blocks: [
+    bloque('SIMETRÍA', 'Coloca el mismo número de prendas a cada lado del maniquí central de la vitrina.'),
+  ] }], 'B.pdf');
+  assert.equal(prosa.heading, 'SIMETRÍA');
+  // Donde el título ya lo dice, no se repite.
+  const [marcas] = buildChunks([{ page: 1, titulo: 'Marcas', blocks: [bloque('MUNDOS Y MARCAS · URBANO', 'Tresvik\nKalinde')] }], 'B.pdf');
+  assert.equal(marcas.heading, 'MUNDOS Y MARCAS · URBANO');
+});
+
+const HILOS = 'Manual Hilos y Botones.pdf';
+const conHilos = fn => conEstado({
+  docChunks: [
+    frag('h1', HILOS, 3, 'Clasificación · Hilos', 'Tipo de producto: Hilos — Grosor, Color'),
+    frag('h2', HILOS, 3, 'Clasificación · Botones', 'Tipo de producto: Botones — Material, Tamaño'),
+    frag('h3', HILOS, 3, 'Clasificación · Agujas', 'Tipo de producto: Agujas — Tamaño, Color'),
+    frag('h4', HILOS, 5, 'Básicos de Mercería · FOCAL', 'Luz\nAltura\nRitmo'),
+    frag('h5', HILOS, 6, 'PASILLO', 'Deja 90 cm de pasillo entre los muebles de la mercería.'),
+  ].map(c => ({ ...c })), manualSections: [], docs: [{ name: HILOS }], manualActivo: HILOS, ultimosFragmentos: [],
+}, fn, reconstruirIndice);
+
+test('en un manual de dos familias, la segunda distingue: «cómo se clasifican los botones»', () => conHilos(() => {
+  assert.match(nombreDeSeccion(HILOS), /hilos y botones/i);
+  const ids = retrieve('como se clasifican los botones', { doc: HILOS, source: 'pdf' }).map(r => r.c.id);
+  assert.equal(ids[0], 'h2', ids.join(','));
+}));
+
+test('si tras quitar el nombre del manual solo queda «cuáles», se busca con el nombre', () => conHilos(() => {
+  assert.ok(retrieve('cuales son los hilos y botones', { doc: HILOS, source: 'pdf' }).length > 0);
+}));

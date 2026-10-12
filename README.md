@@ -150,6 +150,22 @@ Tres arreglos lo explican:
   una con su mundo y su página. Además, la lámina ya no se esconde por un «no especifica» a
   media respuesta, y la cabecera de la tarjeta enseña los mundos que la respuesta nombra.
 
+Las tres que fallaban se arreglaron en la lectura y la búsqueda (ap-v1.24), sin tocar el
+prompt:
+- **Cada celda va con su encabezado.** En una tabla «MUNDO | EXHIBICIÓN | MARCA», la fila sale
+  como «EXHIBICIÓN: Por color» y luego «MARCA: …». Suelto entre las marcas, «Por color» no decía
+  que es como se exhibe el mundo.
+- **Rejillas en minúsculas** (`tablaDeCeldas`). La clasificación de una sección suele ser una
+  rejilla —«Botones | Material | Tamaño»— sin rótulos en mayúsculas. Se reconoce por la forma:
+  cuatro o más filas de celdas cortas y alineadas, rótulos que no se repiten y valores que sí.
+- **El nombre de la lámina no se pierde.** En una lámina de solo listas (un «Básicos de Vitrina»
+  con dos listas tituladas debajo), el nombre va delante de cada título. Y dentro de un manual,
+  «¿cuáles son los básicos?», en el manual que se llama así, ya no se queda buscando «cuáles» a secas. En un manual
+  de dos familias («Hilos y Botones»), nombrar la segunda sí distingue.
+
+Modo manual: desarrollo 35 → **36/42**, confirmación 16 → **17/19**; dato en contexto,
+desarrollo 38 → **39/42**. Golden de 667: arregla 1, rompe 0.
+
 ### Dos modos de respuesta, y el modelo de fábrica
 
 Desde el 26-sep, en **Ajustes → Modo de respuesta** hay dos:

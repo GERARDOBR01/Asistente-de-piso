@@ -254,6 +254,7 @@ export function esVerbo(w){
 }
 /** @param {string} g */
 export const esVerboDePiso=g=>esVerbo(g.replace(/^[~!]/,''));
+const INTERROGATIVOS=new Set(['cual','cuales','que','como','donde','cuando','cuanto','cuantos','cuanta','cuantas','quien','quienes']);
 /** @param {string} query @param {OpcionesDeBusqueda} [opts] @returns {Resultado[]} */
 export function retrieve(query,opts){
   const{source=null,limit=40,doc=null}=opts||{};
@@ -264,12 +265,25 @@ export function retrieve(query,opts){
      secciones sí distingue, y ahí (sin `doc`) se queda. */
   if(doc){
     const propio=new Set(tokenize(nombreDeSeccion(doc)));
+    /* Un manual de dos familias —HILOS Y BOTONES— sí se distingue por
+       dentro: «¿cómo se clasifican los botones?» buscaba solo «clasifican», y
+       la fila de los botones empataba con la de los hilos. Si
+       la pregunta nombra una sola familia, y no es la primera, esa palabra se
+       queda. La primera no: con ella se nombra la sección en el piso —«en
+       vinos las cervezas…», «el maniquí de sacos»— y ahí no distingue nada. */
+    const familias=nombreDeSeccion(doc).split(/\s+y\s+/i).map(p=>new Set(tokenize(p)));
+    if(familias.length>1){
+      const nombradas=familias.filter(f=>terms.some(x=>variantes(x.g.replace(/^[~!]/,'')).some(v=>f.has(v))));
+      if(nombradas.length===1&&nombradas[0]!==familias[0])for(const t of nombradas[0])propio.delete(t);
+    }
     /** @param {string} g */
     const esDelNombre=g=>variantes(g.replace(/^[~!]/,'')).some(v=>propio.has(v));
     const resto=terms.filter(x=>!esDelNombre(x.g));
     /* Si tras quitar el nombre solo quedan verbos, la pregunta ES el nombre:
-       «¿cómo acomodo los vinos?» en VINOS Y LICORES. */
-    if(resto.some(x=>!esVerboDePiso(x.g)))terms=resto;
+       «¿cómo acomodo los vinos?» en VINOS Y LICORES. Y lo mismo si solo queda
+       la palabra de la pregunta: «¿cuáles son los básicos de vitrina?» en
+       BÁSICOS DE VITRINA buscaba «cuales» a secas y no encontraba nada. */
+    if(resto.some(x=>!esVerboDePiso(x.g)&&!INTERROGATIVOS.has(x.g.replace(/^[~!]/,''))))terms=resto;
   }
   if(!terms.length)return[];
   /* Lo que se exige se mide sobre lo que de verdad se busca. Contarlo sobre la
