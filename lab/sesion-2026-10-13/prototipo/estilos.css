@@ -1,0 +1,46 @@
+/* Lenguaje visual del repo: fondo casi negro, vidrio neutro, un solo punto rojo. */
+:root{
+  --bg:#0A0B0D; --panel:#14161B; --panel2:#1B1E25; --linea:#2A2E37;
+  --texto:#F4F2F0; --tenue:#B3B0B8; --rojo:#E5333A;
+  --ok:#2FbF71; --warn:#E0A32E; --bad:#E5333A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--texto);
+  font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.punto{display:inline-block;width:.6em;height:.6em;border-radius:50%;background:var(--rojo);vertical-align:middle}
+.barra{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;border-bottom:1px solid var(--linea);position:sticky;top:0;background:rgba(10,11,13,.9);backdrop-filter:blur(8px)}
+.marca{font-weight:600;letter-spacing:.2px}.marca b{color:var(--tenue);font-weight:600}
+.etq-demo{font-size:12px;color:var(--tenue);border:1px solid var(--linea);border-radius:999px;padding:3px 10px}
+main{max-width:720px;margin:0 auto;padding:16px}
+.intro{color:var(--tenue);font-size:14px}
+.intro code{color:var(--texto)}
+.panel{background:var(--panel);border:1px solid var(--linea);border-radius:16px;padding:16px;margin:16px 0}
+.panel h2{margin:0 0 12px;font-size:18px}
+.campo{display:block;font-size:13px;color:var(--tenue);margin-bottom:10px}
+.campo select{display:block;width:100%;margin-top:4px;background:var(--panel2);color:var(--texto);
+  border:1px solid var(--linea);border-radius:10px;padding:10px}
+.fila{display:flex;gap:8px}
+.fila input{flex:1;min-width:0;background:var(--panel2);color:var(--texto);
+  border:1px solid var(--linea);border-radius:10px;padding:12px}
+button{cursor:pointer;border:1px solid var(--linea);border-radius:10px;background:var(--panel2);color:var(--texto);padding:12px 14px;font-size:15px}
+.primario{background:var(--rojo);border-color:var(--rojo);color:#fff;font-weight:600}
+.icono.grabando{background:var(--rojo);border-color:var(--rojo)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.chip{font-size:13px;color:var(--tenue);padding:6px 12px;border-radius:999px}
+.salida{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.badge{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:13px;letter-spacing:.4px;
+  width:max-content;padding:6px 12px;border-radius:999px;border:1px solid var(--linea)}
+.badge .punto{background:currentColor}
+.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.bad{color:var(--bad)}
+.nota{margin:0;font-size:14px}
+.aviso{margin:0;font-size:13px;color:var(--warn)}
+.vacio{margin:0;font-size:13px;color:var(--tenue)}
+.fuente{background:var(--panel2);border:1px solid var(--linea);border-radius:12px;padding:12px}
+.fuente-h{font-size:12px;color:var(--tenue);margin-bottom:6px}
+.fuente-t{font-size:14px;white-space:pre-wrap}
+.mini{font-size:12px;color:var(--tenue);margin:0 0 12px}
+.subir{display:block;text-align:center;border:1px dashed var(--linea);border-radius:12px;padding:18px;color:var(--tenue);cursor:pointer}
+.rubrica{margin:14px 0 0;padding-left:18px;color:var(--tenue);font-size:13px}
+.rubrica b{color:var(--texto)}
+.pie{max-width:720px;margin:0 auto;padding:16px;color:var(--tenue);font-size:12px}

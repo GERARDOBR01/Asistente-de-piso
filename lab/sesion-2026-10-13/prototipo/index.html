@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Asistente de Piso · NEO (prototipo)</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header class="barra">
+  <div class="marca"><span class="punto"></span> Asistente de Piso <b>· NEO</b></div>
+  <span class="etq-demo">prototipo · datos sintéticos · sin red</span>
+</header>
+
+<main>
+  <p class="intro">Una sola pantalla que une <b>Preguntar</b> (respuesta con su fuente, y “no sé”
+  cuando no hay evidencia) y <b>Revisar por foto</b> (veredicto por código). Reutiliza el motor
+  y la revisión reales de la app, sin tocarlos. Ver <code>../analisis/</code>.</p>
+
+  <section class="panel">
+    <h2>Preguntar</h2>
+    <label class="campo">Sección
+      <select id="seccion"></select>
+    </label>
+    <div class="fila">
+      <input id="q" type="text" placeholder="Escribe tu pregunta…" autocomplete="off">
+      <button id="voz" class="icono" title="Dictar (voz a texto)">🎤</button>
+      <button id="preguntar" class="primario">Preguntar</button>
+    </div>
+    <div id="ejemplos" class="chips"></div>
+    <div id="respuesta" class="salida"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Revisar por foto</h2>
+    <p id="umbrales" class="mini"></p>
+    <label for="foto" class="subir">📷 Tomar o subir una foto del mueble</label>
+    <input id="foto" type="file" accept="image/*" capture="environment" hidden>
+    <div id="veredicto" class="salida"></div>
+    <ul id="rubrica" class="rubrica"></ul>
+  </section>
+</main>
+
+<footer class="pie">Prototipo de laboratorio (sesión 2026-10-13). No es la app en producción.</footer>
+
+<script type="module">
+  import { iniciar } from './app.mjs';
+  iniciar();
+</script>
+</body>
+</html>
