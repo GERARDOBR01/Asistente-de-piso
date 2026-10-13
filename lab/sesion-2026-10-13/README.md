@@ -48,6 +48,33 @@ Vista previa: `prototipo/vista-previa.png`.
 - UI en Chromium headless: badge y fuentes correctos, trampa en **NO SÉ**, y
   **0 peticiones de red externas** (todo local).
 
+## Medición con un manual real
+
+Se probó con un manual real de muebles (38 págs.). El PDF, la batería y los volcados quedan
+**fuera del repo**. Batería de 86 preguntas armada a mano desde el manual: 59 de dato, 12 de esas
+mismas escritas con faltas de celular, 11 que el manual no contesta y 4 trampas. Instrumento: el
+de siempre (`lab/volcar.mjs` con la app real en Chromium, `lab/correr.mjs` y `lab/comparar.mjs`).
+
+| Modo manual, sin API | App actual | Con el prototipo |
+|---|---|---|
+| Dato con su página | 60/71 (84.5 %) | 60/71 |
+| Dato en el contexto que recibiría el modelo | 65/71 | 65/71 |
+| «No está» bien dicho | 4/11 | 4/11 |
+| Trampas | 4/4 | 4/4 |
+| Decisiones idénticas a la app (estado y páginas) | — | **86/86** |
+
+- **Exactitud: crece 0 %, medido** (arregla 0, rompe 0). Es por diseño: el prototipo llama al
+  mismo `respuestaSinModelo`. Lo que suma es forma de uso (una pantalla, voz, sección), no aciertos.
+- **Voz a texto:** las 12 con faltas salen 10/12, igual que bien escritas. El motor ya absorbe
+  las faltas; el dictado aporta manos libres, no aciertos.
+- **Arreglo que destapó este manual:** el prototipo armaba el id con «manual#página#título», y aquí
+  20 de 81 fragmentos comparten página y título. Con eso divergía de la app en 5 de 86; ahora el id
+  va por posición, se conservan los campos del fragmento y cuenta el manual interno: 86/86.
+- **Dónde sí hay margen (motor, no este trabajo):** 7 de 11 «no está» enseñan tarjeta; de los
+  datos que fallan, 5 tienen la página correcta pero el dato en otro fragmento de esa página (el
+  «fragmento hermano» de la hoja de ruta), 2 son de una tabla que sale de otra página y 2 son un
+  aviso falso.
+
 ## Qué NO se tocó
 `index.html`, `src/`, `sw.js`, el CI y el resto de `lab/`. El APK, los JARs, Ghidra y los
 volcados de REA se quedaron en el scratchpad de la sesión (fuera del repo); sus versiones y

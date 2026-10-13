@@ -13,17 +13,24 @@ import { reconstruirIndice } from '../../../src/motor/indice.js';
 import { respuestaSinModelo } from '../../../src/motor/respuesta.js';
 import { rutaDeLaPregunta } from '../../../src/motor/conversacion.js';
 import { noCalifica, reducir, redondear, CALIDAD } from '../../../src/revision/veredicto.js';
-import { MANUALES, EJEMPLOS, RUBRICA } from './datos-demo.mjs';
+import * as datos from './datos-demo.mjs';
 
-/* ── Montar el corpus sintético en el motor real ──────────────────────────── */
+const { MANUALES, EJEMPLOS, RUBRICA } = datos;
+
+/* ── Montar el corpus en el motor real ────────────────────────────────────────
+   El id va por posición y no por «manual#página#título»: en un manual real
+   varios fragmentos comparten página y título (en uno de muebles, 20 de 81), y
+   el motor deduplica la evidencia por id. Los campos que traiga el fragmento
+   (los de un corpus.json de lab/volcar.mjs) se conservan, y si los datos traen
+   el manual interno de la app (MANUAL_INTERNO), cuenta para BM25 como en la app. */
 function construirCorpus() {
   /** @type {any[]} */
   const docChunks = [];
   for (const m of MANUALES)
-    for (const c of m.chunks)
-      docChunks.push({ id: `${m.name}#${c.page}#${c.heading}`, source: 'pdf', docName: m.name, page: c.page, heading: c.heading, text: c.text });
-  const docs = MANUALES.map(m => ({ name: m.name }));
-  montar({ docChunks, docs, manualActivo: MANUALES[0].name, docFigures: [], ultimosFragmentos: [] }, reconstruirIndice);
+    m.chunks.forEach((c, i) => docChunks.push({ ...c, id: c.id ?? `${m.name}#${i}`, source: c.source ?? 'pdf', docName: m.name }));
+  const docs = MANUALES.map(m => ({ name: m.name, pageCount: m.pageCount }));
+  const manualSections = /** @type {any} */ (datos).MANUAL_INTERNO ?? [];
+  montar({ manualSections, docChunks, docs, manualActivo: MANUALES[0].name, docFigures: [], ultimosFragmentos: [] }, reconstruirIndice);
 }
 
 /* Igual que lab/motor-node.mjs: la ruta de la pregunta se calcula una vez por turno. */
