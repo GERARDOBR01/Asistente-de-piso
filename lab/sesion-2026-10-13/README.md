@@ -12,7 +12,8 @@ llevar algo de esto al código de producción. Nada fuera de esta carpeta se mod
    **Zebra Companion** y **Mylow (Lowe's)**.
    → `analisis/yoobic-estatico.md`, `analisis/competitivo.md`, `analisis/fuentes.md`
    Después de medir: qué hay detrás de los mejores del sector y dónde sí sirve REA →
-   `analisis/que-hay-detras.md`
+   `analisis/que-hay-detras.md`. Y de qué proyectos ya terminados se puede sacar algo para el
+   chat y para Revisar → `analisis/donde-extraer.md`
 3. **Prototipo** que replica lo mejor de los tres en **una sola pantalla**: *Preguntar*
    (respuesta con su fuente, y “no sé” cuando no hay evidencia) + *Revisar por foto*
    (veredicto por código). → `prototipo/`
