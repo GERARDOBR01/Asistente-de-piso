@@ -2,8 +2,9 @@
 
 - **Estado:** en `main` (#51, 6-oct-2026). El 7-oct se calibró con fotos reales de piso (rama
   `revision-tienda`): ver «Fotos reales de tienda (7-oct)». El orden entre grupos de color sigue
-  siendo un **supuesto por confirmar**. El criterio de éxito se ha medido solo con fotos de
-  **desarrollo**: falta el lote de confirmación. Lo que cambió al construirlo está en «Ajustes
+  siendo un **supuesto por confirmar**. El 17-oct se corrió el **lote de confirmación** (23 fotos
+  bien montadas, una sola corrida): **no confirma** el criterio en colorización, triangulación y
+  niveles. Ver «Lote de confirmación (17-oct)». Lo que cambió al construirlo está en «Ajustes
   durante la construcción», al final.
 
 ## Contexto
@@ -502,6 +503,71 @@ existen. Para eso está el toque inteligente.
 - **Precarga:** los modelos se bajan al elegir «Focal».
 
 Todo esto se midió en **desarrollo**, con 5 fotos. Falta el lote de confirmación.
+
+## Lote de confirmación (17-oct)
+
+Corrido **una sola vez**, con el código de `main` en `ae377e3` y sin tocar `src/` antes ni
+durante. Las fotos y el informe con nombres de archivo viven fuera del repo.
+
+**El lote:**
+- 23 fotos de piso nuevas (2 al 16 de octubre): 14 reenviadas por WhatsApp y 9 originales de un
+  Galaxy A54. Según Gerardo, **todas están bien montadas**: `esperado = CUMPLE` en todas.
+- 4 tringlas, 4 muebles (mesa de doblado, mesa nido, mesa de bolsas, carrito) y 16 focales (uno
+  es una foto de área con tringla y focal). Son 40 básicos más 23 orígenes.
+- El tipo, el recuadro de cada mueble y los puntos de cada focal los marcó Claude viendo la foto,
+  no Gerardo. **Protocolo de toque:** un punto en lo más alto de cada elemento del frente
+  (maniquí, base con producto, planta, bolsa y totem o panel de la exhibición). No cuentan la
+  tringla, el marco de madera ni el letrero de precio en poste.
+- **HEIC:** las 9 originales del teléfono vienen en HEIC, y la app no las abre en Chrome
+  (`ui.js`, «La foto está en HEIC…»). Se pasaron a JPG con su EXIF (como «Más compatible» en la
+  cámara) para poder medirlas.
+- **Navegador:** en el contenedor no hay Chrome; se usó el Chromium 141 de Playwright
+  (`CHROMIUM=…`) en vez de `CANAL=chrome`. Es el mismo motor.
+
+**Resultado:**
+
+| Básico | Aciertos | IC 95 % | CUMPLE falsos | GRAVE falsos | NO_CALIFICA | Criterio |
+|---|---|---|---|---|---|---|
+| Colorización | 2/4 | 15–85 % | — (sin defectos) | 2 | 0 | ✗ |
+| Surtido | 4/4 | 51–100 % | — (sin defectos) | 0 | 0 | ✓ en la razón, con n = 4 |
+| Triangulación | 9/16 (56 %) | 33–77 % | — (sin defectos) | 3 | 0 | ✗ |
+| Alturas y niveles | 12/16 (75 %) | 51–90 % | — (sin defectos) | 3 | 0 | ✗ |
+| Origen | 23/23 | 86–100 % | — | 0 | — | ✓ |
+
+- **NO_CALIFICA en los básicos: 0 de 40** (0 %, bajo el tope de 30 %). En el origen, 14 de 23
+  salen «sin datos», las 14 de WhatsApp, como se espera; las 9 del teléfono salen OBSERVACIÓN.
+- **CUMPLE falsos: no se pueden medir.** El lote no trae fotos con defecto.
+
+**Cada falla y su causa:**
+
+| Básico | Exhibición | Salió | Causa |
+|---|---|---|---|
+| Colorización | Tringla de chamarras acolchadas | GRAVE «frío entre neutros, tramo 5 de 11» | A ojo, la tringla sí rompe la regla parafraseada: un rojo después de los azules y oscuros entre los neutros. Gerardo la da por buena: o la tienda clasifica por estilo antes que por color («manda la clasificación»), o la regla del supuesto no es la del piso. **Decide Gerardo** |
+| Colorización | Tringla entre maniquíes, foto de área | GRAVE «frío entre cálidos, tramo 1 de 7» | La tringla está espaciada y entre las prendas se ve el azul del ventanal: el fondo cuenta como una prenda fría. Falla de método (fondo que no es liso) |
+| Triangulación | Dos maniquíes a los lados de un marco (2 fotos de la misma exhibición) | OBSERVACIÓN «2 elementos a la misma altura» | Las cabezas quedan a 0.8 % una de otra. Composición simétrica por diseño |
+| Triangulación | Dos maniquíes juntos con totem | OBSERVACIÓN, empate | Cabezas a 3.3 %, debajo del empate de 4 %. Se decide por el pulso de quien toca |
+| Triangulación | Caballeros con 7 elementos (3 totems) | OBSERVACIÓN, empate | Los dos maniquíes más altos quedan a 1.4 % |
+| Triangulación y niveles | 4 maniquíes de pie en fila (2 fotos) y un infantil con 3 totems | GRAVE «todo casi a la misma altura» | Desnivel de 7, 8 y 10 %, bajo el mínimo de 12 %. Gerardo da por buena la fila de maniquíes |
+| Niveles | 4 maniquíes, uno con sombrero | OBSERVACIÓN «solo 2 alturas» | Tres cabezas a la misma altura y el sombrero arriba |
+
+**Sensibilidad al protocolo de toque** (aparte, no cuenta para el criterio): con los mismos
+focales tocando solo maniquíes y bases, sin totems, triangulación baja a 8/16. Las fallas no
+vienen de haber contado los totems.
+
+**Conclusión:**
+- El lote **no confirma** el criterio. Con exhibiciones que Gerardo da por buenas, triangulación
+  y niveles marcan una de cada tres, y 6 de esas marcas son GRAVE. Es la parte del ADR que ya era
+  un **supuesto**: el triángulo, el empate de 4 % y el desnivel de 12 %. En piso, una fila de
+  maniquíes a la misma altura y una pareja simétrica también se aceptan.
+- Surtido y origen no fallan, pero con 4 muebles y sin defectos **no alcanza** para confirmar
+  el surtido.
+- Estas 23 fotos ya se usaron. Si se ajusta algo con ellas, pasan a ser desarrollo, y la
+  siguiente confirmación necesita un lote nuevo con defectos puestos a propósito y ~10 por básico.
+- **Por confirmar con Gerardo:**
+  - ninguna foto de entre el 2 y el 6 de octubre debe estar entre las 5 que calibraron el 7-oct.
+    Para el origen, varias pueden estar entre las 30 de WhatsApp del 8-oct;
+  - el HEIC en el teléfono: si el selector de Android lo entrega como HEIC, 4 de cada 10 fotos
+    de ese teléfono no abren.
 
 ## Consecuencias
 

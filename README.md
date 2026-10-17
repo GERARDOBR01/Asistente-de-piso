@@ -547,8 +547,13 @@ WhatsApp con la Web Share API.
   - 30 fotos de tienda reenviadas por WhatsApp: el origen sale «sin datos» en todas, ninguna
     GRAVE. El mejor detector de IA abierto tampoco marcó ninguna (0/59 con las de ayer), pero pesa
     780 MB y falla con ediciones locales: no entra a la app (ADR 0007).
-  - **Pero esas fotos se usaron para calibrar**: son desarrollo, no evidencia. La confirmación
-    es el siguiente lote de fotos, corrido una sola vez.
+  - **Pero esas fotos se usaron para calibrar**: son desarrollo, no evidencia.
+- **Lote de confirmación** (17-oct, 23 fotos nuevas bien montadas, una sola corrida): **no
+  confirma el criterio**. Triangulación 9/16, alturas y niveles 12/16, colorización 2/4; surtido
+  4/4 y origen 23/23 sin GRAVE falsos; 0 % NO_CALIFICA. Las fallas son filas de maniquíes a la
+  misma altura y parejas simétricas que en piso se aceptan, una tringla que la regla supuesta da
+  por revuelta y un ventanal que se cuela entre prendas. Sin fotos con defecto, los CUMPLE falsos
+  no se midieron. Detalle en el ADR 0007.
 - La regla de colorización (orden de los grupos y dirección) sigue siendo un supuesto por
   confirmar, y se configura en `REGLA_COLOR`.
 
