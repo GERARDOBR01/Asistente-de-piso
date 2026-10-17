@@ -38,7 +38,8 @@ Las decisiones están en `docs/adr/`:
 - **0004, prompt injection.**
 - **0005, módulos sin bundler:** cómo se parte `index.html` y en qué orden.
 - **0006, puerta sin modelo:** el criterio de salida de la Fase 3, fijado antes de la corrida.
-- **0007, revisión con foto.**
+- **0007, revisión con foto.** El lote de confirmación (17-oct) no confirmó el criterio.
+- **0008, pesos y capas de Veristack en la revisión con foto:** propuesta, sin código.
 
 Lo último que salió (ap-v1.13 a v1.21):
 - **v1.13 a v1.15, Revisar:** SynthID revisado a mano cuando la app no puede probar el origen, y
