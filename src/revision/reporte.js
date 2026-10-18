@@ -11,10 +11,11 @@ import { COLOR_NIVEL, $, st, aviso, vibrar, ease, esc } from './comun.js';
 import { animar, redondo, dibujar } from './dibujo.js';
 import { medirZona, pintarZonas } from './zonas.js';
 import { nuevaRevision } from './ui.js';
-import { guardarPronto, pintarArea } from './historial.js';
+import { guardarPronto, pintarArea, miniaturaAhora } from './historial.js';
 import { comparar, resumenCambios, cuando, cuandoEnFrase } from './registro.js';
 import { textoSello } from './notas.js';
 import { empezarAnotar } from './anotar.js';
+import { tarjetaReferencia, comparacionActual } from './referencia.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {import('./zonas.js').Zona} Zona */
@@ -231,6 +232,7 @@ export function pintarResultados(subir = false) {
       ${z.tipo === 'tringla' ? `<button type="button" class="rv-vestidos" data-vestidos="${i}" aria-pressed="${!!z.vestidos}">${z.vestidos ? 'Es de vestidos · revisar con la regla de color' : '¿Es de vestidos? La regla de color no aplica'}</button>` : ''}
     </div>`;
     }).join('')}
+    ${tarjetaReferencia()}
     ${st.origen ? tarjetaOrigen(origenVisto(), undefined, true) : ''}
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
       ${listaManual().map(m => `<label><input type="checkbox" data-item="${esc(m)}"${revisadoAMano().has(m) ? ' checked' : ''}> ${esc(m)}</label>`).join('')}</div>
@@ -315,7 +317,7 @@ function tarjetaCambios() {
   const varias = st.zonas.length > 1;
   return `<div class="rv-cambios" data-todo="${r.todo}">
     <div class="rv-cambios-cab"><span>Antes y después</span><b>${esc(r.texto)}</b></div>
-    <div class="rv-cambios-fotos"><figure><img src="${a.url || ''}" alt="La revisión de antes"><figcaption>Antes · ${esc(cuando(a.creada))}</figcaption></figure><figure><img id="rv-cambios-ahora" src="${st.miniActual}" alt="La revisión de ahora"><figcaption>Ahora</figcaption></figure></div>
+    <div class="rv-cambios-fotos"><figure><img src="${a.url || ''}" alt="La revisión de antes"><figcaption>Antes · ${esc(cuando(a.creada))}</figcaption></figure><figure><img data-mini-actual src="${miniaturaAhora()}" alt=""><figcaption>Ahora</figcaption></figure></div>
     <ul>${filas.map(f => `<li data-cambio="${esc(f.cambio)}"><span>${varias ? `Zona ${f.zona + 1} · ` : ''}${esc(BASICO[/** @type {'surtido'} */ (f.basico)] || f.basico)}</span><em>${esc(f.antes || '—')} → ${esc(f.ahora)}</em><b>${CAMBIO[f.cambio]}</b></li>`).join('')}</ul>
   </div>`;
 }
@@ -335,6 +337,8 @@ function resumenTexto() {
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
   if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
   if (o?.evidencia?.huella) l.push(`Huella SHA-256 de la foto original: ${o.evidencia.huella}…`);
+  const cmp = comparacionActual();
+  if (cmp && st.referencia) l.push(`Contra la referencia (${st.referencia.nombre}): se parece ${Math.round(cmp.x.parecido * 100)} %; ${cmp.x.texto}`);
   const notas = st.notas.filter(n => n.tipo === 'nota').map(n => `«${/** @type {{texto:string}} */ (n).texto}»`);
   if (st.notas.length) l.push(`Anotado a mano en la foto: ${st.notas.length} ${st.notas.length === 1 ? 'marca' : 'marcas'}${notas.length ? ` (${notas.join(', ')})` : ''}.`);
   const marcados = listaManual().filter(m => revisadoAMano().has(m));

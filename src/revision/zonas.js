@@ -66,7 +66,8 @@ const nuevaZona = (tipo, marco, guia) => ({ tipo, marco, guia, puntos: [], orige
 export function medirZona(z) {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
   z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos, { guia: z.guia, excluir: z.maniquies, vestidos: z.vestidos });
-  if (z.tipo === 'anaquel' && !z.maniquies) quitarManiquies(z);
+  /* Los ejemplos están dibujados por la app: no hay maniquíes que buscar ni modelo que bajar. */
+  if (z.tipo === 'anaquel' && !z.maniquies && f.via !== 'demo') quitarManiquies(z);
 }
 
 /* Surtido: un maniquí junto a la mesa no es un hueco ni producto. El detector

@@ -12,6 +12,7 @@ import { $, st, aviso, esc, aLienzo } from './comun.js';
 import { dibujar } from './dibujo.js';
 import { revisadoAMano, compartirImagen } from './reporte.js';
 import { reporteDeRonda, textoDeRonda, colorIndice, nombrePendiente, cuentaEnPalabras } from './rondas.js';
+import { ponerReferencia } from './referencia.js';
 
 const DB = 'asistente_piso_revisar', STORE = 'revisiones';
 /** El área de la revisión anterior: una ronda suele ser del mismo departamento. */
@@ -73,7 +74,7 @@ const jpeg = (c, q) => new Promise((ok, ko) => c.toBlob(b => (b ? ok(b) : ko(new
 /** Lo que se guardaría ahora de la revisión en pantalla (sin la foto). */
 function datosActuales() {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height }, antes: st.antes, notas: st.notas });
+  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height }, antes: st.antes, notas: st.notas, referencia: st.referencia });
 }
 
 const guardable = () => !!st.foto && st.foto.via !== 'demo' && st.foto !== descartada && st.zonas.some(z => z.res && z.res.length);
@@ -114,7 +115,7 @@ async function guardar() {
     f.guardada ||= jpeg(aLienzo(f.base, LADO_FOTO), 0.85);
     const antes = registros.find(r => r.id === id);
     const miniatura = await jpeg(mini, 0.8);
-    const reg = { id, creada: antes?.creada ?? Date.now(), editada: Date.now(), ...datos, foto: await f.guardada, miniatura };
+    const reg = { id, creada: antes?.creada ?? Date.now(), editada: Date.now(), ...datos, foto: await f.guardada, miniatura, refMini: st.referencia?.mini || null };
     if (st.foto === f) ponerMiniActual(miniatura);
     await tx('readwrite', s => s.put(reg));
     if (nueva) {
@@ -223,6 +224,12 @@ async function compartirRonda() {
   await compartirImagen(r.c, textoDeRonda(r.x), `ronda-${area}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}.jpg`, 'Ronda de exhibición');
 }
 
+/** La miniatura de ahora para las tarjetas: la guardada, o la del lienzo mientras se guarda. */
+export function miniaturaAhora() {
+  if (st.miniActual || !st.foto) return st.miniActual;
+  try { return aLienzo($('rv-lienzo'), LADO_MINI).toDataURL('image/jpeg', 0.7); } catch { return ''; }
+}
+
 /**
  * La miniatura marcada de la revisión en pantalla, para «Antes y después».
  * @param {Blob|null|undefined} blob
@@ -230,8 +237,7 @@ async function compartirRonda() {
 export function ponerMiniActual(blob) {
   if (st.miniActual) URL.revokeObjectURL(st.miniActual);
   st.miniActual = blob ? URL.createObjectURL(blob) : '';
-  const img = /** @type {HTMLImageElement|null} */ (document.getElementById('rv-cambios-ahora'));
-  if (img && st.miniActual) img.src = st.miniActual;
+  if (st.miniActual) document.querySelectorAll('img[data-mini-actual]').forEach(img => { /** @type {HTMLImageElement} */ (img).src = st.miniActual; });
 }
 
 /* ── Lista ──────────────────────────────────────────────────────────────── */
@@ -343,6 +349,9 @@ export function iniciarHistorial(abrir, repetir) {
   refrescar();
 }
 
+/** Lo guardado, la más nueva primero (para elegir una referencia). */
+export const registrosGuardados = () => registros;
+
 /** Reabre una revisión del historial (desde la lista o desde un pendiente de la ronda). @param {string} id */
 function abrirId(id) {
   const reg = registros.find(r => r.id === id);
@@ -356,6 +365,7 @@ function abrirId(id) {
 export function revisionNueva() {
   soltarActual();
   st.registro = null; descartada = null; st.antes = null; st.notas = [];
+  ponerReferencia(null);
   ponerMiniActual(null);
   areaNueva();
 }
