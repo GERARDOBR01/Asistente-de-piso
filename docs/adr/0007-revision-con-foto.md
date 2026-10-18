@@ -529,6 +529,64 @@ la columna junto al maniquí**.
 | Lote de confirmación (zonas a mano) | 5/5 | 5/5 |
 | 23 fotos con mesa, sin zona | 6 GRAVE + 4 OBSERVACIÓN falsos | 1 GRAVE (pared con letras) + 1 OBSERVACIÓN; 16 piden zona |
 
+## Colorización con la regla de Gerardo (17-oct)
+
+**La regla, confirmada por Gerardo:** siempre de cálidos a fríos a neutros, de izquierda a
+derecha, sea cual sea la mercancía. **GRAVE = un grupo partido en bloques o un mal seguimiento
+del orden.** La excepción son los **vestidos** (presentación de básicos), que llevan su propio
+mercadeo por temporada.
+
+- `REGLA_COLOR.ordenEstricto: true`: unos bloques limpios en otro orden ya no son observación.
+  - Ojo: una foto de ejemplo del propio manual (tallas grandes) va fríos → cálidos → neutros y
+    ahora sale GRAVE. Gerardo lo tiene que ver.
+- **Vestidos:** en la tarjeta de una tringla hay «¿Es de vestidos?». Al tocarlo, NO_CALIFICA
+  con su motivo («la regla de color no se aplica; revisa a mano que siga la campaña»).
+- Fuera el «supuesto por confirmar» de la pantalla y del motivo.
+
+**Qué tan bien distingue una buena de una mala colorización.** Banco fuera del repo
+(`eval-revision/color`), revisado a ojo tramo por tramo:
+- **Tringlas reales:** 19 zonas. Son 16 calificables: 10 de desarrollo, 2 de prueba y 4 del
+  lote de confirmación.
+- **Defectos hechos con ellas:** a 8 tringlas bien montadas se les pegó en medio de un bloque
+  una prenda real de otro grupo, recortada de otra foto y con la luz de la foto destino
+  (32 «intrusos»). Además hay 4 ediciones con los bloques intercambiados y 8 controles (una
+  prenda del mismo grupo, que no debe cambiar nada).
+- El código encontró dos causas de error que no eran de la regla:
+  1. **Brillos.** Un tramo angosto (< 4 % de la franja) y quemado (L ≥ 98) es luz recortada
+     por la cámara, no una prenda. En las camisas azules del lote de confirmación, dos brillos
+     partían el bloque azul y salía GRAVE.
+  2. **Colores en el filo.** Un color es dudoso si un error de medición chico lo cambia de
+     grupo (4 de claridad, 20 % de croma, 8° de tono), o si es un pálido (L ≥ 80 y C de 3 a 15:
+     azul cielo, rosa pastel, crema).
+     - Se lee dos veces, con todos los tramos y solo con los firmes. Si sin los dudosos la
+       tringla está en orden, sale **OBSERVACIÓN «revísalo a ojo»**, nunca GRAVE.
+     - Tampoco se vuelve CUMPLE, así que no tapa un defecto.
+     - La mezclilla lavada (L 30, C 5) y el marino (L 21) siguen firmes.
+
+| Banco | Antes (orden estricto) | Ahora (+ brillos y dudosos) |
+|---|---|---|
+| Tringlas reales, desarrollo | 9/10 | 9/10 |
+| Tringlas reales, prueba | 2/2 | 2/2 |
+| Lote de confirmación | 3/4 (GRAVE falso: camisas azules) | **4/4** |
+| Intrusos atrapados | 31/32 | 31/32 (24 GRAVE, 7 OBSERVACIÓN) |
+| Orden equivocado atrapado | 4/4 | 4/4 |
+| Controles con GRAVE falso | 3/8 | 1/8 (+2 OBSERVACIÓN) |
+| Sintéticas | 52/56 | 52/56 |
+| Fotos del manual / tienda | 8/8 · 2/2 | 8/8 · 2/2 |
+
+- **Los 7 intrusos que bajan a OBSERVACIÓN:**
+  - cuatro blusas lila: el lila está en el filo entre morado (frío) y rosa (cálido);
+  - tres prendas en una tringla de luz muy cálida y tenue, donde un amarillo casi se lee beige.
+- **Límites que quedan:**
+  - un suéter vino en sombra fuerte se lee negro: en la foto los píxeles están en 13–32 de 255;
+  - una mezclilla deslavada bajo cierta luz se lee gris;
+  - un marino un poco más claro que su bloque, junto a una prenda muy distinta, se lee azul.
+- **Para Gerardo:**
+  - una foto del manual va mezclilla clara | caqui | mezclilla oscura. ¿Es clasificación por
+    producto, que manda sobre el color, o un ejemplo de colorización? Hoy sale CUMPLE porque
+    las dos mezclillas se leen marino.
+  - ¿Una tringla de blusas rojas y negras alternadas por colección es GRAVE?
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

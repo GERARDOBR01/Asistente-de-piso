@@ -247,7 +247,7 @@ async function credencialDe(blob, meta, anclas) {
 /**
  * Del archivo a resultados, sin pantalla: lo usan la pestaña y eval/revision.mjs.
  * @param {Blob} blob @param {Tipo} tipo
- * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco, excluir?:Marco[], anclasC2pa?:string}} [op]
+ * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco, excluir?:Marco[], vestidos?:boolean, anclasC2pa?:string}} [op]
  *   `puntos`, `marco` y `excluir` en fracción del ancho y del alto de la foto.
  */
 export async function analizarArchivo(blob, tipo, op = {}) {
@@ -260,7 +260,7 @@ export async function analizarArchivo(blob, tipo, op = {}) {
   const meta = leerMetadatos(bytes);
   const origen = veredictoOrigen({ via: op.via || 'galeria', meta, huella: h, bytes: bytes.length, tomada: op.tomada, credencial: await credencialDe(blob, meta, op.anclasC2pa) });
   let resultados;
-  try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco, 'manual', { excluir: op.excluir }); }
+  try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco, 'manual', { excluir: op.excluir, vestidos: op.vestidos }); }
   catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }
   return { bytes, base, img, origen, huella: h, resultado: resultados[0] || null, resultados };
 }
@@ -300,14 +300,15 @@ function cargarDemo(imgDemo, puntos) {
  * @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
  * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara
  * @param {OrigenPuntos} [origenPuntos]
- * @param {{guia?:boolean, excluir?:Marco[]}} [op] `guia`: la zona no la dibujó la persona;
- *   `excluir`: maniquíes detectados, en fracción, que no cuentan para el surtido
+ * @param {{guia?:boolean, excluir?:Marco[], vestidos?:boolean}} [op] `guia`: la zona no la dibujó la persona;
+ *   `excluir`: maniquíes detectados, en fracción, que no cuentan para el surtido;
+ *   `vestidos`: la tringla es de vestidos y la regla de color no se aplica
  * @returns {Resultado[]}
  */
 function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual', op = {}) {
   const m = zona || MARCOS[tipo];
   const marco = { x: m.x * img.width, y: m.y * img.height, w: m.w * img.width, h: m.h * img.height };
-  if (tipo === 'tringla') return [revisarColor(img, { marco })];
+  if (tipo === 'tringla') return [revisarColor(img, { marco, vestidos: op.vestidos })];
   if (tipo === 'anaquel') return [revisarSurtido(img, {
     marco, guia: op.guia ?? !zona,
     excluir: (op.excluir || []).map(b => ({ x: b.x * img.width, y: b.y * img.height, w: b.w * img.width, h: b.h * img.height })),
@@ -327,6 +328,7 @@ function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual', op =
  * @property {OrigenPuntos} origenPuntos
  * @property {string} [nota] lo que dijo «Sugerir», hasta que se toque la zona
  * @property {Marco[]} [maniquies] maniquíes detectados en la zona (surtido), en fracción de la foto
+ * @property {boolean} [vestidos] tringla de vestidos: la persona lo marcó y no se aplica la regla de color
  * @property {Resultado[]|null} res null = el focal espera sus puntos
  */
 
@@ -336,7 +338,7 @@ const nuevaZona = (tipo, marco, guia) => ({ tipo, marco, guia, puntos: [], orige
 /** @param {Zona} z */
 function medirZona(z) {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos, { guia: z.guia, excluir: z.maniquies });
+  z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos, { guia: z.guia, excluir: z.maniquies, vestidos: z.vestidos });
   if (z.tipo === 'anaquel' && !z.maniquies) quitarManiquies(z);
 }
 
@@ -784,15 +786,16 @@ function dibujarColor(ctx, r, k, u, e, p) {
     ctx.fillStyle = 'rgba(255,255,255,.95)';
     ctx.font = `700 ${Math.round(10 * u)}px Geist Mono, ui-monospace, monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    if (x1 - x0 > 14 * u) ctx.fillText(NOMBRE_GRUPO[/** @type {'calido'} */ (t.grupo)][0].toUpperCase(), (x0 + x1) / 2, by + bh + 4 * u);
+    /* Un color dudoso lleva «?»: el código no lo da por seguro. */
+    if (x1 - x0 > 14 * u) ctx.fillText(NOMBRE_GRUPO[/** @type {'calido'} */ (t.grupo)][0].toUpperCase() + (t.dudoso ? '?' : ''), (x0 + x1) / 2, by + bh + 4 * u);
     if (t.fueraGrupo || t.fueraRueda) {
-      const grave = t.fueraGrupo, pulso = p < 1 ? 1 + 0.6 * Math.sin(p * Math.PI * 4) ** 2 : 1;
+      const grave = t.fueraGrupo && !t.dudoso, pulso = p < 1 ? 1 + 0.6 * Math.sin(p * Math.PI * 4) ** 2 : 1;
       ctx.lineWidth = (grave ? 3.2 : 2.4) * u * pulso;
       ctx.strokeStyle = grave ? COLOR_NIVEL.GRAVE : COLOR_NIVEL['OBSERVACIÓN'];
       if (!grave) ctx.setLineDash([6 * u, 4 * u]);
       redondo(ctx, x0 - 3 * u, y0 - 6 * u, x1 - x0 + 6 * u, by + bh - y0 + 10 * u, 8 * u);
       ctx.stroke(); ctx.setLineDash([]);
-      pildora(ctx, `tramo ${i + 1} · ${NOMBRE_GRUPO[/** @type {'calido'} */ (t.grupo)]}`, (x0 + x1) / 2, y0 - 20 * u, grave ? COLOR_NIVEL.GRAVE : COLOR_NIVEL['OBSERVACIÓN'], u, grave ? '#fff' : '#2A1A00');
+      pildora(ctx, `tramo ${i + 1} · ${t.dudoso ? `¿${NOMBRE_GRUPO[/** @type {'calido'} */ (t.grupo)]}?` : NOMBRE_GRUPO[/** @type {'calido'} */ (t.grupo)]}`, (x0 + x1) / 2, y0 - 20 * u, grave ? COLOR_NIVEL.GRAVE : COLOR_NIVEL['OBSERVACIÓN'], u, grave ? '#fff' : '#2A1A00');
     }
   });
 }
@@ -930,9 +933,10 @@ const ICONO_COMPARTIR = '<svg class="ico" viewBox="0 0 24 24"><circle cx="18" cy
 /** La cifra grande de cada básico. @param {Resultado} r */
 function cifra(r) {
   const ev = r.evidencia;
-  if (r.nivel === 'NO_CALIFICA') return { n: null, de: '', txt: 'no se puede calificar con esta foto' };
+  if (r.nivel === 'NO_CALIFICA') return { n: null, de: '', txt: ev.vestidos ? 'vestidos: sin regla de color' : 'no se puede calificar con esta foto' };
   if (r.basico === 'colorizacion') {
     if (r.nivel === 'GRAVE') return { n: Number(ev.fuera_de_grupo), de: `/${ev.tramos}`, txt: 'tramos rompen los bloques de color' };
+    if (r.nivel === 'OBSERVACIÓN' && Number(ev.dudosos)) return { n: Number(ev.dudosos), de: `/${ev.tramos}`, txt: 'tramos con color dudoso: revísalos a ojo' };
     if (r.nivel === 'OBSERVACIÓN' && Number(ev.fuera_de_rueda)) return { n: Number(ev.fuera_de_rueda), de: `/${ev.tramos}`, txt: 'tramos fuera de la rueda en su grupo' };
     if (r.nivel === 'OBSERVACIÓN') return { n: Number(ev.tramos), de: '', txt: 'tramos en bloques, en otro orden' };
     return { n: Number(ev.tramos), de: '', txt: 'tramos de color, todos en orden' };
@@ -963,6 +967,8 @@ function contar(el, fin) {
 const DE_DONDE = { manual: 'puntos tocados a mano', detector: 'puntos sugeridos por la app', 'detector+manual': 'sugeridos y tocados', silueta: 'cimas por silueta', 'detector+silueta': 'sugeridos y por silueta' };
 /** @type {Record<string, (v: any) => string | null>} */
 const CHIP = {
+  vestidos: () => 'tringla de vestidos',
+  orden: v => `regla: ${v}`,
   tramos: v => `${v} tramos de color`,
   fondo_pct: v => v ? `fondo ${v} %` : null,
   luz_corregida: v => v ? 'luz corregida' : null,
@@ -970,6 +976,8 @@ const CHIP = {
   direccion: v => v === 'der-izq' ? 'de derecha a izquierda' : 'de izquierda a derecha',
   fuera_de_grupo: v => v ? `${v} fuera de su bloque` : 'bloques limpios',
   fuera_de_rueda: v => v ? `${v} fuera de la rueda` : null,
+  dudosos: v => v ? `${v} con color dudoso` : null,
+  brillos: v => v ? `${v} ${v === 1 ? 'brillo' : 'brillos'} sin contar` : null,
   grupos: () => null,
   bloques: v => v ? `bloques: ${v}` : null,
   celdas: v => `${v} celdas revisadas`,
@@ -1123,7 +1131,8 @@ function pintarResultados(subir = false) {
       <div class="rv-ev">${chips(r.evidencia)}</div>
       <div class="rv-fuente">${conIA(r)
         ? 'fuente: CÓDIGO · los puntos los ubicó IA en tu teléfono (MediaPipe) · el veredicto, el código · nada se sube'
-        : 'fuente: CÓDIGO · medido en este teléfono · sin IA'}${z.tipo === 'tringla' && r.nivel !== 'NO_CALIFICA' ? ' · regla de color por confirmar' : ''}</div>
+        : 'fuente: CÓDIGO · medido en este teléfono · sin IA'}</div>
+      ${z.tipo === 'tringla' ? `<button type="button" class="rv-vestidos" data-vestidos="${i}" aria-pressed="${!!z.vestidos}">${z.vestidos ? 'Es de vestidos · revisar con la regla de color' : '¿Es de vestidos? La regla de color no aplica'}</button>` : ''}
     </div>`;
     }).join('')}
     ${st.origen ? tarjetaOrigen(origenVisto(), undefined, true) : ''}
@@ -1149,6 +1158,15 @@ function pintarResultados(subir = false) {
     if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }, 950);
   $('rv-compartir').onclick = compartir;
+  /* Vestidos llevan su propio mercadeo (presentación de básicos): la persona lo dice y la zona se vuelve a medir. */
+  caja.querySelectorAll('[data-vestidos]').forEach((/** @type {HTMLElement} */ b) => b.addEventListener('click', () => {
+    const z = st.zonas[Number(b.dataset.vestidos)];
+    if (!z) return;
+    z.vestidos = !z.vestidos;
+    st.activa = st.zonas.indexOf(z);
+    medirZona(z);
+    animar(700); pintarZonas(); pintarResultados();
+  }));
   caja.querySelectorAll('.rv-lista input').forEach((/** @type {HTMLInputElement} */ inp) => inp.addEventListener('change', () => {
     const s = revisadoAMano();
     if (inp.checked) s.add(/** @type {string} */ (inp.dataset.item)); else s.delete(/** @type {string} */ (inp.dataset.item));
@@ -1313,6 +1331,8 @@ const EJEMPLOS = {
   tringla: [
     () => tringla([P.calido[0], P.calido[1], P.calido[2], P.frio[2], P.calido[3], P.calido[4], P.frio[0], P.frio[1], P.frio[3], P.neutro[2], P.neutro[3], P.neutro[4]], { w: 960, h: 720, semilla: 4, ruido: 5, sombra: 0.2 }),
     () => tringla([P.calido[0], P.calido[1], P.calido[2], P.calido[3], P.frio[0], P.frio[1], P.frio[2], P.frio[3], P.neutro[0], P.neutro[2], P.neutro[3], P.neutro[4]], { w: 960, h: 720, semilla: 6, ruido: 5, sombra: 0.2 }),
+    /* Un azul muy pálido entre los fríos: ¿azul cielo o gris? Sale «revísalo a ojo». */
+    () => tringla([P.calido[0], P.calido[1], P.calido[3], P.frio[0], P.frio[1], '#D6DCE6', P.frio[2], P.frio[3], P.neutro[2], P.neutro[3], P.neutro[4]], { w: 960, h: 720, semilla: 8, ruido: 5, sombra: 0.2 }),
   ],
   anaquel: [
     () => anaquel({ w: 960, h: 720, semilla: 8, ruido: 5, sombra: 0.15, huecos: [[0, 3], [0, 4], [2, 1]] }),
