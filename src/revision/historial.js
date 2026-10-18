@@ -73,7 +73,7 @@ const jpeg = (c, q) => new Promise((ok, ko) => c.toBlob(b => (b ? ok(b) : ko(new
 /** Lo que se guardaría ahora de la revisión en pantalla (sin la foto). */
 function datosActuales() {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height }, antes: st.antes });
+  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height }, antes: st.antes, notas: st.notas });
 }
 
 const guardable = () => !!st.foto && st.foto.via !== 'demo' && st.foto !== descartada && st.zonas.some(z => z.res && z.res.length);
@@ -355,7 +355,7 @@ function abrirId(id) {
 /** Una foto nueva (o «Nueva foto»): su revisión se guarda como otra. */
 export function revisionNueva() {
   soltarActual();
-  st.registro = null; descartada = null; st.antes = null;
+  st.registro = null; descartada = null; st.antes = null; st.notas = [];
   ponerMiniActual(null);
   areaNueva();
 }

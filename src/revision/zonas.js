@@ -165,7 +165,9 @@ export function tocarZona(i) {
 /** Lista de zonas y el botón para agregar otra. */
 export function pintarZonas() {
   const caja = $('rv-zonas');
-  if (!st.foto) { caja.hidden = true; return; }
+  $('rv-lienzo').classList.toggle('anotando', st.modo === 'anotar');
+  /* Al anotar, la barra de herramientas toma el lugar de las zonas. */
+  if (!st.foto || st.modo === 'anotar') { caja.hidden = true; return; }
   caja.hidden = false;
   const dibujando = st.modo === 'dibujar';
   $('rv-zonas-lista').innerHTML = st.zonas.map((z, i) => {
@@ -192,7 +194,7 @@ export function pintarZonas() {
 }
 
 /* Tras un resultado la página bajó a las tarjetas: la foto vuelve a la vista para dibujar o ajustar. */
-function verFoto() {
+export function verFoto() {
   const r = $('rv-escena').getBoundingClientRect();
   if (r.top < 0 || r.bottom > innerHeight) $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
 }

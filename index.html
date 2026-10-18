@@ -1229,6 +1229,16 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-escena canvas{touch-action:manipulation}
 .rv-escena canvas.dibujando{touch-action:none;cursor:crosshair}
 .rv-escena canvas.ajustando{touch-action:none;cursor:move}
+.rv-escena canvas.anotando{touch-action:none;cursor:crosshair}
+/* Anotar la foto (src/revision/anotar.js). */
+.rv-anotar{display:flex;flex-direction:column;gap:8px;margin-top:-4px;padding:10px;border-radius:16px;background:var(--s1);border:1px solid var(--border2);color:var(--text2);font-size:12.5px}
+.rv-anotar-btns{display:flex;flex-wrap:wrap;gap:6px}
+.rv-anotar button{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-anotar button[aria-pressed="true"]{border-color:#FF3347;color:#FF3347;background:color-mix(in srgb,#FF3347 10%,var(--s1))}
+.rv-anotar button.pri{margin-left:auto;border:0;background:var(--text);color:var(--bg)}
+.rv-anotar button:disabled{opacity:.45;cursor:default}
+.rv-nota-caja{display:flex;gap:6px}
+.rv-nota-caja input{flex:1;min-width:0;min-height:36px;padding:0 10px;border-radius:10px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:500 14px 'Geist',system-ui,sans-serif}
 .rv-zonas{display:flex;flex-direction:column;gap:6px;margin-top:-4px}
 .rv-zonas-fila{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 /* Las zonas en su renglón y los botones abajo: con tres botones no caben juntos a 390 px. */
@@ -1803,6 +1813,11 @@ body::after{
     <div class="rv-zonas" id="rv-zonas" hidden>
       <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button><button class="rv-zona-ajustar" id="rv-zona-ajustar" type="button" aria-pressed="false" hidden>✎ Ajustar</button><button class="rv-nueva-foto" id="rv-nueva-foto" type="button" aria-label="Empezar con otra foto">↺ Nueva foto</button></div>
       <span class="rv-zonas-t" id="rv-zonas-t"></span>
+    </div>
+    <div class="rv-anotar" id="rv-anotar" hidden>
+      <span id="rv-anotar-t"></span>
+      <span class="rv-anotar-btns"><button type="button" data-herr="flecha" aria-pressed="true">Flecha</button><button type="button" data-herr="trazo" aria-pressed="false">Trazo</button><button type="button" data-herr="nota" aria-pressed="false">Nota</button><button type="button" id="rv-anotar-deshacer">Deshacer</button><button type="button" class="pri" id="rv-anotar-listo">Listo</button></span>
+      <span class="rv-nota-caja" id="rv-nota-caja" hidden><input id="rv-nota-txt" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="Ej. Falta la talla M"><button type="button" id="rv-nota-ok">Poner</button></span>
     </div>
     <div class="rv-ayuda" id="rv-ayuda" hidden><span id="rv-ayuda-t">Toca lo más alto de cada elemento</span><span><button id="rv-sugerir" type="button">Sugerir</button><button id="rv-exacto" type="button" aria-pressed="false">Punto exacto</button><button id="rv-deshacer" type="button">Deshacer</button><button class="pri" id="rv-listo" type="button" disabled>Revisar</button></span></div>
     <div class="rv-acciones">
