@@ -18,7 +18,7 @@ import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
 import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
-import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, TOPE_HISTORIAL } from '../src/revision/registro.js';
+import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, cuandoEnFrase, TOPE_HISTORIAL, comparar, resumenCambios } from '../src/revision/registro.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -883,4 +883,35 @@ test('historial: sugerencias de área, tope y fechas', () => {
   assert.equal(cuando(new Date(2026, 9, 17, 21, 30).getTime(), ahora), 'Ayer · 21:30');
   assert.equal(cuando(new Date(2026, 8, 3, 8, 0).getTime(), ahora), '3 sep · 8:00');
   assert.equal(cuando(new Date(2025, 11, 24, 8, 0).getTime(), ahora), '24 dic 2025 · 8:00');
+  assert.equal(cuandoEnFrase(new Date(2026, 9, 18, 9, 7).getTime(), ahora), 'de hoy, 9:07');
+  assert.equal(cuandoEnFrase(new Date(2026, 9, 17, 21, 30).getTime(), ahora), 'de ayer, 21:30');
+  assert.equal(cuandoEnFrase(new Date(2026, 8, 3, 8, 0).getTime(), ahora), 'del 3 sep, 8:00');
+});
+
+test('antes y después: cada básico contra el de antes, zona por zona', () => {
+  const r = (/** @type {string} */ basico, /** @type {any} */ nivel) => ({ basico, nivel, motivo: '', evidencia: {}, fuente: /** @type {'CÓDIGO'} */ ('CÓDIGO') });
+  const antes = [
+    { tipo: 'tringla', res: [r('colorizacion', 'GRAVE')] },
+    { tipo: 'anaquel', res: [r('surtido', 'OBSERVACIÓN')] },
+    { tipo: 'focal', res: [r('triangulacion', 'CUMPLE'), r('niveles', 'GRAVE')] },
+    { tipo: 'anaquel', res: [r('surtido', 'NO_CALIFICA')] },
+  ];
+  const ahora = [
+    { tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] },
+    { tipo: 'anaquel', res: [r('surtido', 'OBSERVACIÓN')] },
+    { tipo: 'focal', res: [r('triangulacion', 'OBSERVACIÓN'), r('niveles', 'OBSERVACIÓN')] },
+    { tipo: 'anaquel', res: [r('surtido', 'CUMPLE')] },
+    { tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] },
+  ];
+  const f = comparar(antes, ahora);
+  assert.deepEqual(f.map(x => x.cambio), ['corregido', 'igual', 'empeoro', 'mejoro', 'sin dato', 'nuevo']);
+  assert.deepEqual(resumenCambios(f), { corregidos: 1, pendientes: 2, empeoraron: 1, todo: false, texto: '1 de 3 corregidos · 1 empeoró' });
+  /* Una zona que cambió de tipo es nueva, no se compara con la otra. */
+  assert.equal(comparar([{ tipo: 'anaquel', res: [r('surtido', 'GRAVE')] }], [{ tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] }])[0].cambio, 'nuevo');
+  const todo = resumenCambios(comparar(antes.slice(0, 1), ahora.slice(0, 1)));
+  assert.equal(todo.todo, true); assert.equal(todo.texto, '1 de 1 corregido');
+  assert.equal(resumenCambios(comparar([{ tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] }], [{ tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] }])).texto, 'Ya cumplía');
+  /* El registro guarda de cuál viene y el resumen. */
+  const reg = registroDe({ zonas: ahora.slice(0, 1), origen: null, area: '', via: 'app', tomada: null, revisado: [], tam: { w: 1, h: 1 }, antes: { id: 'rv-1', zonas: antes.slice(0, 1) } });
+  assert.equal(reg.antes, 'rv-1'); assert.equal(reg.cambios?.todo, true);
 });

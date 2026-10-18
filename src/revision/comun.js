@@ -48,6 +48,9 @@ export const st = {
   /** @type {any} */ origen: null,
   /** el área o departamento de la revisión (historial y reporte) */ area: '',
   /** @type {string|null} id de la revisión en el historial; null = todavía no se guarda */ registro: null,
+  /** @type {null|{id:string, zonas:any[], miniatura:Blob|null, creada:number, url?:string}} la revisión de antes, con la que se compara («Volver a revisar») */ antes: null,
+  /** @type {any} la revisión guardada que se vuelve a revisar: espera la foto nueva */ repetir: null,
+  /** @type {string} la miniatura marcada de la revisión en pantalla (para «Antes y después») */ miniActual: '',
   /** lo que la persona vio en SynthID @type {null|import('./procedencia.js').VistoSynthid} */ synthid: null,
   /** ya tocó «Revisar con SynthID»: se ve la pregunta */ synthidAbierto: false,
   demo: { tringla: 0, anaquel: 0, focal: 0 },
@@ -67,7 +70,9 @@ export function mostrar(modo) {
   $('rv-vacia').hidden = modo !== 'vacia';
   $('rv-video').hidden = modo !== 'camara';
   $('rv-lienzo').hidden = modo !== 'foto';
-  $('rv-guia').hidden = modo !== 'camara';
+  /* Al volver a revisar, la foto de antes (en fantasma) es la guía. */
+  $('rv-guia').hidden = modo !== 'camara' || !!st.repetir;
+  $('rv-fantasma').hidden = modo !== 'camara' || !st.repetir;
   $('rv-ayuda').hidden = true;
   const d = $('rv-disparo');
   d.classList.toggle('vivo', modo === 'camara');

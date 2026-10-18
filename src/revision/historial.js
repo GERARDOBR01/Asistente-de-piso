@@ -34,8 +34,10 @@ let todas = false;
 let borrarTodoArmado = false;
 /** @type {string[]} */
 let urls = [];
-/** @type {(reg: any) => void} */
+/** @type {(reg: any, previa?: any) => void} */
 let alAbrir = () => {};
+/** @type {(reg: any) => void} */
+let alRepetir = () => {};
 
 /** @returns {Promise<IDBDatabase>} */
 function abrirBase() {
@@ -68,7 +70,7 @@ const jpeg = (c, q) => new Promise((ok, ko) => c.toBlob(b => (b ? ok(b) : ko(new
 /** Lo que se guardaría ahora de la revisión en pantalla (sin la foto). */
 function datosActuales() {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height } });
+  return registroDe({ zonas: st.zonas, origen: st.origen, area: st.area, via: f.via, tomada: f.tomada, revisado: [...revisadoAMano()], tam: { w: f.img.width, h: f.img.height }, antes: st.antes });
 }
 
 const guardable = () => !!st.foto && st.foto.via !== 'demo' && st.foto !== descartada && st.zonas.some(z => z.res && z.res.length);
@@ -108,7 +110,9 @@ async function guardar() {
   try {
     f.guardada ||= jpeg(aLienzo(f.base, LADO_FOTO), 0.85);
     const antes = registros.find(r => r.id === id);
-    const reg = { id, creada: antes?.creada ?? Date.now(), editada: Date.now(), ...datos, foto: await f.guardada, miniatura: await jpeg(mini, 0.8) };
+    const miniatura = await jpeg(mini, 0.8);
+    const reg = { id, creada: antes?.creada ?? Date.now(), editada: Date.now(), ...datos, foto: await f.guardada, miniatura };
+    if (st.foto === f) ponerMiniActual(miniatura);
     await tx('readwrite', s => s.put(reg));
     if (nueva) {
       navigator.storage?.persist?.().catch(() => {});
@@ -151,13 +155,25 @@ function sugerir() {
   $('rv-areas').innerHTML = sugerenciasDeArea(registros, $('rv-area').value, AREAS_BASE).slice(0, 12).map(a => `<option value="${esc(a)}"></option>`).join('');
 }
 
-/** La barra del área se ve con una foto real; dice si ya está guardada. */
+/** La barra del área se ve con una foto real (o esperando la de «Volver a revisar»); dice si ya está guardada. */
 export function pintarArea() {
-  const real = !!st.foto && st.foto.via !== 'demo';
+  const real = (!!st.foto && st.foto.via !== 'demo') || !!st.repetir;
   $('rv-area-caja').hidden = !real;
   if (!real) return;
   const reg = st.registro && registros.find(r => r.id === st.registro);
-  $('rv-guardada').textContent = reg ? `Guardada · ${cuando(reg.creada)}` : (guardable() ? 'Se guarda en el historial' : '');
+  $('rv-guardada').textContent = st.repetir ? '' : reg ? `Guardada · ${cuando(reg.creada)}` : (guardable() ? 'Se guarda en el historial' : '');
+  $('rv-repetir').hidden = !reg || !!st.repetir;
+}
+
+/**
+ * La miniatura marcada de la revisión en pantalla, para «Antes y después».
+ * @param {Blob|null|undefined} blob
+ */
+export function ponerMiniActual(blob) {
+  if (st.miniActual) URL.revokeObjectURL(st.miniActual);
+  st.miniActual = blob ? URL.createObjectURL(blob) : '';
+  const img = /** @type {HTMLImageElement|null} */ (document.getElementById('rv-cambios-ahora'));
+  if (img && st.miniActual) img.src = st.miniActual;
 }
 
 /* ── Lista ──────────────────────────────────────────────────────────────── */
@@ -190,8 +206,9 @@ function pintar() {
     const u = URL.createObjectURL(r.miniatura); urls.push(u);
     const n = r.nivel || 'PENDIENTE';
     const bs = Object.entries(r.basicos || {}).map(([b, nv]) => `<i data-n="${esc(nv)}">${esc(BASICO_CORTO[b] || b)}</i>`).join('');
+    const vuelta = r.cambios ? `<small class="rv-hist-vuelta" data-todo="${r.cambios.todo}">↻ ${esc(r.cambios.texto)}</small>` : '';
     return `<div class="rv-hist-item${r.id === st.registro ? ' on' : ''}" data-n="${esc(n)}">
-      <button type="button" class="rv-hist-abrir" data-abrir="${esc(r.id)}"><img src="${u}" alt="" loading="lazy"><span class="rv-hist-txt"><b>${esc(r.area || 'Sin área')}</b><small>${esc(cuando(r.tomada || r.creada))} · ${r.zonas.length} ${r.zonas.length === 1 ? 'zona' : 'zonas'}</small><span class="rv-hist-bas">${bs}</span></span></button>
+      <button type="button" class="rv-hist-abrir" data-abrir="${esc(r.id)}"><img src="${u}" alt="" loading="lazy"><span class="rv-hist-txt"><b>${esc(r.area || 'Sin área')}</b><small>${esc(cuando(r.tomada || r.creada))} · ${r.zonas.length} ${r.zonas.length === 1 ? 'zona' : 'zonas'}</small>${vuelta}<span class="rv-hist-bas">${bs}</span></span></button>
       <button type="button" class="rv-hist-x" data-borrar="${esc(r.id)}" aria-label="Borrar la revisión">×</button></div>`;
   }).join('') + (vista.length < lista.length ? `<button type="button" class="rv-hist-mas" data-mas="1">Ver las ${lista.length}</button>` : '');
   const b = $('rv-hist-borrar');
@@ -220,10 +237,15 @@ async function borrarTodo() {
 /**
  * Engancha la lista y el área. `abrir` vuelve a poner en la pantalla una
  * revisión guardada (lo hace ui.js, que maneja la escena).
- * @param {(reg: any) => void} abrir
+ * @param {(reg: any, previa?: any) => void} abrir
+ * @param {(reg: any) => void} repetir «Volver a revisar» la revisión en pantalla
  */
-export function iniciarHistorial(abrir) {
-  alAbrir = abrir;
+export function iniciarHistorial(abrir, repetir) {
+  alAbrir = abrir; alRepetir = repetir;
+  $('rv-repetir').addEventListener('click', () => {
+    const reg = st.registro && registros.find(r => r.id === st.registro);
+    if (reg) { soltarActual(); alRepetir(reg); }
+  });
   const area = $('rv-area');
   area.addEventListener('input', () => { st.area = normalizarArea(area.value); sugerir(); guardarPronto(); });
   area.addEventListener('change', () => { area.value = st.area; });
@@ -239,7 +261,7 @@ export function iniciarHistorial(abrir) {
     }
     if (b.dataset.abrir) {
       const reg = registros.find(r => r.id === b.dataset.abrir);
-      if (reg) { soltarActual(); descartada = null; alAbrir(reg); pintar(); }
+      if (reg) { soltarActual(); descartada = null; alAbrir(reg, reg.antes ? registros.find(r => r.id === reg.antes) : null); pintar(); }
     }
   });
   $('rv-hist-filtro').addEventListener('click', (/** @type {MouseEvent} */ e) => {
@@ -258,6 +280,7 @@ export function iniciarHistorial(abrir) {
 /** Una foto nueva (o «Nueva foto»): su revisión se guarda como otra. */
 export function revisionNueva() {
   soltarActual();
-  st.registro = null; descartada = null;
+  st.registro = null; descartada = null; st.antes = null;
+  ponerMiniActual(null);
   areaNueva();
 }

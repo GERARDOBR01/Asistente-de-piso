@@ -122,6 +122,37 @@ export function empezarRevision(puntosListos = false) {
   pintarZonas(); pintarResultados(true);
 }
 
+/**
+ * «Volver a revisar»: la foto nueva se mide con las mismas zonas que la de
+ * antes. Los puntos de un focal llegan como sugerencia, en el mismo lugar
+ * relativo: la persona los mueve a las cimas de hoy y toca Revisar (si se
+ * midieran tal cual, el focal saldría igual que antes aunque lo hayan cambiado).
+ * @param {any[]} previas zonas guardadas @param {{w:number,h:number}} tam la imagen analizada de antes
+ */
+export function empezarConZonas(previas, tam) {
+  const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
+  const lz = $('rv-lienzo');
+  lz.width = f.base.width; lz.height = f.base.height;
+  proporcion(f.base.width, f.base.height);
+  mostrar('foto');
+  const kx = f.img.width / (tam.w || f.img.width), ky = f.img.height / (tam.h || f.img.height);
+  st.zonas = previas.map(p => {
+    const z = nuevaZona(p.tipo, { ...p.marco }, p.guia);
+    if (p.vestidos) z.vestidos = true;
+    if (p.tipo === 'focal' && p.puntos?.length) {
+      z.puntos = p.puntos.map((/** @type {{x:number,y:number}} */ q) => ({ x: q.x * kx, y: q.y * ky, sugerido: true }));
+      z.origenPuntos = p.origenPuntos || 'manual';
+      z.nota = 'Los puntos son los de la vez pasada: muévelos a las cimas de hoy y toca Revisar';
+    }
+    return z;
+  });
+  st.activa = 0; st.modo = 'ver';
+  for (const z of st.zonas) if (z.tipo !== 'focal') medirZona(z);
+  const focal = st.zonas.findIndex(z => z.tipo === 'focal');
+  if (focal >= 0) { tocarZona(focal); return; }
+  animar(900); pintarZonas(); pintarResultados(true);
+}
+
 /** El focal espera sus puntos. @param {number} i */
 export function tocarZona(i) {
   st.activa = i; st.modo = 'tocar';

@@ -31,7 +31,6 @@ export function pedirSensor() {
 
 export function empezarToma() {
   pararToma();
-  $('rv-toma').hidden = false;
   addEventListener('devicemotion', alMoverse);
   reloj = setTimeout(medir, 250);
 }
@@ -56,6 +55,7 @@ function medir() {
     chip('luz', t.luz, t.luz ? 'Luz bien' : 'Falta luz', `exposición ${t.exposicion} (mínimo 80)`);
     chip('nitidez', t.nitida, t.nitida ? 'Nítida' : 'Quieto: sale movida', `nitidez ${t.nitidez} (mínimo 30)`);
     $('rv-toma').dataset.listo = String(t.luz && t.nitida);
+    $('rv-toma').hidden = false;
     listo();
   }
   reloj = setTimeout(medir, CADA_MS);
