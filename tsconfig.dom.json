@@ -3,5 +3,5 @@
   // un proyecto aparte para que el motor siga sin poder tocar la pantalla.
   "extends": "./tsconfig.json",
   "compilerOptions": { "lib": ["es2022", "dom", "dom.iterable"] },
-  "include": ["src/tipos.d.ts", "src/revision/silueta.js", "src/revision/detector.js", "src/revision/c2pa.js", "src/revision/comun.js", "src/revision/dibujo.js", "src/revision/zonas.js", "src/revision/reporte.js", "src/revision/ui.js", "src/almacen/manuales.js"]
+  "include": ["src/tipos.d.ts", "src/revision/silueta.js", "src/revision/detector.js", "src/revision/c2pa.js", "src/revision/comun.js", "src/revision/dibujo.js", "src/revision/zonas.js", "src/revision/reporte.js", "src/revision/guia.js", "src/revision/ui.js", "src/almacen/manuales.js"]
 }

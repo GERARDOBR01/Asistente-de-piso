@@ -104,6 +104,28 @@ export function marcarTipo(t) {
   $('rv-vacia-t').textContent = TEXTOS[t].vacia;
 }
 
+/**
+ * La fuente reducida a `max` px de lado en un lienzo (uno nuevo, o `c` para
+ * reusarlo: la toma en vivo mide dos veces por segundo).
+ * @param {CanvasImageSource & {width:number,height:number}} fuente @param {number} max
+ * @param {number} [ancho] @param {number} [alto] medidas reales, si `fuente` no las trae
+ * @param {HTMLCanvasElement} [c]
+ */
+export function aLienzo(fuente, max, ancho = fuente.width, alto = fuente.height, c = document.createElement('canvas')) {
+  const f = Math.min(1, max / Math.max(ancho, alto));
+  c.width = Math.round(ancho * f); c.height = Math.round(alto * f);
+  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(fuente, 0, 0, c.width, c.height);
+  return c;
+}
+
+/** Los píxeles que se analizan: 640 px de lado. @param {HTMLCanvasElement} c @param {HTMLCanvasElement} [destino] @returns {Imagen} */
+export function pixeles(c, destino) {
+  const ch = aLienzo(c, 640, c.width, c.height, destino);
+  return /** @type {CanvasRenderingContext2D} */ (ch.getContext('2d')).getImageData(0, 0, ch.width, ch.height);
+}
+
 /** Dónde se ve la foto en la página: object-fit: contain puede dejar franjas en el lienzo. */
 export function areaFoto() {
   const lz = $('rv-lienzo'), r = lz.getBoundingClientRect();

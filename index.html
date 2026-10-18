@@ -1263,6 +1263,16 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
   -webkit-mask:linear-gradient(#000 0 0) top left/26px 26px no-repeat,linear-gradient(#000 0 0) top right/26px 26px no-repeat,linear-gradient(#000 0 0) bottom left/26px 26px no-repeat,linear-gradient(#000 0 0) bottom right/26px 26px no-repeat;
           mask:linear-gradient(#000 0 0) top left/26px 26px no-repeat,linear-gradient(#000 0 0) top right/26px 26px no-repeat,linear-gradient(#000 0 0) bottom left/26px 26px no-repeat,linear-gradient(#000 0 0) bottom right/26px 26px no-repeat}
 .rv-franja{position:absolute;left:0;right:0;border-top:1.5px dashed rgba(255,255,255,.75);border-bottom:1.5px dashed rgba(255,255,255,.75);background:rgba(255,255,255,.06)}
+/* Toma en vivo (src/revision/guia.js): avisa, no bloquea. */
+.rv-toma{position:absolute;left:8px;right:8px;bottom:10px;display:flex;gap:5px;pointer-events:none;flex-wrap:wrap;justify-content:center}
+.rv-toma span{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,.58);color:#fff;font-size:11px;white-space:nowrap;backdrop-filter:blur(8px)}
+.rv-toma span::before{content:'';width:7px;height:7px;border-radius:50%;background:#E2B755}
+.rv-toma span.ok::before{background:#5BC79A}
+.rv-horizonte{position:absolute;left:12%;right:12%;top:50%;height:0;pointer-events:none;--ladeo:0deg}
+.rv-horizonte::before,.rv-horizonte::after{content:'';position:absolute;top:-1px;width:14%;border-top:2px solid rgba(255,255,255,.85)}
+.rv-horizonte::before{left:0}.rv-horizonte::after{right:0}
+.rv-horizonte b{position:absolute;left:20%;right:20%;top:-1px;border-top:2px solid #fff;transform:rotate(var(--ladeo));transition:transform .1s linear}
+.rv-horizonte.ok b,.rv-horizonte.ok::before,.rv-horizonte.ok::after{border-color:#5BC79A}
 .rv-guia-txt{position:absolute;left:50%;top:10px;transform:translateX(-50%);padding:5px 11px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:11.5px;white-space:nowrap;backdrop-filter:blur(8px)}
 .rv-vacia{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;text-align:center;color:#C9C6CE;
   background:radial-gradient(60% 50% at 50% 40%,rgba(var(--acc-rgb),.16),rgba(0,0,0,0) 70%),linear-gradient(180deg,#121318,#08090B)}
@@ -1453,6 +1463,7 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 /* ── Revisar: el disparador es un obturador; el veredicto cae como sello ── */
 .rv-disparo{box-shadow:0 0 0 4px var(--bg),0 0 0 5px var(--border3),0 12px 30px var(--accent-sombra);transition:transform .14s var(--suave)}
 .rv-disparo.vivo{box-shadow:0 0 0 4px var(--bg),0 0 0 7px rgba(var(--rojo-rgb),0.8),0 12px 30px var(--accent-sombra)}
+.rv-disparo.vivo.lista{box-shadow:0 0 0 4px var(--bg),0 0 0 7px #5BC79A,0 12px 30px var(--accent-sombra)}
 .rv-vacia{background:radial-gradient(60% 50% at 50% 40%,rgba(255,255,255,.07),rgba(0,0,0,0) 70%),linear-gradient(180deg,#141519,#08090B)}
 .rv-nivel{border:1.5px solid currentColor;transform:rotate(-3deg);animation:sello .46s .32s var(--rebote) both}
 @keyframes sello{from{opacity:0;transform:rotate(-8deg) scale(1.6)}to{opacity:1;transform:rotate(-3deg) scale(1)}}
@@ -1709,7 +1720,8 @@ body::after{
       </div>
       <video id="rv-video" playsinline muted hidden></video>
       <canvas id="rv-lienzo" hidden></canvas>
-      <div class="rv-guia" id="rv-guia" hidden><div class="rv-franja" id="rv-franja"></div><span class="rv-guia-txt" id="rv-guia-txt">Encuadra la tringla</span></div>
+      <div class="rv-guia" id="rv-guia" hidden><div class="rv-franja" id="rv-franja"></div><span class="rv-guia-txt" id="rv-guia-txt">Encuadra la tringla</span><i class="rv-horizonte" id="rv-horizonte" hidden><b></b></i></div>
+      <div class="rv-toma" id="rv-toma" hidden><span data-toma="luz">Luz</span><span data-toma="nitidez">Nitidez</span><span data-toma="nivel" id="rv-toma-nivel" hidden>Nivel</span></div>
     </div>
     <div class="rv-zonas" id="rv-zonas" hidden>
       <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button><button class="rv-zona-ajustar" id="rv-zona-ajustar" type="button" aria-pressed="false" hidden>✎ Ajustar</button><button class="rv-nueva-foto" id="rv-nueva-foto" type="button" aria-label="Empezar con otra foto">↺ Nueva foto</button></div>

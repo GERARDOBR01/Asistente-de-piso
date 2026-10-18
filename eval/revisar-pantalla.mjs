@@ -1,8 +1,9 @@
 // La pantalla de Revisar de punta a punta, en un Chromium sin ventana, en
 // celular (390×844, táctil) y en escritorio. Lo corre el CI: las pruebas de
 // lab/ miden las reglas sobre los píxeles; aquí se prueba lo que toca la
-// persona (ejemplos, galería, zonas, vestidos, puntos del focal, compartir,
-// otra foto) y que nada truene en la página. Sin fotos reales: las imágenes
+// persona (cámara con la guía en vivo, ejemplos, galería, zonas, ajustar,
+// vestidos, puntos del focal, compartir, otra foto) y que nada truene en la
+// página. Sin fotos reales: la cámara es la falsa de Chromium, las imágenes
 // las dibuja demo.js en la propia página, y el focal se toca con «Punto
 // exacto», que no necesita bajar ningún modelo.
 //
@@ -19,7 +20,11 @@ if (capturas) fs.mkdirSync(capturas, { recursive: true });
 const pw = await cargarPlaywright();
 if (!pw) { console.error('Falta Playwright: npm i --no-save playwright-core, o PLAYWRIGHT_CORE=<ruta a index.mjs>'); process.exit(2); }
 const srv = await servirRepo();
-const b = await pw.chromium.launch({ executablePath: process.env.CHROMIUM || undefined, channel: process.env.CANAL || undefined });
+const b = await pw.chromium.launch({
+  executablePath: process.env.CHROMIUM || undefined, channel: process.env.CANAL || undefined,
+  /* Cámara falsa de Chromium y permiso sin preguntar: prueba la guía en vivo y el disparo. */
+  args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+});
 const url = `http://127.0.0.1:${/** @type {any} */ (srv.address()).port}/index.html`;
 
 /** @type {{vista:string, q:string, ok:boolean, detalle:string}[]} */
@@ -81,6 +86,39 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await espera(p, 400);
     const tipo = (/** @type {string} */ t) => p.evaluate((/** @type {string} */ t) => /** @type {HTMLElement} */ (document.querySelector(`[data-tipo="${t}"]`)).click(), t);
     const ejemplo = async () => { await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-demo')).click()); await espera(p, 1300); };
+
+    /* 0. Cámara: la guía en vivo mide luz y nitidez, el nivel sigue al acelerómetro y la foto se toma. */
+    const disparo = () => p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-disparo')).click());
+    await disparo();
+    await p.waitForFunction(() => {
+      const t = /** @type {HTMLElement} */ (document.getElementById('rv-toma'));
+      return !t.hidden && /** @type {HTMLElement} */ (t.querySelector('[data-toma="luz"]')).textContent !== 'Luz';
+    }, null, { timeout: 20000 });
+    const toma = await p.evaluate(() => [...document.querySelectorAll('#rv-toma span:not([hidden])')].map(e => e.textContent));
+    fila('cámara: la guía en vivo dice luz y nitidez antes de tomar', toma.length === 2 && /Luz bien|Falta luz/.test(toma[0]) && /Nítida|movida/.test(toma[1]), toma.join(' · '));
+    /** Gravedad como la da Android con el teléfono ladeado `grados` a la derecha. @param {number} grados */
+    const ladear = grados => p.evaluate((/** @type {number} */ g) => {
+      const r = g * Math.PI / 180;
+      for (let i = 0; i < 40; i++) dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: -9.81 * Math.sin(r), y: 9.81 * Math.cos(r), z: 0 } }));
+    }, grados);
+    const leerNivel = () => p.evaluate(() => ({
+      txt: /** @type {HTMLElement} */ (document.getElementById('rv-toma-nivel')).textContent,
+      giro: /** @type {HTMLElement} */ (document.getElementById('rv-horizonte')).style.getPropertyValue('--ladeo'),
+      ok: document.getElementById('rv-horizonte')?.classList.contains('ok'),
+    }));
+    await ladear(8); await espera(p, 200);
+    const chueco = await leerNivel();
+    await ladear(0); await espera(p, 200);
+    const derecho = await leerNivel();
+    fila('cámara: el nivel sigue al acelerómetro (ladeado 8°, luego derecho)', chueco.txt === 'Ladeado 8°' && chueco.giro === '-8.0deg' && !chueco.ok && derecho.txt === 'Derecho' && derecho.ok,
+      `${chueco.txt} ${chueco.giro} → ${derecho.txt} ${derecho.giro}`);
+    await foto('camara');
+    await disparo();
+    await p.waitForFunction(() => document.querySelectorAll('#rv-res .rv-ver').length > 0, null, { timeout: 30000 });
+    const apagada = await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-toma')).hidden && !document.getElementById('rv-disparo')?.classList.contains('lista'));
+    fila('cámara: la foto se toma, se revisa y la guía en vivo se apaga', apagada);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await espera(p, 300);
 
     /* 1. Ejemplos: los tres de tringla, los dos de anaquel y los dos de focal. */
     await tipo('tringla');

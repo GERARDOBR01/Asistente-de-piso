@@ -13,7 +13,8 @@ import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompl
 import { puntosDeCajas } from './triangulo.js';
 import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
-import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen } from './comun.js';
+import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
+import { pedirSensor, empezarToma, pararToma } from './guia.js';
 import { girar, animar, dibujar } from './dibujo.js';
 import { medirTodo, medirZona, empezarRevision, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
 import { tarjetaOrigen, pintarResultados, reporteParaCompartir } from './reporte.js';
@@ -37,6 +38,7 @@ function ponerGuia() {
 
 async function abrirCamara() {
   if (!navigator.mediaDevices?.getUserMedia) { aviso('Este navegador no da acceso a la cámara: usa Galería o un ejemplo.', 'warn'); return; }
+  pedirSensor();
   try {
     st.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
   } catch (e) {
@@ -50,9 +52,11 @@ async function abrirCamara() {
   if (v.videoWidth) proporcion(v.videoWidth, v.videoHeight);
   ponerGuia();
   mostrar('camara');
+  empezarToma();
 }
 
 function cerrarCamara() {
+  pararToma();
   st.stream?.getTracks().forEach(t => t.stop());
   st.stream = null;
   const v = $('rv-video');
@@ -80,24 +84,6 @@ async function tomar() {
 }
 
 /* ── Cargar y analizar ──────────────────────────────────────────────────── */
-
-/** @param {CanvasImageSource & {width:number,height:number}} fuente @param {number} max
- * @param {number} [ancho] @param {number} [alto] medidas reales, si `fuente` no las trae */
-function aLienzo(fuente, max, ancho = fuente.width, alto = fuente.height) {
-  const f = Math.min(1, max / Math.max(ancho, alto));
-  const c = document.createElement('canvas');
-  c.width = Math.round(ancho * f); c.height = Math.round(alto * f);
-  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(fuente, 0, 0, c.width, c.height);
-  return c;
-}
-
-/** @param {HTMLCanvasElement} c @returns {Imagen} */
-function pixeles(c) {
-  const ch = aLienzo(c, 640);
-  return /** @type {CanvasRenderingContext2D} */ (ch.getContext('2d')).getImageData(0, 0, ch.width, ch.height);
-}
 
 /** Un error al cargar la foto que sabe en qué paso pasó y qué decirle a la persona. */
 class ErrorFoto extends Error {

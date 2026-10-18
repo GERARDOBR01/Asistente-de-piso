@@ -651,6 +651,28 @@ con el tipo equivocado también. Ahora «✎ Ajustar», junto a «＋ Zona», en
 La geometría vive en `marco.js` (pura, con pruebas de propiedades). `eval/revisar-pantalla.mjs`
 la prueba en la pantalla: esquina, mover, cambiar de tringla a mesa y salir.
 
+## Captura guiada en vivo (18-oct)
+
+Una foto oscura o movida se descubría después de tomarla, con un NO_CALIFICA. Ahora, con la
+cámara abierta, `guia.js` mide un cuadro del video cada ~450 ms y lo dice sobre el video:
+- **Luz y nitidez** con los umbrales de `noCalifica` (`CALIDAD`), por el mismo camino que la
+  foto (lienzo de ≤ 1600 px y luego 640 px), dentro de la guía del tipo elegido. `noCalifica`
+  da solo el primer problema; `revisarToma` (`toma.js`, pura) da los dos a la vez. Una prueba
+  de propiedades pide que digan lo mismo.
+- **Nivel** con la gravedad del acelerómetro (`devicemotion`): «Derecho» hasta 2°, «Casi
+  derecho» hasta 6°, «Ladeado N°» arriba de eso, y «Ponlo de frente» si mira más de 20°
+  hacia arriba o abajo (deforma el mueble). Una línea del horizonte gira en la guía y se
+  alinea con las marcas de la orilla cuando el teléfono está derecho. Android e iOS dan la
+  gravedad con signos opuestos: el ángulo se pliega a ±90°. iOS pide permiso al abrir la
+  cámara; sin sensor o sin permiso, no hay nivel y lo demás sigue.
+- El disparo se pinta de verde cuando todo está bien. **Avisa, no bloquea:** se puede tomar
+  la foto igual, y la revisión sigue diciendo NO_CALIFICA si no da.
+
+La prueba de pantalla abre la cámara falsa de Chromium y simula el sensor (8° → «Ladeado 8°»,
+0° → «Derecho»). Lo que falta medir en el A54: que «Nítida» en el video y la nitidez de la
+foto tomada coincidan (la foto viene de `takePhoto` a resolución completa) y el signo del
+nivel con el teléfono de lado.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan
