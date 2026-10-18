@@ -1316,6 +1316,26 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-cambios li[data-cambio="corregido"] b,.rv-cambios li[data-cambio="mejoro"] b{color:var(--green)}
 .rv-cambios li[data-cambio="empeoro"] b{color:var(--red)}
 .rv-cambios li[data-cambio="igual"] b{color:var(--amber)}
+/* Ronda de departamento: el índice de exhibición de un área en un día. */
+.rv-ronda{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:var(--rxl);background:var(--s1);border:1px solid var(--border2)}
+.rv-ronda-cab{display:flex;align-items:center;gap:8px}
+.rv-ronda-cab span{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.rv-ronda-cab b{font-size:13px;color:var(--text)}
+.rv-ronda-cab select{flex:1;min-width:0;min-height:32px;padding:0 8px;border-radius:10px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:600 12.5px 'Geist',system-ui,sans-serif}
+.rv-ronda-indice{display:flex;align-items:center;gap:12px}
+.rv-ronda-indice b{flex:none;white-space:nowrap;font:700 40px/1 'Geist',system-ui,sans-serif;color:var(--c);letter-spacing:-.02em}
+.rv-ronda-indice span{display:flex;flex-direction:column;font-size:13px;color:var(--text);font-weight:600}
+.rv-ronda-indice small{font-size:11.5px;color:var(--text3);font-weight:400}
+.rv-ronda-barra{height:8px;border-radius:999px;background:var(--s2);overflow:hidden}
+.rv-ronda-barra i{display:block;height:100%;border-radius:999px}
+.rv-ronda-cuenta{margin:0;font-size:12px;color:var(--text2)}
+.rv-ronda-pend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rv-ronda-pend button{width:100%;display:flex;align-items:flex-start;gap:8px;padding:8px 6px;border:0;border-top:1px solid var(--border2);background:none;color:var(--text);text-align:left;font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer;--rv-c:var(--amber)}
+.rv-ronda-pend button[data-n="GRAVE"]{--rv-c:var(--red)}
+.rv-ronda-pend i{flex:none;width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--rv-c)}
+.rv-ronda-pend span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rv-ronda-pend small{font-weight:400;color:var(--text3);font-size:11.5px;line-height:1.35}
+.rv-ronda-btn{min-height:40px;border-radius:999px;border:0;background:var(--text);color:var(--bg);font:700 13px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-hist-vuelta{color:var(--amber)!important}
 .rv-hist-vuelta[data-todo="true"]{color:var(--green)!important}
 /* Toma en vivo (src/revision/guia.js): avisa, no bloquea. */
@@ -1802,6 +1822,7 @@ body::after{
       <input id="rv-area" list="rv-areas" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ej. Caballeros · mesa de entrada">
       <datalist id="rv-areas"></datalist>
       <span class="rv-guardada" id="rv-guardada"></span>
+      <span class="rv-guardada" id="rv-ronda-linea"></span>
       <button type="button" class="rv-chip" id="rv-repetir" hidden>↻ Volver a revisar</button>
     </div>
     <div class="rv-res" id="rv-res" aria-live="polite"></div>
@@ -1809,6 +1830,7 @@ body::after{
       <div class="rv-hist-cab"><h3 id="rv-hist-t">Historial</h3><span id="rv-hist-n"></span><button class="rv-hist-borrar" id="rv-hist-borrar" type="button">Borrar todo</button></div>
       <p class="rv-hist-nota">Se guarda solo en este teléfono. Toca una revisión para volver a verla.</p>
       <div class="rv-hist-filtro" id="rv-hist-filtro"></div>
+      <div class="rv-ronda" id="rv-ronda" hidden></div>
       <div class="rv-hist-lista" id="rv-hist-lista"></div>
     </section>
   </div>

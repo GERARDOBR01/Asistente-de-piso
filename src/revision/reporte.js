@@ -195,7 +195,7 @@ function listaManual() {
   return l;
 }
 
-const BASICO = { colorizacion: 'Colorización', surtido: 'Surtido', triangulacion: 'Triangulación', niveles: 'Alturas y niveles' };
+export const BASICO = { colorizacion: 'Colorización', surtido: 'Surtido', triangulacion: 'Triangulación', niveles: 'Alturas y niveles' };
 
 /** Todos los resultados, con su zona. */
 function todos() {
@@ -345,6 +345,24 @@ function guardarRevisado() {
   } catch { /* sin almacenamiento: se queda en la sesión */ }
 }
 
+/** @type {CanvasRenderingContext2D|null} */
+let medidor = null;
+
+/** Un texto partido en renglones que caben en `ancho` px con esa letra. @param {string} t @param {string} font @param {number} ancho */
+export function renglones(t, font, ancho) {
+  medidor ||= /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  medidor.font = font;
+  /** @type {string[]} */
+  const out = [];
+  let r = '';
+  for (const pal of t.split(' ')) {
+    const prueba = r ? r + ' ' + pal : pal;
+    if (r && medidor.measureText(prueba).width > ancho) { out.push(r); r = pal; } else r = prueba;
+  }
+  if (r) out.push(r);
+  return out;
+}
+
 /**
  * La imagen para compartir, de 1080 px de ancho: la foto marcada y, debajo,
  * cada veredicto con su insignia de color, su cifra y su motivo, lo revisado a
@@ -356,20 +374,6 @@ export function reporteParaCompartir() {
   dibujar(1);
   const ANCHO = 1080, M = 48, u = ANCHO / 400;
   const altoFoto = Math.round(lz.height * ANCHO / lz.width);
-  const medir = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
-  /** @param {string} t @param {string} font @param {number} ancho */
-  const renglones = (t, font, ancho) => {
-    medir.font = font;
-    /** @type {string[]} */
-    const out = [];
-    let r = '';
-    for (const pal of t.split(' ')) {
-      const prueba = r ? r + ' ' + pal : pal;
-      if (r && medir.measureText(prueba).width > ancho) { out.push(r); r = pal; } else r = prueba;
-    }
-    if (r) out.push(r);
-    return out;
-  };
   const F = {
     titulo: '700 40px Geist, system-ui, sans-serif', sub: '500 26px Geist, system-ui, sans-serif',
     basico: '700 30px Geist, system-ui, sans-serif', nivel: '700 24px "Geist Mono", ui-monospace, monospace',
@@ -432,21 +436,27 @@ export function reporteParaCompartir() {
 }
 
 async function compartir() {
-  const c = reporteParaCompartir();
-  const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.9)));
-  const texto = resumenTexto();
   const d = new Date(), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
   const que = st.zonas.length > 1 ? 'area' : st.zonas[0]?.tipo || st.tipo;
-  const nombre = `revision-${que}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}-${f2(d.getHours())}${f2(d.getMinutes())}.jpg`;
+  await compartirImagen(reporteParaCompartir(), resumenTexto(), `revision-${que}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}-${f2(d.getHours())}${f2(d.getMinutes())}.jpg`, 'Revisión con foto');
+}
+
+/**
+ * Por la hoja de compartir del teléfono (WhatsApp, correo) la imagen y el
+ * texto; si el navegador no puede, se descarga la imagen y se copia el texto.
+ * @param {HTMLCanvasElement} c @param {string} texto @param {string} nombre @param {string} titulo
+ */
+export async function compartirImagen(c, texto, nombre, titulo) {
+  const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.9)));
   const archivo = new File([blob], nombre, { type: 'image/jpeg' });
   const nav = /** @type {any} */ (navigator);
   if (nav.canShare?.({ files: [archivo] })) {
-    try { await nav.share({ files: [archivo], text: texto, title: 'Revisión con foto' }); return; }
+    try { await nav.share({ files: [archivo], text: texto, title: titulo }); return; }
     catch (e) { if (/** @type {any} */ (e)?.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nombre; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  try { await navigator.clipboard.writeText(texto); aviso('Se descargó la foto marcada y el resumen quedó copiado.'); }
-  catch { aviso('Se descargó la foto marcada.'); }
+  try { await navigator.clipboard.writeText(texto); aviso('Se descargó la imagen y el resumen quedó copiado.'); }
+  catch { aviso('Se descargó la imagen.'); }
 }

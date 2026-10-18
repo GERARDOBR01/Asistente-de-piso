@@ -40,8 +40,8 @@ export function normalizarArea(s) {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, LARGO_AREA);
 }
 
-/** Para comparar sin acentos ni mayúsculas. @param {string} s */
-const llano = s => normalizarArea(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+/** Para comparar áreas sin acentos ni mayúsculas. @param {string} s */
+export const llano = s => normalizarArea(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /**
  * El resumen que se ve en la lista: el peor nivel de la revisión y el peor de
@@ -168,6 +168,69 @@ export function aRecortar(registros, tope = TOPE_HISTORIAL) {
   if (registros.length <= tope) return [];
   return [...registros].sort((a, b) => a.creada - b.creada).slice(0, registros.length - tope).map(r => r.id);
 }
+
+/* ── Ronda: las exhibiciones de un área en un día ──────────────────────── */
+
+/** Lo que vale cada exhibición en el índice. NO_CALIFICA no cuenta: no dice nada del montaje. */
+export const PUNTOS = /** @type {Record<string, number>} */ ({ CUMPLE: 1, 'OBSERVACIÓN': 0.5, GRAVE: 0 });
+
+/** El día local de un instante, como número para comparar. @param {number} ms */
+const diaDe = ms => { const d = new Date(ms); return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate(); };
+
+/**
+ * Las revisiones que siguen vigentes: si una se volvió a revisar, cuenta la de después.
+ * @template {{id:string, antes?:string|null}} R @param {R[]} registros @returns {R[]}
+ */
+export function vigentes(registros) {
+  const reemplazadas = new Set(registros.map(r => r.antes).filter(Boolean));
+  return registros.filter(r => !reemplazadas.has(r.id));
+}
+
+/**
+ * La ronda de un área en el día de `cuandoMs`: cada zona de cada revisión
+ * vigente es una exhibición. Índice: promedio de CUMPLE 1, OBSERVACIÓN ½,
+ * GRAVE 0 (sin las que no calificaron). Pendientes: lo que no cumple, primero
+ * lo GRAVE y en el orden en que se revisó.
+ * @param {{id:string, area:string, creada:number, antes?:string|null, zonas:{tipo:string, res:Resultado[]|null}[], cambios?:any}[]} registros
+ * @param {string} area @param {number} cuandoMs
+ */
+export function ronda(registros, area, cuandoMs) {
+  const k = llano(area), dia = diaDe(cuandoMs);
+  const delDia = registros.filter(r => llano(r.area) === k && diaDe(r.creada) === dia).sort((a, b) => a.creada - b.creada);
+  const vig = vigentes(delDia);
+  const exhibiciones = vig.flatMap(r => r.zonas.map((z, i) => {
+    const res = z.res || [];
+    const nivel = res.length ? peor(res.map(x => x.nivel)) : null;
+    const peorRes = res.find(x => x.nivel === nivel) || null;
+    return { id: r.id, zona: i, zonas: r.zonas.length, tipo: z.tipo, nivel, basico: peorRes?.basico || '', motivo: peorRes?.motivo || '', creada: r.creada };
+  }));
+  const calificadas = exhibiciones.filter(e => e.nivel && e.nivel in PUNTOS);
+  const indice = calificadas.length ? calificadas.reduce((s, e) => s + PUNTOS[/** @type {string} */ (e.nivel)], 0) / calificadas.length : null;
+  /** @type {Record<string, number>} */
+  const cuenta = { CUMPLE: 0, 'OBSERVACIÓN': 0, GRAVE: 0, NO_CALIFICA: 0, PENDIENTE: 0 };
+  for (const e of exhibiciones) cuenta[e.nivel || 'PENDIENTE']++;
+  const pendientes = exhibiciones.filter(e => e.nivel === 'GRAVE' || e.nivel === 'OBSERVACIÓN')
+    .sort((a, b) => (a.nivel === 'GRAVE' ? 0 : 1) - (b.nivel === 'GRAVE' ? 0 : 1) || a.creada - b.creada);
+  const corregidas = vig.filter(r => r.antes && delDia.some(a => a.id === r.antes)).length;
+  return { area: normalizarArea(area), dia: cuandoMs, revisiones: vig.length, ids: vig.map(r => r.id), exhibiciones, indice, cuenta, pendientes, corregidas };
+}
+
+/**
+ * Las rondas que hay en el historial (un área en un día), la más reciente primero.
+ * @param {{area:string, creada:number}[]} registros @returns {{area:string, dia:number, n:number}[]}
+ */
+export function rondas(registros) {
+  /** @type {Map<string, {area:string, dia:number, n:number}>} */
+  const m = new Map();
+  for (const r of registros) {
+    const k = `${llano(r.area)}|${diaDe(r.creada)}`, x = m.get(k);
+    if (x) { x.n++; if (r.creada > x.dia) { x.dia = r.creada; x.area = normalizarArea(r.area); } } else m.set(k, { area: normalizarArea(r.area), dia: r.creada, n: 1 });
+  }
+  return [...m.values()].sort((a, b) => b.dia - a.dia);
+}
+
+/** El índice como se lee en piso: «75 %». @param {number|null} i */
+export const porcentaje = i => (i === null ? '—' : `${Math.round(i * 100)} %`);
 
 /**
  * Lo mismo, dentro de una frase: «de hoy, 9:07», «de ayer, 21:30», «del 3 sep, 8:00».

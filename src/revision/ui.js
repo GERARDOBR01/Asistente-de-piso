@@ -16,7 +16,7 @@ import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
 import { pedirSensor, empezarToma, pararToma } from './guia.js';
-import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea, ponerMiniActual, pintarArea } from './historial.js';
+import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea, ponerMiniActual, pintarArea, rondaElegida, imagenDeRonda } from './historial.js';
 import { girar, animar, dibujar } from './dibujo.js';
 import { medirTodo, medirZona, empezarRevision, empezarConZonas, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
 import { tarjetaOrigen, pintarResultados, reporteParaCompartir, ponerRevisado } from './reporte.js';
@@ -654,5 +654,5 @@ function iniciar() {
 iniciar();
 
 /* Para eval/revision.mjs y las capturas: el mismo código que corre en el teléfono. */
-/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st, reporteParaCompartir,
+/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st, reporteParaCompartir, rondaElegida, imagenDeRonda,
   sugerirPuntos: async (/** @type {any} */ a, /** @type {any} */ m, /** @type {any} */ p, /** @type {any} */ o) => (await import('./detector.js')).sugerirPuntos(a, m, p, o) };
