@@ -638,6 +638,9 @@ detector no vio al maniquí (sin maniquíes no hay grupo y los objetos se quedan
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan
   sobre `{width,height,data}` como `ImageData`, así que corren igual en Node y en el navegador, y
   las pruebas no necesitan navegador.
-- La pantalla (`src/revision/ui.js`) es la única que toca el DOM y la cámara, junto con
-  `detector.js`, que solo carga MediaPipe cuando alguien lo pide.
+- La pantalla (`src/revision/{ui,comun,zonas,dibujo,reporte}.js`) es la única que toca el DOM y
+  la cámara, junto con `detector.js`, que solo carga MediaPipe cuando alguien lo pide.
+  `ui.js` (1,500 líneas) se partió el 18-oct sin cambiar comportamiento: la escena y el focal
+  en `ui.js`, el estado en `comun.js`, las zonas, el dibujo sobre la foto y el reporte aparte.
+  `eval/revisar-pantalla.mjs` recorre la pantalla en el CI.
 - El motor del manual no se toca: el golden master tiene que salir idéntico.

@@ -25,10 +25,21 @@ const SUCIA = { ruido: 8, desenfoque: 1, sombra: 0.35 };
 const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigator|indexedDB|alert|confirm)\b/;
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
-test('frontera: las piezas de la revisión no usan APIs del navegador (solo ui.js y los cargadores de modelos)', () => {
+/* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js'];
+const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
+
+test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
   const dir = path.join(RAIZ, 'src', 'revision');
-  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['ui.js', 'detector.js', 'silueta.js', 'c2pa.js'].includes(f))
+  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !PUERTAS.includes(f))
     .filter(f => DEL_NAVEGADOR.test(sinComentarios(fs.readFileSync(path.join(dir, f), 'utf8'))));
+  assert.deepEqual(malos, []);
+});
+
+test('frontera: las piezas puras no importan a la pantalla', () => {
+  const dir = path.join(RAIZ, 'src', 'revision');
+  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !PUERTAS.includes(f))
+    .filter(f => PANTALLA.some(p => sinComentarios(fs.readFileSync(path.join(dir, f), 'utf8')).includes(`'./${p}'`)));
   assert.deepEqual(malos, []);
 });
 
