@@ -633,6 +633,24 @@ corregida— y 12 focales nuevos con su zona y sus maniquíes; fuera del repo,
 Quedan dos: un póster de una persona del mismo tamaño que los maniquíes, y una foto donde el
 detector no vio al maniquí (sin maniquíes no hay grupo y los objetos se quedan).
 
+## Zonas: ajustar sin volver a dibujar (18-oct)
+
+Antes, un recuadro mal puesto se quitaba con la × y se dibujaba otra vez, y una zona marcada
+con el tipo equivocado también. Ahora «✎ Ajustar», junto a «＋ Zona», entra a un modo:
+- arrastrar dentro de la zona activa la mueve; arrastrar una esquina cambia su tamaño, con la
+  esquina opuesta quieta. Nunca se sale de la foto ni baja de 6 % por lado (lo mismo que al
+  dibujarla), ni se voltea;
+- al soltar se vuelve a medir. Deja de ser la zona de la guía y los maniquíes del surtido se
+  buscan otra vez dentro del recuadro nuevo;
+- los botones de arriba (Tringla, Anaquel o mesa, Focal) cambian qué es la zona, igual que
+  al dibujar eligen qué se dibuja. Un focal sin puntos los pide al terminar;
+- tocar otra zona la elige (la más chica que contiene el toque);
+- «Listo» sale. Es un modo, y no un gesto siempre activo, porque la zona suele cubrir casi
+  toda la foto: deslizar sobre la foto para bajar la página la movería sin querer.
+
+La geometría vive en `marco.js` (pura, con pruebas de propiedades). `eval/revisar-pantalla.mjs`
+la prueba en la pantalla: esquina, mover, cambiar de tringla a mesa y salir.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

@@ -16,6 +16,7 @@ import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos, BR
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
+import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -702,4 +703,53 @@ test('SynthID: hecha con IA → GRAVE; partes con IA → OBSERVACIÓN; sin marca
   /* Donde no se ofrece, anotar no cambia nada. */
   const app = await origen(JPEG_MINIMO, 'app');
   assert.equal(conSynthid(app, 'generada'), app);
+});
+
+/* ── Ajustar una zona con el dedo (18-oct) ────────────────────────────── */
+
+const marcoValido = fc.record({ x: fc.double({ min: 0, max: 0.9, noNaN: true }), y: fc.double({ min: 0, max: 0.9, noNaN: true }), w: fc.double({ min: 0.06, max: 1, noNaN: true }), h: fc.double({ min: 0.06, max: 1, noNaN: true }) })
+  .map(m => ({ ...m, w: Math.min(m.w, 1 - m.x), h: Math.min(m.h, 1 - m.y) }))
+  .filter(m => m.w >= LADO_MINIMO && m.h >= LADO_MINIMO);
+const desplazamiento = fc.double({ min: -1.5, max: 1.5, noNaN: true });
+const esquina = fc.constantFrom(null, [0, 0], [1, 0], [0, 1], [1, 1]);
+const casi = 1e-9;
+
+test('ajustar zona: nunca se sale de la foto ni queda más chica que al dibujarla', () => {
+  fc.assert(fc.property(marcoValido, esquina, desplazamiento, desplazamiento, (m0, e, dx, dy) => {
+    const m = ajustarMarco(m0, /** @type {any} */ (e), dx, dy);
+    return m.x >= -casi && m.y >= -casi && m.x + m.w <= 1 + casi && m.y + m.h <= 1 + casi
+      && m.w >= LADO_MINIMO - casi && m.h >= LADO_MINIMO - casi;
+  }));
+});
+
+test('ajustar zona: moverla no cambia su tamaño; estirar una esquina deja quieta la opuesta', () => {
+  fc.assert(fc.property(marcoValido, desplazamiento, desplazamiento, (m0, dx, dy) => {
+    const m = ajustarMarco(m0, null, dx, dy);
+    return Math.abs(m.w - m0.w) < casi && Math.abs(m.h - m0.h) < casi;
+  }));
+  fc.assert(fc.property(marcoValido, fc.constantFrom([0, 0], [1, 0], [0, 1], [1, 1]), desplazamiento, desplazamiento, (m0, e, dx, dy) => {
+    const [cx, cy] = /** @type {[number, number]} */ (e);
+    const m = ajustarMarco(m0, [cx, cy], dx, dy);
+    const fijaX = m0.x + (1 - cx) * m0.w, fijaY = m0.y + (1 - cy) * m0.h;
+    return Math.abs((cx ? m.x : m.x + m.w) - fijaX) < casi && Math.abs((cy ? m.y : m.y + m.h) - fijaY) < casi;
+  }));
+  /* Un caso a mano: la esquina de abajo a la derecha se estira 10 % y 5 %. */
+  const r = ajustarMarco({ x: 0.2, y: 0.2, w: 0.4, h: 0.4 }, [1, 1], 0.1, 0.05);
+  assert.deepEqual(Object.values(r).map(v => +v.toFixed(6)), [0.2, 0.2, 0.5, 0.45]);
+  /* Arrastrar la esquina de arriba a la izquierda más allá de la opuesta: se topa en el mínimo, no se voltea. */
+  const t = ajustarMarco({ x: 0.2, y: 0.2, w: 0.4, h: 0.4 }, [0, 0], 0.9, 0.9);
+  assert.deepEqual(Object.values(t).map(v => +v.toFixed(6)), [0.54, 0.54, 0.06, 0.06]);
+});
+
+test('ajustar zona: el dedo agarra la esquina más cercana, la zona o nada; y elige la zona más chica', () => {
+  const m = { x: 0.2, y: 0.2, w: 0.4, h: 0.4 };
+  assert.deepEqual(agarrar(m, 0.21, 0.59, 0.05, 0.05), { esquina: [0, 1] });
+  assert.deepEqual(agarrar(m, 0.4, 0.4, 0.05, 0.05), { esquina: null });
+  assert.equal(agarrar(m, 0.9, 0.9, 0.05, 0.05), null);
+  /* Una zona angosta: las dos esquinas de arriba quedan al alcance; gana la más cercana. */
+  assert.deepEqual(agarrar({ x: 0.5, y: 0.5, w: 0.06, h: 0.3 }, 0.545, 0.5, 0.05, 0.05), { esquina: [1, 0] });
+  const area = { x: 0, y: 0, w: 1, h: 1 }, mesa = { x: 0.1, y: 0.5, w: 0.3, h: 0.3 };
+  assert.equal(zonaEn([area, mesa], 0.2, 0.6), 1);
+  assert.equal(zonaEn([area, mesa], 0.8, 0.2), 0);
+  assert.equal(zonaEn([mesa], 0.8, 0.2), -1);
 });

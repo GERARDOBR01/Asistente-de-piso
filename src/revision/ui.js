@@ -13,9 +13,9 @@ import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompl
 import { puntosDeCajas } from './triangulo.js';
 import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
-import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar } from './comun.js';
+import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen } from './comun.js';
 import { girar, animar, dibujar } from './dibujo.js';
-import { medirTodo, medirZona, empezarRevision, tocarZona, pintarZonas, empezarDibujo, terminarDibujo } from './zonas.js';
+import { medirTodo, medirZona, empezarRevision, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
 import { tarjetaOrigen, pintarResultados, reporteParaCompartir } from './reporte.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
@@ -222,7 +222,7 @@ function cargarDemo(imgDemo, puntos) {
 /** Deja la pestaña como recién abierta, lista para otra foto, sin recargar. */
 export function nuevaRevision() {
   cerrarCamara();
-  st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null;
+  st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
   st.exacto = false; st.buscando = false;
   $('rv-ayuda').hidden = true;
@@ -368,18 +368,6 @@ export function precargarModelos() {
   import('./detector.js').then(m => m.cargarDetector()).catch(() => {});
 }
 
-/** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e @param {boolean} [recortar] */
-function aImagen(e, recortar = false) {
-  const lz = $('rv-lienzo'), r = lz.getBoundingClientRect(), f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  /* object-fit: contain puede dejar franjas: se calcula el área real. */
-  const esc_ = Math.min(r.width / lz.width, r.height / lz.height);
-  const w = lz.width * esc_, h = lz.height * esc_, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
-  let x = (e.clientX - r.left - ox) / w, y = (e.clientY - r.top - oy) / h;
-  if (recortar) { x = Math.min(1, Math.max(0, x)); y = Math.min(1, Math.max(0, y)); }
-  else if (x < 0 || y < 0 || x > 1 || y > 1) return null;
-  return { x: x * f.img.width, y: y * f.img.height };
-}
-
 /* ── Ejemplos (modo demo, sin cámara) ───────────────────────────────────── */
 
 const EJEMPLOS = {
@@ -431,15 +419,12 @@ async function muestraOrigen(cual) {
 
 /** @param {Tipo} t */
 function elegirTipo(t) {
-  st.tipo = t;
+  marcarTipo(t);
   if (t === 'focal') precargarModelos();
-  document.querySelectorAll('.rv-tipo').forEach(b => {
-    const on = /** @type {HTMLElement} */ (b).dataset.tipo === t;
-    b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
-  });
-  $('rv-vacia-t').textContent = TEXTOS[t].vacia;
   if (st.stream) { ponerGuia(); return; }
   if (!st.foto) { st.zonas = []; $('rv-res').innerHTML = ''; proporcion(4, 3); mostrar('vacia'); pintarZonas(); return; }
+  /* Mientras se ajusta una zona, los botones de arriba cambian qué es. */
+  if (st.modo === 'ajustar') { cambiarTipo(t); return; }
   /* Con una foto: si solo está la zona de la guía, se revisa la foto entera
      como el tipo nuevo (lo de antes). Si ya hay zonas dibujadas, el tipo es
      para la siguiente zona. */
@@ -548,7 +533,9 @@ function iniciar() {
   $('rv-demo').addEventListener('click', ejemplo);
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
   engancharLienzo();
+  engancharAjuste();
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);
+  $('rv-zona-ajustar').addEventListener('click', empezarAjuste);
   $('rv-nueva-foto').addEventListener('click', nuevaRevision);
   $('rv-zonas-lista').addEventListener('click', (/** @type {MouseEvent} */ e) => {
     const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('button'));
@@ -558,10 +545,13 @@ function iniciar() {
       if (!st.zonas.length) { st.puntosDemo = []; empezarRevision(); return; }
       st.activa = Math.min(st.activa, st.zonas.length - 1);
       if (st.modo === 'tocar' && activa()?.res) { st.modo = 'ver'; $('rv-ayuda').hidden = true; }
+      if (st.modo === 'ajustar') marcarTipo(/** @type {Zona} */ (activa()).tipo);
     } else if (b.dataset.zona !== undefined) {
       const i = Number(b.dataset.zona), z = st.zonas[i];
-      if (z.tipo === 'focal' && !z.res) { tocarZona(i); return; }
+      /* Al ajustar, tocar una zona solo la elige: sus puntos se piden al terminar. */
+      if (z.tipo === 'focal' && !z.res && st.modo !== 'ajustar') { tocarZona(i); return; }
       st.activa = i;
+      if (st.modo === 'ajustar') marcarTipo(z.tipo);
     }
     dibujar(1); pintarZonas(); pintarResultados();
   });

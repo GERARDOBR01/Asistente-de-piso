@@ -139,6 +139,30 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await espera(p, 400);
     fila('zonas: la × quita una zona', await p.evaluate(() => document.querySelectorAll('#rv-zonas-lista .rv-zona').length) === 1);
 
+    /* 4b. Ajustar la zona que quedó: esquina, moverla entera y cambiarle el tipo. */
+    const zona0 = () => p.evaluate(() => { const z = /** @type {any} */ (window).__revision.st.zonas[0]; return { ...z.marco, tipo: z.tipo, basico: z.res?.[0]?.basico, guia: z.guia }; });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-zona-ajustar')).click());
+    await espera(p, 800);
+    const enAjuste = await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-zona-ajustar')).innerText.trim() === 'Listo' && document.getElementById('rv-lienzo')?.classList.contains('ajustando'));
+    const z0 = await zona0();
+    await arrastrar([z0.x + z0.w, z0.y + z0.h, 0.5, 0.7]);
+    const z1 = await zona0();
+    fila('ajustar: la esquina de abajo a la derecha cambia el tamaño y la de arriba se queda', enAjuste && Math.abs(z1.x - z0.x) < 0.01 && Math.abs(z1.y - z0.y) < 0.01 && Math.abs(z1.x + z1.w - 0.5) < 0.02 && Math.abs(z1.y + z1.h - 0.7) < 0.02,
+      `${enAjuste} · ${[z1.x, z1.y, z1.w, z1.h].map(v => v.toFixed(2)).join(',')}`);
+    await arrastrar([z1.x + z1.w / 2, z1.y + z1.h / 2, z1.x + z1.w / 2 + 0.2, z1.y + z1.h / 2]);
+    const z2 = await zona0();
+    fila('ajustar: arrastrar adentro la mueve sin cambiar su tamaño y se vuelve a medir', Math.abs(z2.x - z1.x - 0.2) < 0.02 && Math.abs(z2.w - z1.w) < 0.005 && z2.basico === 'colorizacion',
+      `${[z2.x, z2.w].map(v => v.toFixed(2)).join(',')} · ${z2.basico}`);
+    await foto('ajustar');
+    await tipo('anaquel');
+    await espera(p, 900);
+    const z3 = await zona0();
+    const chip = await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-zonas-lista .rv-zona')).innerText);
+    fila('ajustar: el botón de arriba cambia qué es la zona (tringla → mesa, se mide el surtido)', z3.tipo === 'anaquel' && z3.basico === 'surtido' && /Mesa/.test(chip) && Math.abs(z3.x - z2.x) < 0.005, `${z3.tipo} · ${z3.basico} · ${chip.replace(/\s+/g, ' ')}`);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-zona-ajustar')).click());
+    await espera(p, 400);
+    fila('ajustar: «Listo» sale del ajuste', await p.evaluate(() => /** @type {any} */ (window).__revision.st.modo === 'ver' && !document.getElementById('rv-lienzo')?.classList.contains('ajustando')));
+
     /* 5. Focal a mano con «Punto exacto»: tres toques y Revisar. */
     await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
     await tipo('focal');

@@ -70,7 +70,9 @@ export function dibujar(p) {
   /* u: tamaño de las marcas. Se ven en un teléfono a ~400 px de ancho, así
      que se escalan contra eso y no contra la resolución de la foto. */
   const k = lz.width / f.img.width, u = lz.width / 400, e = ease(p);
-  const varias = st.zonas.length > 1 || st.zonas.some(z => !z.guia);
+  const varias = st.zonas.length > 1 || st.zonas.some(z => !z.guia) || st.modo === 'ajustar';
+  const za = st.modo === 'ajustar' && st.activa >= 0 ? st.zonas[st.activa] : null;
+  if (za) sombraFuera(ctx, za.marco);
   st.zonas.forEach((z, i) => {
     /* Solo la zona activa se anima; las demás ya están dibujadas. */
     const ez = i === st.activa ? e : 1, pz = i === st.activa ? p : 1;
@@ -83,6 +85,7 @@ export function dibujar(p) {
     }
     if (varias) dibujarMarcoZona(ctx, z, i, u);
   });
+  if (za) dibujarAsas(ctx, za.marco, u);
   if (st.trazo) {
     const t = st.trazo;
     ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#fff';
@@ -156,6 +159,34 @@ function dibujarMarcoZona(ctx, z, i, u) {
   const ancho = ctx.measureText(txt).width + 16 * u;
   const y = m.y * H > 26 * u ? m.y * H - 14 * u : m.y * H + 14 * u;
   pildora(ctx, txt, m.x * W + ancho / 2, y, n ? color : '#16171B', u, n === 'OBSERVACIÓN' || n === 'CUMPLE' || n === 'NO_CALIFICA' ? '#16171B' : '#fff');
+}
+
+/**
+ * Al ajustar, lo de afuera de la zona se oscurece un poco para ver qué entra.
+ * Va antes de las marcas y las etiquetas, que se siguen leyendo.
+ * @param {CanvasRenderingContext2D} ctx @param {{x:number,y:number,w:number,h:number}} m
+ */
+function sombraFuera(ctx, m) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.fillStyle = 'rgba(0,0,0,.32)';
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.rect(m.x * W, m.y * H, m.w * W, m.h * H); ctx.fill('evenodd');
+}
+
+/**
+ * La zona que se ajusta: borde punteado y una esquina redonda en cada vértice,
+ * del tamaño de un dedo.
+ * @param {CanvasRenderingContext2D} ctx @param {{x:number,y:number,w:number,h:number}} m @param {number} u
+ */
+function dibujarAsas(ctx, m, u) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const x = m.x * W, y = m.y * H, w = m.w * W, h = m.h * H;
+  ctx.setLineDash([7 * u, 5 * u]); ctx.lineWidth = 2 * u; ctx.strokeStyle = '#fff';
+  ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
+  for (const [cx, cy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    ctx.beginPath(); ctx.arc(x + cx * w, y + cy * h, 7.5 * u, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 2.2 * u; ctx.strokeStyle = '#16171B'; ctx.stroke();
+  }
 }
 
 /** @param {CanvasRenderingContext2D} ctx @param {Resultado} r @param {number} k @param {number} u @param {number} e @param {number} p */

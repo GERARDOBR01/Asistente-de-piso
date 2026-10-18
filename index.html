@@ -1228,9 +1228,12 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-escena video,.rv-escena canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
 .rv-escena canvas{touch-action:manipulation}
 .rv-escena canvas.dibujando{touch-action:none;cursor:crosshair}
+.rv-escena canvas.ajustando{touch-action:none;cursor:move}
 .rv-zonas{display:flex;flex-direction:column;gap:6px;margin-top:-4px}
-.rv-zonas-fila{display:flex;align-items:center;gap:6px}
-.rv-zonas-lista{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.rv-zonas-fila{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+/* Las zonas en su renglón y los botones abajo: con tres botones no caben juntos a 390 px. */
+.rv-zonas-lista{display:flex;flex-wrap:wrap;gap:6px;flex:1 0 100%;min-width:0}
+.rv-zonas-lista:empty{display:none}
 .rv-zona{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--border2);background:var(--s1);--rv-c:var(--text3)}
 .rv-zona[data-n="CUMPLE"]{--rv-c:var(--green)}.rv-zona[data-n="OBSERVACIÓN"]{--rv-c:var(--amber)}.rv-zona[data-n="GRAVE"]{--rv-c:var(--red)}
 .rv-zona.on{border-color:var(--rv-c);background:color-mix(in srgb,var(--rv-c) 12%,var(--s1))}
@@ -1239,7 +1242,9 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
 .rv-zona .rv-zona-x{padding:0 10px 0 2px;color:var(--text3);font-size:16px}
 .rv-zona-nueva{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px dashed var(--gold);background:var(--gdim);color:var(--gold);font:700 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-zona-nueva.on{border-style:solid;background:var(--s2);color:var(--text)}
-.rv-nueva-foto{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--border2);background:var(--s1);color:var(--text2);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-zona-ajustar{flex:none;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--border2);background:var(--s1);color:var(--text);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-zona-ajustar.on{border-color:var(--text);background:var(--text);color:var(--bg)}
+.rv-nueva-foto{flex:none;margin-left:auto;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--border2);background:var(--s1);color:var(--text2);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-otra{width:100%;min-height:46px;border-radius:16px;border:1px solid var(--border2);background:var(--s1);color:var(--text);font:600 14px 'Geist',system-ui,sans-serif;cursor:pointer}
 .rv-zonas-t{font-size:12px;color:var(--text3);line-height:1.4;padding:0 4px}
 .rv-general{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:14px 16px;border-radius:var(--rl);border:1px solid var(--rv-borde,var(--border2));background:var(--s1)}
@@ -1454,11 +1459,11 @@ body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
 /* ── Todo lo que se toca se hunde un poco ── */
 .send-btn,.save-btn,.quick-btn,.vacio-ej,.vacio-demo,.chip-ia,.ap-chip,.tb-btn,.tb-chip,.rv-btn,.rv-tipo,.rv-chip,.rv-compartir,.rv-otra,.rv-ayuda button,
-.docs-describir,.docs-borrar,.prov-tab,.api-btn,.chat-tool,.fb-btn,.msg-copy,.restore-btn,.btn-gold-sm,.btn-ghost-sm,.drop-zone,.theme-toggle,.rv-zona-nueva,.rv-nueva-foto{
+.docs-describir,.docs-borrar,.prov-tab,.api-btn,.chat-tool,.fb-btn,.msg-copy,.restore-btn,.btn-gold-sm,.btn-ghost-sm,.drop-zone,.theme-toggle,.rv-zona-nueva,.rv-zona-ajustar,.rv-nueva-foto{
   transition:transform .14s var(--suave),background-color .2s,border-color .2s,color .2s,box-shadow .2s,filter .2s}
 .send-btn:active,.save-btn:active,.quick-btn:active,.chip-ia:active,.ap-chip:active,.tb-btn:active,.tb-chip:active,.rv-btn:active,.rv-tipo:active,.rv-chip:active,
 .rv-compartir:active,.rv-otra:active,.rv-ayuda button:active,.docs-describir:active,.docs-borrar:active,.prov-tab:active,.api-btn:active,.chat-tool:active,
-.fb-btn:active,.msg-copy:active,.restore-btn:active,.btn-gold-sm:active,.btn-ghost-sm:active,.theme-toggle:active,.rv-zona-nueva:active,.rv-nueva-foto:active{transform:translateY(1px) scale(.95)}
+.fb-btn:active,.msg-copy:active,.restore-btn:active,.btn-gold-sm:active,.btn-ghost-sm:active,.theme-toggle:active,.rv-zona-nueva:active,.rv-zona-ajustar:active,.rv-nueva-foto:active{transform:translateY(1px) scale(.95)}
 .vacio-ej:active,.vacio-demo:active,.drop-zone:active{transform:scale(.985)}
 .tab:active .tab-ico{transform:scale(.88);transition:transform .12s var(--suave)}
 .rv-disparo:active{transform:scale(.9)}
@@ -1707,7 +1712,7 @@ body::after{
       <div class="rv-guia" id="rv-guia" hidden><div class="rv-franja" id="rv-franja"></div><span class="rv-guia-txt" id="rv-guia-txt">Encuadra la tringla</span></div>
     </div>
     <div class="rv-zonas" id="rv-zonas" hidden>
-      <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button><button class="rv-nueva-foto" id="rv-nueva-foto" type="button" aria-label="Empezar con otra foto">↺ Nueva foto</button></div>
+      <div class="rv-zonas-fila"><div class="rv-zonas-lista" id="rv-zonas-lista"></div><button class="rv-zona-nueva" id="rv-zona-nueva" type="button">＋ Zona</button><button class="rv-zona-ajustar" id="rv-zona-ajustar" type="button" aria-pressed="false" hidden>✎ Ajustar</button><button class="rv-nueva-foto" id="rv-nueva-foto" type="button" aria-label="Empezar con otra foto">↺ Nueva foto</button></div>
       <span class="rv-zonas-t" id="rv-zonas-t"></span>
     </div>
     <div class="rv-ayuda" id="rv-ayuda" hidden><span id="rv-ayuda-t">Toca lo más alto de cada elemento</span><span><button id="rv-sugerir" type="button">Sugerir</button><button id="rv-exacto" type="button" aria-pressed="false">Punto exacto</button><button id="rv-deshacer" type="button">Deshacer</button><button class="pri" id="rv-listo" type="button" disabled>Revisar</button></span></div>

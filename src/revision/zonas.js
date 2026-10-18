@@ -9,7 +9,8 @@ import { peor } from './veredicto.js';
 import { revisarColor } from './color.js';
 import { revisarSurtido } from './surtido.js';
 import { revisarTriangulo, revisarNiveles } from './triangulo.js';
-import { MARCOS, NOMBRE_TIPO, ARTICULO, $, st, mostrar, proporcion, aviso, conTope, esc } from './comun.js';
+import { ajustarMarco, agarrar, zonaEn } from './marco.js';
+import { MARCOS, NOMBRE_TIPO, ARTICULO, $, st, mostrar, proporcion, aviso, conTope, esc, activa, marcarTipo, areaFoto } from './comun.js';
 import { animar, dibujar } from './dibujo.js';
 import { pintarResultados } from './reporte.js';
 import { actualizarAyuda, precargarModelos } from './ui.js';
@@ -143,22 +144,34 @@ export function pintarZonas() {
   const nueva = $('rv-zona-nueva');
   nueva.textContent = dibujando ? 'Cancelar' : '＋ Zona';
   nueva.classList.toggle('on', dibujando);
+  const ajustando = st.modo === 'ajustar', aj = $('rv-zona-ajustar');
+  aj.hidden = dibujando || !activa();
+  aj.textContent = ajustando ? 'Listo' : '✎ Ajustar';
+  aj.classList.toggle('on', ajustando);
+  aj.setAttribute('aria-pressed', String(ajustando));
   $('rv-zonas-t').textContent = dibujando
     ? `Arrastra sobre la foto para marcar ${ARTICULO[st.tipo]}. Arriba eliges qué es.`
-    : st.zonas.length === 1 && st.zonas[0].guia
-      ? '¿La foto tiene mesa, tringla y focal? Marca cada uno con ＋ Zona.'
-      : 'Toca una zona para verla; la × la quita.';
+    : ajustando
+      ? 'Arrastra el recuadro para moverlo, o una esquina para cambiar su tamaño. Arriba cambias qué es.'
+      : st.zonas.length === 1 && st.zonas[0].guia
+        ? '¿La foto tiene mesa, tringla y focal? Marca cada uno con ＋ Zona.'
+        : 'Toca una zona para verla; la × la quita.';
   $('rv-lienzo').classList.toggle('dibujando', dibujando);
+  $('rv-lienzo').classList.toggle('ajustando', ajustando);
+}
+
+/* Tras un resultado la página bajó a las tarjetas: la foto vuelve a la vista para dibujar o ajustar. */
+function verFoto() {
+  const r = $('rv-escena').getBoundingClientRect();
+  if (r.top < 0 || r.bottom > innerHeight) $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
 }
 
 export function empezarDibujo() {
   if (st.modo === 'dibujar') { st.modo = 'ver'; st.trazo = null; pintarZonas(); dibujar(1); return; }
   if (st.modo === 'tocar') $('rv-ayuda').hidden = true;
-  st.modo = 'dibujar'; st.trazo = null;
+  st.modo = 'dibujar'; st.trazo = null; st.ajuste = null;
   pintarZonas(); dibujar(1);
-  /* Tras un resultado la página bajó a las tarjetas: la foto vuelve a la vista para dibujar. */
-  const r = $('rv-escena').getBoundingClientRect();
-  if (r.top < 0 || r.bottom > innerHeight) $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  verFoto();
 }
 
 /** Cierra el recuadro dibujado y mide la zona nueva. @param {{x0:number,y0:number,x1:number,y1:number}} t en píxeles de la imagen */
@@ -177,4 +190,93 @@ export function terminarDibujo(t) {
   st.activa = i; st.modo = 'ver';
   medirZona(z);
   animar(900); pintarZonas(); pintarResultados(true);
+}
+
+/* ── Ajustar: mover, cambiar el tamaño o el tipo sin volver a dibujar ───── */
+
+/** «✎ Ajustar» entra y «Listo» sale. Al ajustar, deslizar sobre la foto ya no mueve la página. */
+export function empezarAjuste() {
+  if (st.modo === 'ajustar') { terminarAjuste(); return; }
+  const z = activa();
+  if (!z) return;
+  if (st.modo === 'tocar') $('rv-ayuda').hidden = true;
+  st.modo = 'ajustar'; st.trazo = null; st.ajuste = null;
+  marcarTipo(z.tipo);
+  pintarZonas(); dibujar(1);
+  verFoto();
+}
+
+function terminarAjuste() {
+  const z = activa();
+  st.modo = 'ver'; st.ajuste = null;
+  /* Un focal sin puntos (recién cambiado de tipo) los pide al terminar. */
+  if (z && z.tipo === 'focal' && !z.res) { tocarZona(st.activa); return; }
+  pintarZonas(); dibujar(1); pintarResultados(true);
+}
+
+/** La zona activa pasa a ser otra cosa (los botones de arriba, al ajustar). @param {Tipo} t */
+export function cambiarTipo(t) {
+  const z = activa();
+  if (!z || z.tipo === t) return;
+  z.tipo = t; z.guia = false; z.res = null; z.nota = undefined; delete z.maniquies;
+  if (t === 'focal' && !z.puntos.length) { tocarZona(st.activa); return; }
+  medirZona(z);
+  animar(700); pintarZonas(); pintarResultados();
+}
+
+/** La zona ya ajustada se vuelve a medir: deja de ser la de la guía y los maniquíes se buscan otra vez. @param {Zona} z */
+function soltarAjuste(z) {
+  z.guia = false; z.nota = undefined; delete z.maniquies;
+  if (z.tipo === 'focal' && !z.puntos.length) { dibujar(1); pintarZonas(); return; }
+  medirZona(z);
+  animar(600); pintarZonas(); pintarResultados();
+}
+
+/* Alcance del dedo sobre una esquina, en píxeles de pantalla. */
+const ALCANCE_ESQUINA = 24;
+
+export function engancharAjuste() {
+  const lz = $('rv-lienzo');
+  /** @param {PointerEvent} e */
+  const enFraccion = e => {
+    const a = areaFoto();
+    return { x: Math.min(1, Math.max(0, (e.clientX - a.x) / a.w)), y: Math.min(1, Math.max(0, (e.clientY - a.y) / a.h)), a };
+  };
+  lz.addEventListener('pointerdown', (/** @type {PointerEvent} */ e) => {
+    const z = activa();
+    if (st.modo !== 'ajustar' || !z || !st.foto) return;
+    const { x, y, a } = enFraccion(e);
+    const g = agarrar(z.marco, x, y, ALCANCE_ESQUINA / a.w, ALCANCE_ESQUINA / a.h);
+    if (!g) {
+      /* Fuera de la zona activa: tocar otra la elige. */
+      const j = zonaEn(st.zonas.map(o => o.marco), x, y);
+      if (j >= 0 && j !== st.activa) { st.activa = j; marcarTipo(st.zonas[j].tipo); dibujar(1); pintarZonas(); pintarResultados(); }
+      return;
+    }
+    st.ajuste = { esquina: g.esquina, m0: { ...z.marco }, p0: { x, y }, movido: false };
+    lz.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    dibujar(1);
+  });
+  lz.addEventListener('pointermove', (/** @type {PointerEvent} */ e) => {
+    const t = st.ajuste, z = activa();
+    if (!t || !z) return;
+    const { x, y, a } = enFraccion(e);
+    if (!t.movido && Math.hypot((x - t.p0.x) * a.w, (y - t.p0.y) * a.h) < 4) return;
+    t.movido = true;
+    z.marco = ajustarMarco(t.m0, t.esquina, x - t.p0.x, y - t.p0.y);
+    dibujar(1);
+  });
+  lz.addEventListener('pointerup', () => {
+    const t = st.ajuste, z = activa();
+    st.ajuste = null;
+    if (!t || !z) return;
+    st.soltado = performance.now();
+    if (t.movido) soltarAjuste(z); else dibujar(1);
+  });
+  lz.addEventListener('pointercancel', () => {
+    const t = st.ajuste, z = activa();
+    st.ajuste = null;
+    if (t && z) { z.marco = t.m0; dibujar(1); }
+  });
 }

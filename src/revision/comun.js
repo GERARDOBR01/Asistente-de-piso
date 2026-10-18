@@ -39,8 +39,9 @@ export const st = {
   /** @type {null|{img:Imagen, base:HTMLCanvasElement, via:'app'|'galeria'|'demo', bytes:Uint8Array|null, tomada:Date|null}} */ foto: null,
   /** @type {Zona[]} */ zonas: [],
   /** zona que se mira o se edita */ activa: -1,
-  /** @type {'ver'|'dibujar'|'tocar'} */ modo: 'ver',
+  /** @type {'ver'|'dibujar'|'tocar'|'ajustar'} */ modo: 'ver',
   /** @type {null|{x0:number,y0:number,x1:number,y1:number}} recuadro que se está dibujando */ trazo: null,
+  /** @type {null|{esquina:null|[number,number], m0:Marco, p0:{x:number,y:number}, movido:boolean}} zona que se mueve o se estira */ ajuste: null,
   /** @type {{x:number,y:number}[]} puntos del ejemplo de focal */ puntosDemo: [],
   /** cuándo se soltó el último recuadro (ms) */ soltado: 0,
   /** el toque pone el punto justo donde se toca, sin silueta */ exacto: false,
@@ -92,6 +93,32 @@ export function conTope(p, ms) {
 }
 
 export const activa = () => (st.activa >= 0 ? st.zonas[st.activa] : null);
+
+/** Los botones de arriba marcan el tipo `t`, que es el de la próxima zona. @param {Tipo} t */
+export function marcarTipo(t) {
+  st.tipo = t;
+  document.querySelectorAll('.rv-tipo').forEach(b => {
+    const on = /** @type {HTMLElement} */ (b).dataset.tipo === t;
+    b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
+  });
+  $('rv-vacia-t').textContent = TEXTOS[t].vacia;
+}
+
+/** Dónde se ve la foto en la página: object-fit: contain puede dejar franjas en el lienzo. */
+export function areaFoto() {
+  const lz = $('rv-lienzo'), r = lz.getBoundingClientRect();
+  const k = Math.min(r.width / lz.width, r.height / lz.height), w = lz.width * k, h = lz.height * k;
+  return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
+}
+
+/** Coordenadas de un toque, en píxeles de la imagen analizada. @param {MouseEvent} e @param {boolean} [recortar] */
+export function aImagen(e, recortar = false) {
+  const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto), a = areaFoto();
+  let x = (e.clientX - a.x) / a.w, y = (e.clientY - a.y) / a.h;
+  if (recortar) { x = Math.min(1, Math.max(0, x)); y = Math.min(1, Math.max(0, y)); }
+  else if (x < 0 || y < 0 || x > 1 || y > 1) return null;
+  return { x: x * f.img.width, y: y * f.img.height };
+}
 
 /** Vibración corta, si el teléfono la tiene y no se pidió menos movimiento. @param {number|number[]} ms */
 export function vibrar(ms) {
