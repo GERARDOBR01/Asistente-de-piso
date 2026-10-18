@@ -12,7 +12,7 @@
 // los accesorios. Por eso solo SUGIERE: la persona confirma, quita o agrega
 // puntos antes de revisar, y el reporte lo dice.
 
-import { recorteDe, elegirCajas, cimaCreible, fusionarPuntos } from './sugerir.js';
+import { recorteDe, elegirCajas, cimaCreible, fusionarPuntos, REGLA_SUGERIR } from './sugerir.js';
 /** @typedef {import('./sugerir.js').Rect} Rect */
 /** @typedef {import('./sugerir.js').Caja} Caja */
 
@@ -55,7 +55,7 @@ export async function detectar(fuente) {
  * @param {Rect} marco en fracción
  * @param {{x:number,y:number}[]} previos los que ya tocó la persona, en píxeles de `a.img`
  * @param {{silueta?: boolean, cerca?: number, alCaja?: (c: {x:number,y:number,w:number,h:number,categoria:string,score:number}) => void}} [op]
- * @returns {Promise<{puntos: Array<{x:number,y:number,caja?:Rect,categoria?:string,score?:number,deSilueta?:boolean}>, agregados: number, encontrados: number, cajas: Caja[]}>}
+ * @returns {Promise<{puntos: Array<{x:number,y:number,caja?:Rect,categoria?:string,score?:number,deSilueta?:boolean}>, agregados: number, encontrados: number, cajas: Caja[], fuera: {categoria:string, motivo:keyof typeof import('./sugerir.js').MOTIVO_FUERA}[]}>}
  */
 export async function sugerirPuntos(a, marco, previos, op = {}) {
   const B = a.base, W = a.img.width, H = a.img.height, k = W / B.width;
@@ -63,7 +63,9 @@ export async function sugerirPuntos(a, marco, previos, op = {}) {
   const cv = document.createElement('canvas');
   cv.width = r.w; cv.height = r.h;
   /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d')).drawImage(B, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-  const cajas = elegirCajas(await detectar(cv), { w: r.w, h: r.h, cortadoArriba: r.y > 0 })
+  /** @type {{categoria:string, motivo:keyof typeof import('./sugerir.js').MOTIVO_FUERA}[]} */
+  const fuera = [];
+  const cajas = elegirCajas(await detectar(cv), { w: r.w, h: r.h, cortadoArriba: r.y > 0 }, REGLA_SUGERIR, fuera)
     /* Del recorte a la imagen analizada. */
     .map(c => ({ ...c, x: (c.x + r.x) * k, y: (c.y + r.y) * k, w: c.w * k, h: c.h * k }))
     .sort((p, q) => p.x - q.x);
@@ -92,13 +94,16 @@ export async function sugerirPuntos(a, marco, previos, op = {}) {
         } catch { break; /* sin silueta, lo alto de la caja */ }
       }
     }
-    /* Una cima muy por encima del marco es de otra cosa. */
-    if (p.y < (marco.y - 0.03) * H) continue;
+    /* Una cima muy por encima del marco es de otra cosa. Y el detector mira
+       la zona con un margen (para no cortar lo que toca la orilla), pero lo
+       que queda fuera del recuadro que marcó la persona no es de su exhibición. */
+    if (p.y < (marco.y - 0.03) * H || p.y > (marco.y + marco.h) * H) continue;
+    if (p.x < (marco.x - 0.02) * W || p.x > (marco.x + marco.w + 0.02) * W) continue;
     nuevos.push(p);
   }
   const cerca = op.cerca ?? 0.04 * Math.max(W, H);
   /* Dos cajas del mismo elemento (persona y bolsa encimadas) dan la misma cima. */
   const unicos = fusionarPuntos([], nuevos, cerca).puntos;
   const f = fusionarPuntos(previos, unicos, cerca);
-  return { puntos: f.puntos, agregados: f.agregados, encontrados: unicos.length, cajas };
+  return { puntos: f.puntos, agregados: f.agregados, encontrados: unicos.length, cajas, fuera };
 }

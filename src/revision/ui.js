@@ -12,6 +12,7 @@ import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompl
 import { revisarColor, NOMBRE_GRUPO } from './color.js';
 import { revisarSurtido } from './surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, REGLA_TRIANGULO } from './triangulo.js';
+import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
@@ -571,11 +572,14 @@ async function sugerir() {
       z.puntos = r.puntos.map(p => previos.includes(/** @type {any} */ (p)) ? /** @type {PuntoFocal} */ (p) : { x: p.x, y: p.y, sugerido: true });
       if (r.agregados) z.origenPuntos = previos.length ? 'detector+manual' : 'detector';
       const n = r.encontrados;
+      /* Lo que no contó, y por qué: así se entiende por qué no puso un punto ahí. */
+      const motivos = [...new Set((r.fuera || []).map(x => MOTIVO_FUERA[x.motivo]))];
+      const sinContar = r.fuera?.length ? ` No conté ${r.fuera.length}: ${motivos.join(', ')}.` : '';
       /* En la barra de ayuda y no en un aviso flotante: el aviso tapaba la
          parte de arriba de la foto, que es donde quedan las cimas. */
       z.nota = r.agregados
-        ? `Encontré ${n} ${n === 1 ? 'elemento' : 'elementos'}. ¿Falta alguno? Tócalo`
-        : 'Lo que encontré ya estaba marcado. ¿Falta alguno? Tócalo';
+        ? `Encontré ${n} ${n === 1 ? 'elemento' : 'elementos'}.${sinContar} ¿Falta alguno? Tócalo`
+        : `Lo que encontré ya estaba marcado.${sinContar} ¿Falta alguno? Tócalo`;
       vibrar(8);
     }
   } catch (e) {

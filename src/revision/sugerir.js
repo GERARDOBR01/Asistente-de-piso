@@ -19,6 +19,9 @@
 //    su parte de arriba: si la silueta se sale de la caja, no se le cree y se
 //    queda lo alto de la caja.
 // 5. Se fusiona con lo que la persona ya tocó, sin pisarlo.
+// 6. (17-oct) Solo lo que está en la exhibición: fuera lo que lleva puesto un
+//    maniquí, su base, lo cortado por la orilla y lo que queda lejos del grupo
+//    de maniquíes (ver enLaExhibicion).
 //
 // Aquí va lo puro (elegirCajas, cimaCreible, fusionarPuntos), sin DOM y con
 // pruebas en lab/revision.test.mjs. Recortar, detectar y afinar con la silueta
@@ -38,6 +41,86 @@ export const REGLA_SUGERIR = {
   iou: 0.5,              // misma categoría y más que esto: es el mismo
   tope: 9,               // elementos que se revisan en un focal
 };
+
+/* Gerardo (17-oct): «a veces agrega la sugerencia en puntos fuera de la
+   exhibición». En 27 focales reales, sin zona dibujada, los puntos de más eran:
+   la corbata, la mochila puesta o la bolsa en la mano de un maniquí; la base
+   de un maniquí («suitcase»); un maniquí o un cliente cortado por la orilla de
+   la foto; un póster con una persona; y bolsas o ropa doblada de otro mueble.
+   Lo que sigue lo quita sin tocar lo de en medio de la exhibición. */
+export const REGLA_EXHIBICION = {
+  activa: true,
+  borde: 0.01,      // a menos de esto de la orilla del recorte, la caja está cortada por la foto
+  parcial: 0.7,     // cortada por la orilla y más angosta o baja que esto del maniquí guía: es de otro lado
+  flotando: 0.35,   // con los pies más arriba que esto (del alto del maniquí guía): un póster, otra área
+  /* Medido en esos focales, en anchos de maniquí: lo de la exhibición queda a
+     0.2-1.5 del grupo (una bolsa en su base a 1.2, el perchero del focal a
+     1.5); el muro de bolsas de al lado, a 1.9. */
+  margen: 1.6,      // un objeto va a menos de esto (del ancho medio de los maniquíes) del grupo
+  puesto: 0.7,      // un objeto con esta parte dentro de un maniquí lo lleva puesto
+  pies: 0.2,        // un objeto que empieza en el último 20 % de un maniquí, debajo de él, es su base
+  arriba: 0.2,      // un objeto que termina en el 20 % de arriba del recorte es decoración del muro
+};
+
+/** Cómo se dice en el piso por qué no se contó algo. */
+export const MOTIVO_FUERA = {
+  puesto: 'lo que lleva puesto un maniquí', base: 'la base de un maniquí', orilla: 'lo cortado por la orilla de la foto',
+  flota: 'una figura que no está en el piso de la exhibición', lejos: 'lo que está lejos del grupo', arriba: 'la decoración de arriba',
+};
+
+/** @param {Rect} a @param {Rect} b */
+const cruceX = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+
+/**
+ * Solo lo que está en la exhibición (ver REGLA_EXHIBICION).
+ * - Maniquíes: el guía es el más alto de los que no toca la orilla. Fuera los
+ *   cortados por la orilla y más chicos que él, y los que «flotan» (pies muy
+ *   por arriba de los suyos).
+ * - Objetos: fuera lo que queda arriba de todo (decoración del muro) y, si hay
+ *   maniquíes, lo que uno lleva puesto, su base, lo cortado por la orilla y lo
+ *   que queda lejos del grupo. Sin maniquíes no hay grupo contra el cual medir.
+ * @param {Caja[]} cajas en píxeles del recorte @param {{w:number,h:number}} recorte
+ * @param {typeof REGLA_EXHIBICION} [regla]
+ * @param {{categoria:string, motivo:keyof typeof MOTIVO_FUERA}[]} [fuera] aquí se anota lo que se quitó y por qué
+ * @returns {Caja[]}
+ */
+export function enLaExhibicion(cajas, recorte, regla = REGLA_EXHIBICION, fuera = []) {
+  if (!regla.activa) return cajas;
+  const W = recorte.w, H = recorte.h;
+  const enBorde = (/** @type {Caja} */ c) => c.x <= regla.borde * W || c.x + c.w >= (1 - regla.borde) * W;
+  let personas = cajas.filter(c => c.categoria === 'person');
+  if (personas.length) {
+    const libres = personas.filter(p => !enBorde(p));
+    const guia = (libres.length ? libres : personas).reduce((a, b) => (b.h > a.h ? b : a));
+    personas = personas.filter(p => {
+      if (p === guia) return true;
+      if (enBorde(p) && (p.w < regla.parcial * guia.w || p.h < regla.parcial * guia.h)) { fuera.push({ categoria: p.categoria, motivo: 'orilla' }); return false; }
+      if (guia.y + guia.h - (p.y + p.h) > regla.flotando * guia.h) { fuera.push({ categoria: p.categoria, motivo: 'flota' }); return false; }
+      return true;
+    });
+  }
+  const area = (/** @type {Caja} */ c) => Math.max(1, c.w * c.h);
+  const dentro = (/** @type {Caja} */ o, /** @type {Caja} */ p) => cruceX(o, p) * Math.max(0, Math.min(o.y + o.h, p.y + p.h) - Math.max(o.y, p.y)) / area(o);
+  const x0 = Math.min(...personas.map(p => p.x)), x1 = Math.max(...personas.map(p => p.x + p.w));
+  const margen = personas.length ? regla.margen * personas.reduce((s, p) => s + p.w, 0) / personas.length : 0;
+  /** @param {Caja} o @returns {keyof typeof MOTIVO_FUERA | null} */
+  const motivo = o => {
+    if (o.y + o.h <= regla.arriba * H) return 'arriba';
+    if (!personas.length) return null;
+    if (personas.some(p => dentro(o, p) >= regla.puesto && o.y + o.h / 2 < p.y + p.h * (1 - regla.pies))) return 'puesto';
+    if (personas.some(p => o.y >= p.y + p.h * (1 - regla.pies) && cruceX(o, p) >= 0.5 * o.w)) return 'base';
+    if (enBorde(o)) return 'orilla';
+    if (o.x + o.w / 2 < x0 - margen || o.x + o.w / 2 > x1 + margen) return 'lejos';
+    return null;
+  };
+  const objetos = cajas.filter(o => {
+    if (o.categoria === 'person') return false;
+    const m = motivo(o);
+    if (m) fuera.push({ categoria: o.categoria, motivo: m });
+    return !m;
+  });
+  return cajas.filter(c => personas.includes(c) || objetos.includes(c));
+}
 
 /** @param {Rect} a @param {Rect} b */
 export function iou(a, b) {
@@ -63,9 +146,10 @@ export function recorteDe(marco, W, H, margen = REGLA_SUGERIR.margen) {
  * @param {Caja[]} cajas
  * @param {{w:number,h:number,cortadoArriba:boolean}} recorte  `cortadoArriba`: el recorte no empieza en el borde de la foto
  * @param {typeof REGLA_SUGERIR} [regla]
+ * @param {{categoria:string, motivo:keyof typeof MOTIVO_FUERA}[]} [fuera] lo que se quitó por no ser de la exhibición
  * @returns {Caja[]}
  */
-export function elegirCajas(cajas, recorte, regla = REGLA_SUGERIR) {
+export function elegirCajas(cajas, recorte, regla = REGLA_SUGERIR, fuera = []) {
   let buenas = cajas.filter(c => CATEGORIAS_FOCAL.includes(c.categoria)
     && c.score >= (c.categoria === 'person' ? regla.minPersona : regla.minObjeto)
     && (c.w * c.h) / (recorte.w * recorte.h) <= regla.areaMaxima
@@ -87,7 +171,7 @@ export function elegirCajas(cajas, recorte, regla = REGLA_SUGERIR) {
   const base = (/** @type {Caja} */ b) => b.categoria !== 'person' && quedan.some(a => a !== b
     && Math.abs(a.y + a.h - b.y) <= 0.04 * recorte.h && b.w >= 0.9 * a.w
     && Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) >= 0.8 * a.w);
-  return quedan.filter(c => !base(c)).slice(0, regla.tope);
+  return enLaExhibicion(quedan.filter(c => !base(c)), recorte, REGLA_EXHIBICION, fuera).slice(0, regla.tope);
 }
 
 /**
