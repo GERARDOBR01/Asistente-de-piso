@@ -328,6 +328,30 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     fila('antes y después: en el focal los puntos llegan sugeridos, se confirman con Revisar y se comparan', pide.n === 3 && pide.sugeridos && pide.res === null && /vez pasada/.test(pide.nota || '') && pide.listo && !pide.cmp && tras === 'igual,igual',
       `${JSON.stringify(pide)} → ${tras}`);
 
+    /* 11. Ronda: las revisiones de hoy del área. Las dos que se volvieron a revisar dejan de contar. */
+    await espera(p, 1800);
+    const rd = await p.evaluate(() => {
+      const r = /** @type {any} */ (window).__revision.rondaElegida().x;
+      return {
+        revisiones: r.revisiones, exhibiciones: r.exhibiciones.length, corregidas: r.corregidas, indice: r.indice, pendientes: r.pendientes.length,
+        tarjeta: /** @type {HTMLElement} */ (document.querySelector('#rv-ronda .rv-ronda-indice b')).textContent,
+        visible: !(/** @type {HTMLElement} */ (document.getElementById('rv-ronda'))).hidden,
+        linea: /** @type {HTMLElement} */ (document.getElementById('rv-ronda-linea')).textContent,
+      };
+    });
+    const pct = rd.indice === null ? '—' : `${Math.round(rd.indice * 100)} %`;
+    fila('ronda: 4 revisiones del área, 2 vigentes (las otras se volvieron a revisar), con su índice', rd.visible && rd.revisiones === 2 && rd.exhibiciones === 2 && rd.corregidas === 2 && rd.tarjeta === pct && rd.linea.startsWith('Ronda de hoy en Caballeros · mesa 1: 2 exhibiciones · índice ' + pct),
+      JSON.stringify(rd));
+    const img = await p.evaluate(async () => { const r = await /** @type {any} */ (window).__revision.imagenDeRonda(); return r && { w: r.c.width, h: r.c.height }; });
+    fila('ronda: el reporte de una página mide 1080 de ancho', img && img.w === 1080 && img.h > 900, JSON.stringify(img));
+    if (capturas) {
+      const png = await p.evaluate(async () => (await /** @type {any} */ (window).__revision.imagenDeRonda()).c.toDataURL('image/png'));
+      fs.writeFileSync(path.join(capturas, `${vista.nombre}-ronda-reporte.png`), Buffer.from(png.split(',')[1], 'base64'));
+    }
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-compartir-ronda]')).click());
+    await espera(p, 800);
+    await foto('ronda', true);
+
     /* 8. En el celular nada se sale de lado. */
     if (vista.tactil) {
       const ancho = await p.evaluate(() => document.documentElement.scrollWidth);

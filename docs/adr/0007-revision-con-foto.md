@@ -720,6 +720,26 @@ Lo que se encuentra en una ronda se corrige y se vuelve a ver. En una revisión 
   corregido», en verde si se corrigió todo), y al reabrirla vuelve la comparación. El texto
   que se comparte lo incluye.
 
+## Ronda de departamento (18-oct)
+
+Una ronda es un área en un día: se deriva del historial, sin guardar nada aparte.
+- **Cada zona es una exhibición.** El **índice de exhibición** es el promedio de CUMPLE 1,
+  OBSERVACIÓN ½ y GRAVE 0. Lo que no calificó y el focal sin puntos no cuentan: no dicen nada
+  del montaje.
+- Si una revisión se volvió a revisar, **cuenta la de después** (`vigentes`): la ronda dice
+  cómo quedó el área, no cómo estaba.
+- **Pendientes:** las exhibiciones en GRAVE u OBSERVACIÓN, primero las GRAVE y en el orden de
+  la ronda, con el motivo del peor básico. Tocar uno abre esa revisión.
+- En la barra del área, mientras se hace la ronda: «Ronda de hoy en Caballeros: 5
+  exhibiciones · índice 80 % · 1 pendiente».
+- En el historial, la tarjeta de la ronda (la del área del filtro, o la más reciente, con un
+  selector de las últimas 12) y **«Compartir la ronda»**: una página de 1080 px con el
+  índice, las fotos con su nivel, los pendientes y cómo se calcula. El texto que la acompaña
+  dice lo mismo.
+
+`ronda`, `rondas`, `vigentes` y `porcentaje` son puras (`registro.js`, con pruebas); la
+página la dibuja `rondas.js`.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

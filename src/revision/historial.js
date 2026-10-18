@@ -7,10 +7,11 @@
 // resultados, el origen, el área y lo revisado a mano. Vive en el teléfono,
 // nunca sale a la red, y se borra una por una o todo junto.
 
-import { registroDe, sugerenciasDeArea, aRecortar, normalizarArea, cuando } from './registro.js';
+import { registroDe, sugerenciasDeArea, aRecortar, normalizarArea, cuando, ronda, rondas, porcentaje, llano } from './registro.js';
 import { $, st, aviso, esc, aLienzo } from './comun.js';
 import { dibujar } from './dibujo.js';
-import { revisadoAMano } from './reporte.js';
+import { revisadoAMano, compartirImagen } from './reporte.js';
+import { reporteDeRonda, textoDeRonda, colorIndice, nombrePendiente, cuentaEnPalabras } from './rondas.js';
 
 const DB = 'asistente_piso_revisar', STORE = 'revisiones';
 /** El área de la revisión anterior: una ronda suele ser del mismo departamento. */
@@ -32,6 +33,8 @@ let descartada = null;
 let filtro = '';
 let todas = false;
 let borrarTodoArmado = false;
+/** La ronda elegida en el selector: `área|día`. */
+let rondaSel = '';
 /** @type {string[]} */
 let urls = [];
 /** @type {(reg: any, previa?: any) => void} */
@@ -163,6 +166,61 @@ export function pintarArea() {
   const reg = st.registro && registros.find(r => r.id === st.registro);
   $('rv-guardada').textContent = st.repetir ? '' : reg ? `Guardada · ${cuando(reg.creada)}` : (guardable() ? 'Se guarda en el historial' : '');
   $('rv-repetir').hidden = !reg || !!st.repetir;
+  /* Mientras se hace la ronda, cómo va el índice del área hoy. */
+  const x = st.area ? ronda(registros, st.area, Date.now()) : null;
+  $('rv-ronda-linea').textContent = x && x.revisiones && !st.repetir
+    ? `Ronda de hoy en ${st.area}: ${x.exhibiciones.length} ${x.exhibiciones.length === 1 ? 'exhibición' : 'exhibiciones'} · índice ${porcentaje(x.indice)}${x.pendientes.length ? ` · ${x.pendientes.length} ${x.pendientes.length === 1 ? 'pendiente' : 'pendientes'}` : ''}`
+    : '';
+}
+
+/* ── Ronda de departamento ──────────────────────────────────────────────── */
+
+const claveRonda = (/** @type {{area:string, dia:number}} */ r) => `${llano(r.area)}|${new Date(r.dia).toDateString()}`;
+
+/** Las rondas que se pueden elegir (las del área del filtro, si hay) y la elegida. */
+export function rondaElegida() {
+  const lista = rondas(registros).filter(r => !filtro || llano(r.area) === llano(filtro)).slice(0, 12);
+  const sel = lista.find(r => claveRonda(r) === rondaSel) || lista[0];
+  return { lista, sel, x: sel ? ronda(registros, sel.area, sel.dia) : null };
+}
+
+function pintarRonda() {
+  const caja = $('rv-ronda'), { lista, sel, x } = rondaElegida();
+  caja.hidden = !x || !x.revisiones;
+  if (!x || !sel) return;
+  const c = colorIndice(x.indice);
+  caja.innerHTML = `<div class="rv-ronda-cab"><span>Ronda</span>${lista.length > 1
+    ? `<select id="rv-ronda-sel" aria-label="Elegir la ronda">${lista.map(r => `<option value="${esc(claveRonda(r))}"${r === sel ? ' selected' : ''}>${esc(r.area || 'Sin área')} · ${esc(cuando(r.dia).split(' · ')[0])} · ${r.n} ${r.n === 1 ? 'foto' : 'fotos'}</option>`).join('')}</select>`
+    : `<b>${esc(sel.area || 'Sin área')} · ${esc(cuando(sel.dia).split(' · ')[0])}</b>`}</div>
+    <div class="rv-ronda-indice" style="--c:${c}"><b>${porcentaje(x.indice)}</b><span>índice de exhibición<small>${x.exhibiciones.length} ${x.exhibiciones.length === 1 ? 'exhibición' : 'exhibiciones'} en ${x.revisiones} ${x.revisiones === 1 ? 'foto' : 'fotos'}${x.corregidas ? ` · ${x.corregidas} ${x.corregidas === 1 ? 'vuelta' : 'vueltas'} a revisar` : ''}</small></span></div>
+    <div class="rv-ronda-barra"><i style="width:${x.indice === null ? 0 : Math.round(x.indice * 100)}%;background:${c}"></i></div>
+    <p class="rv-ronda-cuenta">${esc(cuentaEnPalabras(x))}</p>
+    ${x.pendientes.length ? `<ul class="rv-ronda-pend">${x.pendientes.map(p => `<li><button type="button" data-abrir="${esc(p.id)}" data-n="${esc(/** @type {string} */ (p.nivel))}"><i></i><span>${esc(nombrePendiente(p))}<small>${esc(p.motivo)}</small></span></button></li>`).join('')}</ul>` : '<p class="rv-ronda-cuenta">Sin pendientes.</p>'}
+    <button type="button" class="rv-ronda-btn" data-compartir-ronda="1">Compartir la ronda</button>`;
+}
+
+/** La página de la ronda elegida, con las miniaturas de sus fotos. */
+export async function imagenDeRonda() {
+  const { x } = rondaElegida();
+  if (!x) return null;
+  const fotos = await Promise.all(x.ids.map(async id => {
+    const r = registros.find(q => q.id === id);
+    /** @type {ImageBitmap|null} */
+    let mini = null;
+    try { mini = await createImageBitmap(r.miniatura); } catch { /* sin miniatura */ }
+    return { creada: r.creada, nivel: r.nivel, zonas: r.zonas.length, mini };
+  }));
+  const c = reporteDeRonda(x, fotos);
+  for (const f of fotos) f.mini?.close();
+  return { c, x };
+}
+
+async function compartirRonda() {
+  const r = await imagenDeRonda();
+  if (!r) return;
+  const d = new Date(r.x.dia), f2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  const area = llano(r.x.area).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sin-area';
+  await compartirImagen(r.c, textoDeRonda(r.x), `ronda-${area}-${d.getFullYear()}-${f2(d.getMonth() + 1)}-${f2(d.getDate())}.jpg`, 'Ronda de exhibición');
 }
 
 /**
@@ -192,6 +250,7 @@ function pintar() {
   pintarArea();
   sugerir();
   if (!registros.length) return;
+  pintarRonda();
   for (const u of urls) URL.revokeObjectURL(u);
   urls = [];
   /* Las áreas más usadas, como filtro. */
@@ -199,7 +258,7 @@ function pintar() {
   if (filtro && !areas.includes(filtro)) areas.push(filtro);
   $('rv-hist-filtro').innerHTML = areas.length < 1 ? '' : [['', 'Todas'], ...areas.map(a => [a, a])]
     .map(([v, t]) => `<button type="button" class="rv-chip${filtro === v ? ' on' : ''}" data-filtro="${esc(v)}">${esc(t)}</button>`).join('');
-  const lista = registros.filter(r => !filtro || normalizarArea(r.area).toLowerCase() === filtro.toLowerCase());
+  const lista = registros.filter(r => !filtro || llano(r.area) === llano(filtro));
   const vista = todas ? lista : lista.slice(0, PRIMERAS);
   $('rv-hist-n').textContent = `${registros.length} ${registros.length === 1 ? 'revisión' : 'revisiones'}`;
   $('rv-hist-lista').innerHTML = vista.map(r => {
@@ -259,15 +318,22 @@ export function iniciarHistorial(abrir, repetir) {
       await borrar(b.dataset.borrar);
       return;
     }
-    if (b.dataset.abrir) {
-      const reg = registros.find(r => r.id === b.dataset.abrir);
-      if (reg) { soltarActual(); descartada = null; alAbrir(reg, reg.antes ? registros.find(r => r.id === reg.antes) : null); pintar(); }
-    }
+    if (b.dataset.abrir) abrirId(b.dataset.abrir);
+  });
+  const caja = $('rv-ronda');
+  caja.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+    const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('button'));
+    if (b?.dataset.abrir) abrirId(b.dataset.abrir);
+    else if (b?.dataset.compartirRonda) compartirRonda();
+  });
+  caja.addEventListener('change', (/** @type {Event} */ e) => {
+    const s = /** @type {HTMLSelectElement} */ (e.target);
+    if (s.id === 'rv-ronda-sel') { rondaSel = s.value; pintarRonda(); }
   });
   $('rv-hist-filtro').addEventListener('click', (/** @type {MouseEvent} */ e) => {
     const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-filtro]'));
     if (!b) return;
-    filtro = /** @type {string} */ (b.dataset.filtro); todas = false;
+    filtro = /** @type {string} */ (b.dataset.filtro); todas = false; rondaSel = '';
     pintar();
   });
   $('rv-hist-borrar').addEventListener('click', () => {
@@ -275,6 +341,15 @@ export function iniciarHistorial(abrir, repetir) {
     borrarTodo();
   });
   refrescar();
+}
+
+/** Reabre una revisión del historial (desde la lista o desde un pendiente de la ronda). @param {string} id */
+function abrirId(id) {
+  const reg = registros.find(r => r.id === id);
+  if (!reg) return;
+  soltarActual(); descartada = null;
+  alAbrir(reg, reg.antes ? registros.find(r => r.id === reg.antes) : null);
+  pintar();
 }
 
 /** Una foto nueva (o «Nueva foto»): su revisión se guarda como otra. */

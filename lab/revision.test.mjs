@@ -18,7 +18,7 @@ import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
 import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
-import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, cuandoEnFrase, TOPE_HISTORIAL, comparar, resumenCambios } from '../src/revision/registro.js';
+import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, cuandoEnFrase, TOPE_HISTORIAL, comparar, resumenCambios, vigentes, ronda, rondas, porcentaje, PUNTOS } from '../src/revision/registro.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,7 +29,7 @@ const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigato
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
 /* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
-const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js'];
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js', 'rondas.js'];
 const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
 
 test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
@@ -914,4 +914,38 @@ test('antes y después: cada básico contra el de antes, zona por zona', () => {
   /* El registro guarda de cuál viene y el resumen. */
   const reg = registroDe({ zonas: ahora.slice(0, 1), origen: null, area: '', via: 'app', tomada: null, revisado: [], tam: { w: 1, h: 1 }, antes: { id: 'rv-1', zonas: antes.slice(0, 1) } });
   assert.equal(reg.antes, 'rv-1'); assert.equal(reg.cambios?.todo, true);
+});
+
+test('ronda: el índice de exhibición de un área en un día', () => {
+  const r = (/** @type {string} */ basico, /** @type {any} */ nivel, motivo = '') => ({ basico, nivel, motivo, evidencia: {}, fuente: /** @type {'CÓDIGO'} */ ('CÓDIGO') });
+  const h = (/** @type {number} */ hora, min = 0) => new Date(2026, 9, 18, hora, min).getTime();
+  const regs = [
+    /* Una foto de área con mesa y tringla, a las 10. */
+    { id: 'a', area: 'Caballeros', creada: h(10), zonas: [{ tipo: 'anaquel', res: [r('surtido', 'GRAVE', 'vacío')] }, { tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] }] },
+    /* Un focal a las 10:05: triángulo bien, niveles en observación → la exhibición es OBSERVACIÓN. */
+    { id: 'b', area: 'caballeros', creada: h(10, 5), zonas: [{ tipo: 'focal', res: [r('triangulacion', 'CUMPLE'), r('niveles', 'OBSERVACIÓN', 'dos alturas')] }] },
+    /* Una mesa que no calificó y un focal sin puntos. */
+    { id: 'c', area: 'Caballeros', creada: h(10, 9), zonas: [{ tipo: 'anaquel', res: [r('surtido', 'NO_CALIFICA')] }, { tipo: 'focal', res: null }] },
+    /* La tringla de «a» se volvió a revisar a las 11: «a» deja de contar. */
+    { id: 'd', area: 'Caballeros', creada: h(11), antes: 'a', zonas: [{ tipo: 'anaquel', res: [r('surtido', 'CUMPLE')] }, { tipo: 'tringla', res: [r('colorizacion', 'CUMPLE')] }] },
+    /* Otra área y otro día no entran. */
+    { id: 'e', area: 'Damas', creada: h(10), zonas: [{ tipo: 'tringla', res: [r('colorizacion', 'GRAVE')] }] },
+    { id: 'f', area: 'Caballeros', creada: new Date(2026, 9, 17, 18).getTime(), zonas: [{ tipo: 'tringla', res: [r('colorizacion', 'GRAVE')] }] },
+  ];
+  const x = ronda(regs, 'CABALLEROS', h(9));
+  assert.deepEqual(x.ids, ['b', 'c', 'd']);
+  assert.equal(x.exhibiciones.length, 5);
+  /* CUMPLE + CUMPLE + OBSERVACIÓN = 2.5 / 3; NO_CALIFICA y el focal sin puntos no cuentan. */
+  assert.ok(Math.abs(/** @type {number} */ (x.indice) - 2.5 / 3) < 1e-9);
+  assert.equal(porcentaje(x.indice), '83 %');
+  assert.deepEqual(x.cuenta, { CUMPLE: 2, 'OBSERVACIÓN': 1, GRAVE: 0, NO_CALIFICA: 1, PENDIENTE: 1 });
+  assert.deepEqual(x.pendientes.map(p => [p.id, p.basico, p.motivo]), [['b', 'niveles', 'dos alturas']]);
+  assert.equal(x.corregidas, 1);
+  /* Sin volver a revisar, la mesa vacía de «a» es pendiente y va primero (GRAVE). */
+  const sinD = ronda(regs.filter(q => q.id !== 'd'), 'Caballeros', h(12));
+  assert.deepEqual(sinD.pendientes.map(p => p.nivel), ['GRAVE', 'OBSERVACIÓN']);
+  assert.equal(porcentaje(ronda([], 'Caballeros', h(12)).indice), '—');
+  assert.deepEqual(vigentes(regs).map(q => q.id), ['b', 'c', 'd', 'e', 'f']);
+  assert.deepEqual(rondas(regs).map(q => [q.area, q.n]), [['Caballeros', 4], ['Damas', 1], ['Caballeros', 1]]);
+  assert.deepEqual(PUNTOS, { CUMPLE: 1, 'OBSERVACIÓN': 0.5, GRAVE: 0 });
 });
