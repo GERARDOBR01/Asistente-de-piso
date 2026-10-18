@@ -17,6 +17,7 @@ import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMu
 import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
 import { pedirSensor, empezarToma, pararToma } from './guia.js';
 import { engancharAnotar } from './anotar.js';
+import { engancharReferencia, ponerReferencia } from './referencia.js';
 import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea, ponerMiniActual, pintarArea, rondaElegida, imagenDeRonda } from './historial.js';
 import { girar, animar, dibujar } from './dibujo.js';
 import { medirTodo, medirZona, empezarRevision, empezarConZonas, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
@@ -191,6 +192,8 @@ async function cargarArchivo(blob, via, tomada) {
       st.repetir = null;
       st.antes = { id: rep.id, zonas: rep.zonas, miniatura: rep.miniatura || null, creada: rep.creada };
       ponerArea(rep.area);
+      /* La referencia (el planograma) sigue siendo la misma. */
+      if (rep.referencia) ponerReferencia({ ...rep.referencia, mini: rep.refMini || null });
       st.origen = a.origen;
       st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
       pintarRepetir();
@@ -446,6 +449,7 @@ async function reabrir(reg, previa) {
   ponerRevisado(reg.huella, reg.revisado || []);
   st.zonas = reg.zonas.map((/** @type {any} */ z) => ({ ...z, puntos: z.puntos || [], res: z.res ?? null }));
   st.notas = reg.notas || [];
+  ponerReferencia(reg.referencia ? { ...reg.referencia, mini: reg.refMini || null } : null);
   st.activa = 0; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   $('rv-ayuda').hidden = true;
   const lz = $('rv-lienzo');
@@ -613,6 +617,7 @@ function iniciar() {
   engancharLienzo();
   engancharAjuste();
   engancharAnotar();
+  engancharReferencia();
   iniciarHistorial(reabrir, volverARevisar);
   $('rv-repetir-x').addEventListener('click', () => { st.repetir = null; pintarRepetir(); cerrarCamara(); if (!st.foto) mostrar('vacia'); });
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);

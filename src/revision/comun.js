@@ -54,6 +54,7 @@ export const st = {
   /** @type {import('./notas.js').Nota[]} flechas, trazos y notas a mano, en fracción de la foto */ notas: [],
   /** @type {null|import('./notas.js').Nota} la que se está dibujando */ notaViva: null,
   /** @type {null|{x:number,y:number}} dónde va la nota que se está escribiendo */ notaPunto: null,
+  /** @type {null|import('./referencia.js').Referencia} la tringla de la campaña o un CUMPLE, para comparar */ referencia: null,
   /** lo que la persona vio en SynthID @type {null|import('./procedencia.js').VistoSynthid} */ synthid: null,
   /** ya tocó «Revisar con SynthID»: se ve la pregunta */ synthidAbierto: false,
   demo: { tringla: 0, anaquel: 0, focal: 0 },

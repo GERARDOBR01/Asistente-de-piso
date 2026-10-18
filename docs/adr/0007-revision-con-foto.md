@@ -759,6 +759,31 @@ página la dibuja `rondas.js`.
   («Anotado a mano: 3 marcas («Falta la talla M»)»). Se guardan con la revisión y vuelven al
   reabrirla. «Volver a revisar» no las copia: son de esa foto.
 
+## Referencia lado a lado: el planograma de VM (18-oct)
+
+Con una tringla medida, la tarjeta «Referencia» la compara contra:
+- **la foto de la campaña** (de la galería): se le mide la colorización con el mismo código
+  (`revisarColor`, con el marco de la guía); si no salen al menos dos tramos, se dice por qué;
+- **una tringla que ya cumplía**, del historial: se usan sus tramos medidos.
+
+`compararReferencia` (`secuencia.js`, pura) alinea las dos secuencias de color con
+Needleman–Wunsch: emparejar dos tramos cuesta su distancia de color (ΔE76, iguales hasta 18)
+más ½ si son de otro grupo, y dejar uno sin pareja cuesta 0.6. Así, un tramo de más o de menos
+no corre toda la comparación. Lo que dice:
+- **el orden de los grupos**, igual o distinto («la referencia va cálidos → fríos → neutros y
+  aquí cálidos → fríos → cálidos…»);
+- **cuántos tramos coinciden en su lugar**; arriba, «Se parece N %»;
+- **el tramo que está en otro lugar**: falta de un lado y sobra del otro con el mismo color
+  («el tramo 4 está en otro lugar (en la referencia va en el 3)»);
+- **lo que falta, lo que sobra y lo que cambió de color.**
+
+Se ven las dos fotos y dos tiras de color alineadas (arriba la referencia, abajo ahora; los
+huecos punteados y los cambios en rojo). La referencia se guarda con la revisión y «Volver a
+revisar» la conserva, porque el planograma no cambia. El texto que se comparte la incluye.
+
+Límite conocido: en la foto de la campaña se mide dentro del marco de la guía. Una foto de
+campaña con la tringla chica o de lado lee mal; para eso está el CUMPLE del historial.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

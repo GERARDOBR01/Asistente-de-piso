@@ -19,6 +19,7 @@ import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src
 import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
 import { textoSello, fechaDeToma, normalizarNota, esFlecha, simplificar, puntaFlecha, LARGO_NOTA } from '../src/revision/notas.js';
+import { secuencia, alinear, compararReferencia, ordenDeGrupos, PARECIDO } from '../src/revision/secuencia.js';
 import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, cuandoEnFrase, TOPE_HISTORIAL, comparar, resumenCambios, vigentes, ronda, rondas, porcentaje, PUNTOS } from '../src/revision/registro.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
@@ -30,7 +31,7 @@ const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigato
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
 /* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
-const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js', 'rondas.js', 'anotar.js'];
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js', 'rondas.js', 'anotar.js', 'referencia.js'];
 const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
 
 test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
@@ -947,6 +948,37 @@ test('anotar: notas, flechas y trazos', () => {
   /* La punta: dos rayas del mismo largo, simétricas respecto a la flecha. */
   const [i, d] = puntaFlecha({ x: 0, y: 0 }, { x: 100, y: 0 }, 20);
   assert.ok(Math.abs(Math.hypot(i.x - 100, i.y) - 20) < 1e-9 && Math.abs(i.y + d.y) < 1e-9 && i.x < 100);
+});
+
+test('referencia: la secuencia de color contra la de la campaña, alineada', () => {
+  /** @param {string} hex */
+  const paso = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); const [L, a, bb] = lab(r, g, b); const C = Math.hypot(a, bb), h = (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360; return { L, a, b: bb, grupo: clasificar(L, C, h).grupo, rgb: hex, ancho: 1 }; };
+  const ref = [P.calido[0], P.calido[1], P.calido[3], P.frio[0], P.frio[1], P.neutro[2], P.neutro[3]].map(paso);
+  /* Igual: todo coincide. */
+  const igual = compararReferencia(ref, ref);
+  assert.equal(igual.parecido, 1); assert.equal(igual.mismoOrden, true);
+  assert.match(igual.texto, /^mismo orden de grupos \(cálidos → fríos → neutros\); 7 de 7 tramos coinciden en su lugar\.$/);
+  /* Un frío metido entre los cálidos: otro orden y una pareja cambiada. */
+  const revuelta = [ref[0], ref[1], ref[3], ref[2], ref[4], ref[5], ref[6]];
+  const x = compararReferencia(ref, revuelta);
+  assert.equal(x.mismoOrden, false);
+  assert.ok(x.parecido < 1);
+  assert.match(x.texto, /otro orden de grupos/);
+  /* El cálido que se movió no «falta» ni «sobra»: está en otro lugar. */
+  assert.deepEqual([x.faltan, x.sobran, x.movidos.length], [0, 0, 1]);
+  assert.match(x.texto, /el tramo \d está en otro lugar \(en la referencia va en el \d\)/);
+  /* Falta un tramo: la alineación deja un hueco y el resto coincide. */
+  const sinUno = ref.filter((_, i) => i !== 4);
+  const y = compararReferencia(ref, sinUno);
+  assert.equal(y.faltan, 1); assert.equal(y.sobran, 0); assert.equal(y.iguales, 6); assert.equal(y.mismoOrden, true);
+  assert.deepEqual(alinear(ref, sinUno).map(p => p.a), [0, 1, 2, 3, null, 4, 5]);
+  /* Las secuencias salen de los tramos ordenados de izquierda a derecha, con su ancho relativo. */
+  const s = secuencia([{ x0: 50, x1: 100, L: 1, a: 0, b: 0, grupo: 'neutro', rgb: '#000' }, { x0: 0, x1: 50, L: 2, a: 0, b: 0, grupo: 'calido', rgb: '#f00' }]);
+  assert.deepEqual(s.map(q => [q.grupo, q.ancho]), [['calido', 0.5], ['neutro', 0.5]]);
+  assert.deepEqual(ordenDeGrupos(ref), ['calido', 'frio', 'neutro']);
+  /* Propiedad: alinear consigo misma empareja todo, en orden y sin distancia. */
+  fc.assert(fc.property(fc.array(fc.constantFrom(...ref), { minLength: 1, maxLength: 12 }), q => alinear(q, q).every((p, i) => p.r === i && p.a === i && p.de === 0)));
+  assert.ok(PARECIDO > 0);
 });
 
 test('ronda: el índice de exhibición de un área en un día', () => {

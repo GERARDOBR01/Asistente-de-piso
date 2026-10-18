@@ -33,9 +33,10 @@ const filas = [];
 /**
  * Sube como si viniera de la galería una imagen que dibuja demo.js en la página.
  * @param {any} p @param {string} quien `tringla` (revuelta) | `tringla-bien` | `anaquel` | `focal`
+ * @param {string} [entrada] el input de archivo (la galería, o la foto de la referencia)
  */
-async function subirDemo(p, quien) {
-  await p.evaluate(async (/** @type {string} */ quien) => {
+async function subirDemo(p, quien, entrada = 'rv-archivo') {
+  await p.evaluate(async (/** @type {[string, string]} */ [quien, entrada]) => {
     const D = await import('/src/revision/demo.js');
     const P = D.PALETA;
     const g = quien === 'tringla' ? D.tringla([P.calido[0], P.calido[1], P.frio[0], P.calido[3], P.frio[1], P.neutro[2], P.neutro[3]], { w: 960, h: 720, semilla: 5 })
@@ -48,10 +49,10 @@ async function subirDemo(p, quien) {
     const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92)));
     const dt = new DataTransfer();
     dt.items.add(new File([blob], `${quien}.jpg`, { type: 'image/jpeg' }));
-    const inp = /** @type {HTMLInputElement} */ (document.getElementById('rv-archivo'));
+    const inp = /** @type {HTMLInputElement} */ (document.getElementById(entrada));
     inp.files = dt.files;
     inp.dispatchEvent(new Event('change'));
-  }, quien);
+  }, [quien, entrada]);
 }
 
 /** Los niveles de las tarjetas de resultado, en orden. @param {any} p @returns {Promise<string[]>} */
@@ -241,7 +242,8 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await subirDemo(p, 'tringla');
     await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-area-caja'))).hidden, null, { timeout: 30000 });
     await p.fill('#rv-area', 'Caballeros · mesa 1');
-    await espera(p, 2000);
+    /* Se guarda 1.2 s después del último cambio: se espera a que llegue a la lista. */
+    await p.waitForFunction((/** @type {number} */ n) => document.querySelectorAll('#rv-hist-lista .rv-hist-item').length > n && /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista .rv-hist-item b')).textContent === 'Caballeros · mesa 1', n1, { timeout: 8000 }).catch(() => {});
     const n2 = await cuantas();
     const antes = await niveles(p);
     fila('historial: las fotos reales se guardan solas (cámara, galería, focal) y los ejemplos no', n0 === 3 && n1 === n0 && n2 === n0 + 1, `${n0} → ${n1} → ${n2}`);
@@ -289,7 +291,7 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     const cmp = await p.evaluate(() => ({
       texto: /** @type {HTMLElement} */ (document.querySelector('.rv-cambios-cab b')).textContent,
       filas: [...document.querySelectorAll('.rv-cambios li')].map(li => /** @type {HTMLElement} */ (li).dataset.cambio),
-      ahora: /** @type {HTMLImageElement} */ (document.getElementById('rv-cambios-ahora')).src.startsWith('blob:'),
+      ahora: /** @type {HTMLImageElement} */ (document.querySelector('.rv-cambios img[data-mini-actual]')).src.startsWith('blob:'),
       marcos: JSON.stringify(/** @type {any} */ (window).__revision.st.zonas.map((/** @type {any} */ z) => z.marco)),
       area: /** @type {HTMLInputElement} */ (document.getElementById('rv-area')).value,
     }));
@@ -400,6 +402,43 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-abrir]')).click());
     await espera(p, 1200);
     fila('anotar: las anotaciones se guardan con la revisión y vuelven al reabrir', await p.evaluate(() => /** @type {any} */ (window).__revision.st.notas.map((/** @type {any} */ n) => n.texto || n.tipo).join()) === 'flecha,trazo,Falta la talla M');
+
+    /* 13. Referencia: la tringla revuelta contra una que cumplía (del historial) y contra la foto de la campaña. */
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await tipo('tringla');
+    await subirDemo(p, 'tringla-bien');
+    await p.waitForFunction(() => document.querySelectorAll('#rv-res .rv-ver').length > 0, null, { timeout: 30000 });
+    await espera(p, 1800);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await subirDemo(p, 'tringla');
+    await p.waitForFunction(() => !!document.querySelector('#rv-res [data-ref="historial"]'), null, { timeout: 30000 });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-res [data-ref="historial"]')).click());
+    await p.waitForFunction(() => !!document.querySelector('#rv-res [data-ref-de]'), null, { timeout: 5000 });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-res [data-ref-de]')).click());
+    await espera(p, 600);
+    const deHist = await p.evaluate(() => ({
+      orden: /** @type {HTMLElement} */ (document.querySelector('.rv-ref')).dataset.orden,
+      cab: /** @type {HTMLElement} */ (document.querySelector('.rv-ref-cab b')).textContent,
+      texto: /** @type {HTMLElement} */ (document.querySelector('.rv-ref p')).textContent,
+      pares: document.querySelectorAll('.rv-ref-par').length, distintos: document.querySelectorAll('.rv-ref-par.distinto').length,
+      nombre: /** @type {any} */ (window).__revision.st.referencia?.nombre,
+    }));
+    fila('referencia: contra un CUMPLE del historial, otro orden de grupos y en qué tramos cambia', deHist.orden === 'false' && /^Se parece \d+ %$/.test(deHist.cab || '') && /^Otro orden de grupos/.test(deHist.texto || '') && deHist.pares >= 7 && /^CUMPLE · /.test(deHist.nombre || ''), JSON.stringify(deHist));
+    await foto('referencia', true);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-res [data-ref="quitar"]')).click());
+    await espera(p, 300);
+    await subirDemo(p, 'tringla-bien', 'rv-ref-archivo');
+    await p.waitForFunction(() => !!document.querySelector('.rv-ref-cab b'), null, { timeout: 30000 });
+    const deFoto = await p.evaluate(() => ({ nombre: /** @type {any} */ (window).__revision.st.referencia?.nombre, cab: /** @type {HTMLElement} */ (document.querySelector('.rv-ref-cab b')).textContent }));
+    await espera(p, 1800);
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision && /** @type {any} */ (window).tocarPestana, null, { timeout: 60000 });
+    await p.evaluate(() => /** @type {any} */ (window).tocarPestana('revisar'));
+    await p.waitForFunction(() => document.querySelectorAll('#rv-hist-lista [data-abrir]').length > 0, null, { timeout: 15000 });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-abrir]')).click());
+    await espera(p, 1200);
+    const vuelve = await p.evaluate(() => ({ nombre: /** @type {any} */ (window).__revision.st.referencia?.nombre, cab: /** @type {HTMLElement|null} */ (document.querySelector('.rv-ref-cab b'))?.textContent }));
+    fila('referencia: la foto de la campaña se mide igual, y la referencia se guarda con la revisión', deFoto.nombre === 'Campaña' && deFoto.cab === vuelve.cab && vuelve.nombre === 'Campaña', `${JSON.stringify(deFoto)} → ${JSON.stringify(vuelve)}`);
 
     /* 8. En el celular nada se sale de lado. */
     if (vista.tactil) {
