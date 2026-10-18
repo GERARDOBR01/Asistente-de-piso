@@ -247,8 +247,8 @@ async function credencialDe(blob, meta, anclas) {
 /**
  * Del archivo a resultados, sin pantalla: lo usan la pestaña y eval/revision.mjs.
  * @param {Blob} blob @param {Tipo} tipo
- * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco, anclasC2pa?:string}} [op]
- *   `puntos` y `marco` en fracción del ancho y del alto de la foto.
+ * @param {{via?:'app'|'galeria', tomada?:Date, puntos?:{x:number,y:number}[], marco?:Marco, excluir?:Marco[], anclasC2pa?:string}} [op]
+ *   `puntos`, `marco` y `excluir` en fracción del ancho y del alto de la foto.
  */
 export async function analizarArchivo(blob, tipo, op = {}) {
   let bytes;
@@ -260,7 +260,7 @@ export async function analizarArchivo(blob, tipo, op = {}) {
   const meta = leerMetadatos(bytes);
   const origen = veredictoOrigen({ via: op.via || 'galeria', meta, huella: h, bytes: bytes.length, tomada: op.tomada, credencial: await credencialDe(blob, meta, op.anclasC2pa) });
   let resultados;
-  try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco); }
+  try { resultados = medirTodo(img, tipo, op.puntos ? op.puntos.map(p => ({ x: p.x * img.width, y: p.y * img.height })) : null, op.marco, 'manual', { excluir: op.excluir }); }
   catch (e) { console.error('Revisar: falló el análisis', e); throw new ErrorFoto('analisis', `La foto se abrió, pero falló el análisis (${/** @type {any} */ (e)?.message || e}). Avísale a Gerardo con esta foto.`, e); }
   return { bytes, base, img, origen, huella: h, resultado: resultados[0] || null, resultados };
 }
@@ -300,13 +300,18 @@ function cargarDemo(imgDemo, puntos) {
  * @param {Imagen} img @param {Tipo} tipo @param {{x:number,y:number}[]|null} [puntos] en píxeles de img
  * @param {Marco} [zona] el recuadro que marcó la persona, en fracción; si no, la guía de la cámara
  * @param {OrigenPuntos} [origenPuntos]
+ * @param {{guia?:boolean, excluir?:Marco[]}} [op] `guia`: la zona no la dibujó la persona;
+ *   `excluir`: maniquíes detectados, en fracción, que no cuentan para el surtido
  * @returns {Resultado[]}
  */
-function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
+function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual', op = {}) {
   const m = zona || MARCOS[tipo];
   const marco = { x: m.x * img.width, y: m.y * img.height, w: m.w * img.width, h: m.h * img.height };
   if (tipo === 'tringla') return [revisarColor(img, { marco })];
-  if (tipo === 'anaquel') return [revisarSurtido(img, { marco })];
+  if (tipo === 'anaquel') return [revisarSurtido(img, {
+    marco, guia: op.guia ?? !zona,
+    excluir: (op.excluir || []).map(b => ({ x: b.x * img.width, y: b.y * img.height, w: b.w * img.width, h: b.h * img.height })),
+  })];
   if (!puntos) return [];
   return [revisarTriangulo(puntos, img, { origen: origenPuntos }), revisarNiveles(puntos, img, { origen: origenPuntos })];
 }
@@ -321,6 +326,7 @@ function medirTodo(img, tipo, puntos = null, zona, origenPuntos = 'manual') {
  * @property {{x:number,y:number}[]} puntos  focal, en píxeles de la imagen analizada
  * @property {OrigenPuntos} origenPuntos
  * @property {string} [nota] lo que dijo «Sugerir», hasta que se toque la zona
+ * @property {Marco[]} [maniquies] maniquíes detectados en la zona (surtido), en fracción de la foto
  * @property {Resultado[]|null} res null = el focal espera sus puntos
  */
 
@@ -330,7 +336,45 @@ const nuevaZona = (tipo, marco, guia) => ({ tipo, marco, guia, puntos: [], orige
 /** @param {Zona} z */
 function medirZona(z) {
   const f = /** @type {NonNullable<typeof st.foto>} */ (st.foto);
-  z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos);
+  z.res = medirTodo(f.img, z.tipo, z.tipo === 'focal' ? z.puntos : null, z.marco, z.origenPuntos, { guia: z.guia, excluir: z.maniquies });
+  if (z.tipo === 'anaquel' && !z.maniquies) quitarManiquies(z);
+}
+
+/* Surtido: un maniquí junto a la mesa no es un hueco ni producto. El detector
+   (el mismo de «Sugerir», ~14 MB, guardado por el service worker) busca
+   personas en la foto una sola vez; si alguno cae en la zona, se vuelve a
+   medir sin sus celdas. Sin señal y sin modelo guardado, se queda como está.
+   Solo `person` ≥ 0.4: en el banco de escena (17-oct) acertó 93-100 % de las
+   veces que dijo «maniquí». */
+const MANIQUI_MINIMO = 0.4;
+
+/** @param {Zona} z */
+async function quitarManiquies(z) {
+  const f = st.foto;
+  if (!f) return;
+  z.maniquies = [];
+  try {
+    const ff = /** @type {any} */ (f);
+    ff.personas ||= import('./detector.js').then(m => conTope(m.detectar(f.base), 12000));
+    const W = f.base.width, H = f.base.height, m = z.marco;
+    /** @type {{x:number,y:number,w:number,h:number,categoria:string,score:number}[]} */
+    const cajas = await ff.personas;
+    const dentro = cajas
+      .filter(c => c.categoria === 'person' && c.score >= MANIQUI_MINIMO)
+      .map(c => ({ x: c.x / W, y: c.y / H, w: c.w / W, h: c.h / H }))
+      .filter(b => {
+        const i = Math.max(0, Math.min(b.x + b.w, m.x + m.w) - Math.max(b.x, m.x)) * Math.max(0, Math.min(b.y + b.h, m.y + m.h) - Math.max(b.y, m.y));
+        return i >= 0.3 * b.w * b.h;
+      });
+    if (!dentro.length || st.foto !== f || !st.zonas.includes(z)) return;
+    z.maniquies = dentro;
+    medirZona(z);
+    pintarZonas(); pintarResultados(); dibujar(1);
+  } catch (e) {
+    /* Sin señal la primera vez: la próxima zona lo vuelve a intentar. */
+    delete /** @type {any} */ (f).personas;
+    console.warn('Revisar: sin detector para quitar maniquíes del surtido', e);
+  }
 }
 
 const activa = () => (st.activa >= 0 ? st.zonas[st.activa] : null);
@@ -933,6 +977,7 @@ const CHIP = {
   vacio_pct: v => `vacío ${v} %`,
   huecos: v => v ? `${v} ${v === 1 ? 'hueco' : 'huecos'}` : 'sin huecos',
   hueco_mayor_pct: v => v ? `hueco mayor ${v} %` : null,
+  celdas_maniqui: v => `${v} celdas tapadas por maniquí (no cuentan)`,
   puntos: v => `${v} ${v === 1 ? 'elemento' : 'elementos'}`,
   origen_puntos: v => DE_DONDE[/** @type {'manual'} */ (v)] || null,
   cima_pos_pct: v => `cima al ${v} % del ancho`,

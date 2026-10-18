@@ -503,6 +503,32 @@ existen. Para eso está el toque inteligente.
 
 Todo esto se midió en **desarrollo**, con 5 fotos. Falta el lote de confirmación.
 
+## Surtido: solo la mesa o el mueble (17-oct)
+
+Gerardo: «una foto de una mesa y un maniquí a un lado sale GRAVE porque a la izquierda del
+maniquí no hay nada; pero solo se evalúa la mesa». Sin una zona dibujada, el surtido medía el
+92 % de la foto. Al pintar dónde caían los «huecos» en 23 fotos con mesa del banco de escena
+(`eval-revision/escena`, fuera del repo), casi siempre eran **el techo**, y en dos, **la base o
+la columna junto al maniquí**.
+
+- **Techo.** Con el marco de la guía, lo vacío que toca el borde de arriba es techo o pared si,
+  sumando todos sus pedazos (las lámparas lo parten), cubre al menos la mitad del ancho. Una
+  casilla vacía del entrepaño de arriba de un mueble que llena el cuadro no llega a tanto: las
+  12 semillas sintéticas con hueco siguen sin CUMPLE. Con una zona dibujada no cambia nada.
+- **Maniquíes.** El detector de «Sugerir» (EfficientDet-Lite0) busca `person` ≥ 0.4 una vez
+  por foto. En el banco de escena esas cajas acertaron 93–100 % de las veces.
+  - **Sin zona y con maniquí → NO_CALIFICA**, y se pide marcar la mesa con «＋ Zona». No se
+    adivina qué parte de una foto de área es la mesa.
+  - **Con zona:** las celdas que tapa el maniquí no cuentan ni como hueco ni como producto.
+  - Sin señal y sin el modelo guardado, todo queda como antes.
+
+| | Antes | Ahora |
+|---|---|---|
+| Fotos del manual | 12/12 | 12/12 |
+| Tienda | 2/2 | 2/2 |
+| Lote de confirmación (zonas a mano) | 5/5 | 5/5 |
+| 23 fotos con mesa, sin zona | 6 GRAVE + 4 OBSERVACIÓN falsos | 1 GRAVE (pared con letras) + 1 OBSERVACIÓN; 16 piden zona |
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan
