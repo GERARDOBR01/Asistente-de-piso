@@ -15,9 +15,10 @@ import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
 import { pedirSensor, empezarToma, pararToma } from './guia.js';
+import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea } from './historial.js';
 import { girar, animar, dibujar } from './dibujo.js';
 import { medirTodo, medirZona, empezarRevision, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
-import { tarjetaOrigen, pintarResultados, reporteParaCompartir } from './reporte.js';
+import { tarjetaOrigen, pintarResultados, reporteParaCompartir, ponerRevisado } from './reporte.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
 /** @typedef {import('./comun.js').Tipo} Tipo */
@@ -180,6 +181,7 @@ export async function analizarArchivo(blob, tipo, op = {}) {
 async function cargarArchivo(blob, via, tomada) {
   try {
     const a = await analizarArchivo(blob, st.tipo, { via, tomada: tomada || undefined });
+    revisionNueva();
     st.foto = { img: a.img, base: a.base, via, bytes: a.bytes, tomada };
     st.origen = a.origen;
     st.synthid = null; st.synthidAbierto = false;
@@ -197,6 +199,7 @@ function cargarDemo(imgDemo, puntos) {
   const c = document.createElement('canvas');
   c.width = imgDemo.width; c.height = imgDemo.height;
   /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).putImageData(new ImageData(Uint8ClampedArray.from(imgDemo.data), imgDemo.width, imgDemo.height), 0, 0);
+  revisionNueva();
   st.foto = { img: pixeles(c), base: c, via: 'demo', bytes: null, tomada: null };
   st.synthid = null; st.synthidAbierto = false;
   st.origen = { basico: 'origen', nivel: 'DEMO', motivo: 'Imagen de ejemplo dibujada por la app: no hay origen que probar. Con una foto real aquí sale si se tomó en la app, si viene de galería o si declara IA.', evidencia: {}, fuente: 'CÓDIGO' };
@@ -207,6 +210,7 @@ function cargarDemo(imgDemo, puntos) {
 
 /** Deja la pestaña como recién abierta, lista para otra foto, sin recargar. */
 export function nuevaRevision() {
+  revisionNueva();
   cerrarCamara();
   st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
@@ -401,6 +405,36 @@ async function muestraOrigen(cual) {
     '<p class="rv-nota">Muestra armada en la app con metadatos de ejemplo. No se adivina con un detector: se lee lo que la foto declara. Un GRAVE solo sale si la propia foto dice que es IA.</p>';
 }
 
+/**
+ * Una revisión del historial vuelve a la pantalla como se guardó: la foto, las
+ * zonas con sus resultados y marcas, el origen, el área y lo revisado a mano.
+ * No se vuelve a medir: es la evidencia de ese día.
+ * @param {any} reg
+ */
+async function reabrir(reg) {
+  cerrarCamara();
+  let base;
+  try {
+    const bmp = await createImageBitmap(reg.foto);
+    base = aLienzo(bmp, LADO_DECODIFICADO, bmp.width, bmp.height);
+    bmp.close();
+  } catch (e) { aviso('No se pudo abrir la foto guardada.', 'warn'); console.warn(e); return; }
+  st.foto = { img: pixeles(base), base, via: reg.via, bytes: null, tomada: reg.tomada ? new Date(reg.tomada) : null };
+  st.origen = reg.origen; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
+  st.registro = reg.id;
+  ponerArea(reg.area);
+  ponerRevisado(reg.huella, reg.revisado || []);
+  st.zonas = reg.zonas.map((/** @type {any} */ z) => ({ ...z, puntos: z.puntos || [], res: z.res ?? null }));
+  st.activa = 0; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
+  $('rv-ayuda').hidden = true;
+  const lz = $('rv-lienzo');
+  lz.width = base.width; lz.height = base.height;
+  proporcion(base.width, base.height); mostrar('foto');
+  dibujar(1); pintarZonas(); pintarResultados();
+  marcarGuardada();
+  $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+}
+
 /* ── Arranque ───────────────────────────────────────────────────────────── */
 
 /** @param {Tipo} t */
@@ -520,6 +554,7 @@ function iniciar() {
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
   engancharLienzo();
   engancharAjuste();
+  iniciarHistorial(reabrir);
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);
   $('rv-zona-ajustar').addEventListener('click', empezarAjuste);
   $('rv-nueva-foto').addEventListener('click', nuevaRevision);

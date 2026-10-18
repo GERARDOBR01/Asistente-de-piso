@@ -46,6 +46,8 @@ export const st = {
   /** cuándo se soltó el último recuadro (ms) */ soltado: 0,
   /** el toque pone el punto justo donde se toca, sin silueta */ exacto: false,
   /** @type {any} */ origen: null,
+  /** el área o departamento de la revisión (historial y reporte) */ area: '',
+  /** @type {string|null} id de la revisión en el historial; null = todavía no se guarda */ registro: null,
   /** lo que la persona vio en SynthID @type {null|import('./procedencia.js').VistoSynthid} */ synthid: null,
   /** ya tocó «Revisar con SynthID»: se ve la pregunta */ synthidAbierto: false,
   demo: { tringla: 0, anaquel: 0, focal: 0 },

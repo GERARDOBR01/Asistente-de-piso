@@ -1263,6 +1263,37 @@ body:has(#panel-chat.active) .chat-wrap{flex:1;min-height:0;height:auto}
   -webkit-mask:linear-gradient(#000 0 0) top left/26px 26px no-repeat,linear-gradient(#000 0 0) top right/26px 26px no-repeat,linear-gradient(#000 0 0) bottom left/26px 26px no-repeat,linear-gradient(#000 0 0) bottom right/26px 26px no-repeat;
           mask:linear-gradient(#000 0 0) top left/26px 26px no-repeat,linear-gradient(#000 0 0) top right/26px 26px no-repeat,linear-gradient(#000 0 0) bottom left/26px 26px no-repeat,linear-gradient(#000 0 0) bottom right/26px 26px no-repeat}
 .rv-franja{position:absolute;left:0;right:0;border-top:1.5px dashed rgba(255,255,255,.75);border-bottom:1.5px dashed rgba(255,255,255,.75);background:rgba(255,255,255,.06)}
+/* Área e historial (src/revision/historial.js). */
+.rv-area{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:4px;padding:8px 12px;border-radius:16px;background:var(--s1);border:1px solid var(--border2)}
+.rv-area label{font-size:12px;font-weight:600;color:var(--text2)}
+.rv-area input{flex:1;min-width:0;min-height:34px;padding:0 10px;border-radius:10px;border:1px solid var(--border2);background:var(--s2);color:var(--text);font:500 14px 'Geist',system-ui,sans-serif}
+.rv-guardada{flex-basis:100%;font-size:11.5px;color:var(--text3)}
+.rv-guardada:empty{display:none}
+.rv-historial{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.rv-hist-cab{display:flex;align-items:baseline;gap:8px}
+.rv-hist-cab h3{margin:0;font-size:15px;font-weight:650;color:var(--text)}
+.rv-hist-cab span{font-size:12px;color:var(--text3)}
+.rv-hist-borrar{margin-left:auto;min-height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--border2);background:var(--s1);color:var(--text2);font:600 12px 'Geist',system-ui,sans-serif;cursor:pointer}
+.rv-hist-borrar.armado{border-color:var(--red);color:var(--red)}
+.rv-hist-nota{margin:0;font-size:12px;color:var(--text3)}
+.rv-hist-filtro{display:flex;flex-wrap:wrap;gap:6px}
+.rv-hist-filtro:empty{display:none}
+.rv-hist-filtro .rv-chip.on{border-color:var(--text);color:var(--text);font-weight:600}
+.rv-hist-lista{display:flex;flex-direction:column;gap:6px}
+.rv-hist-item{display:flex;align-items:stretch;border-radius:16px;background:var(--s1);border:1px solid var(--border2);overflow:hidden;--rv-c:var(--text3)}
+.rv-hist-item[data-n="CUMPLE"]{--rv-c:var(--green)}.rv-hist-item[data-n="OBSERVACIÓN"]{--rv-c:var(--amber)}.rv-hist-item[data-n="GRAVE"]{--rv-c:var(--red)}
+.rv-hist-item.on{border-color:var(--rv-c)}
+.rv-hist-abrir{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:8px;border:0;background:none;color:var(--text);text-align:left;cursor:pointer;font:inherit}
+.rv-hist-abrir img{flex:none;width:64px;height:48px;object-fit:cover;border-radius:10px;background:#07080A;box-shadow:inset 0 0 0 2px var(--rv-c)}
+.rv-hist-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rv-hist-txt b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-hist-txt small{font-size:11.5px;color:var(--text3)}
+.rv-hist-bas{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.rv-hist-bas i{font-style:normal;font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid currentColor;color:var(--text3)}
+.rv-hist-bas i[data-n="CUMPLE"]{color:var(--green)}.rv-hist-bas i[data-n="OBSERVACIÓN"]{color:var(--amber)}.rv-hist-bas i[data-n="GRAVE"]{color:var(--red)}
+.rv-hist-x{flex:none;min-width:44px;border:0;border-left:1px solid var(--border2);background:none;color:var(--text3);font-size:18px;cursor:pointer}
+.rv-hist-x.armado{min-width:84px;color:var(--red);font-size:12px;font-weight:600}
+.rv-hist-mas{min-height:36px;border-radius:999px;border:1px dashed var(--border3);background:none;color:var(--text2);font:600 12.5px 'Geist',system-ui,sans-serif;cursor:pointer}
 /* Toma en vivo (src/revision/guia.js): avisa, no bloquea. */
 .rv-toma{position:absolute;left:8px;right:8px;bottom:10px;display:flex;gap:5px;pointer-events:none;flex-wrap:wrap;justify-content:center}
 .rv-toma span{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,.58);color:#fff;font-size:11px;white-space:nowrap;backdrop-filter:blur(8px)}
@@ -1740,7 +1771,19 @@ body::after{
       <button class="rv-chip" data-muestra="whatsapp" type="button">Reenviada por WhatsApp</button>
       <button class="rv-chip" data-muestra="ia" type="button">Hecha con IA</button>
     </div>
+    <div class="rv-area" id="rv-area-caja" hidden>
+      <label for="rv-area">Área</label>
+      <input id="rv-area" list="rv-areas" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ej. Caballeros · mesa de entrada">
+      <datalist id="rv-areas"></datalist>
+      <span class="rv-guardada" id="rv-guardada"></span>
+    </div>
     <div class="rv-res" id="rv-res" aria-live="polite"></div>
+    <section class="rv-historial" id="rv-historial" hidden aria-labelledby="rv-hist-t">
+      <div class="rv-hist-cab"><h3 id="rv-hist-t">Historial</h3><span id="rv-hist-n"></span><button class="rv-hist-borrar" id="rv-hist-borrar" type="button">Borrar todo</button></div>
+      <p class="rv-hist-nota">Se guarda solo en este teléfono. Toca una revisión para volver a verla.</p>
+      <div class="rv-hist-filtro" id="rv-hist-filtro"></div>
+      <div class="rv-hist-lista" id="rv-hist-lista"></div>
+    </section>
   </div>
 </div>
 
