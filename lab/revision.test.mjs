@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { peor, noCalifica, reducir } from '../src/revision/veredicto.js';
 import { leerMetadatos, veredictoOrigen, sha256Puro, huella, fechaExif, dimensiones, jpegCompleto, interpretarC2pa, admiteSynthid, conSynthid } from '../src/revision/procedencia.js';
-import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos } from '../src/revision/color.js';
+import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos, BRILLO } from '../src/revision/color.js';
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
@@ -287,13 +287,55 @@ test('colorización: fuera de la rueda dentro de su grupo → OBSERVACIÓN solo 
   assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, revisarRueda: true } }).nivel, 'OBSERVACIÓN');
 });
 
-test('colorización: bloques limpios en otro orden → OBSERVACIÓN; la dirección y el rigor son configurables', () => {
+test('colorización: bloques limpios en otro orden → GRAVE (regla de Gerardo); la dirección y el rigor son configurables', () => {
   const img = tringla(BIEN.slice().reverse());
   const r = revisarColor(img);
-  assert.equal(r.nivel, 'OBSERVACIÓN');
-  assert.match(r.motivo, /bien formados, pero van neutros → fríos → cálidos/);
-  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, ordenEstricto: true } }).nivel, 'GRAVE');
+  assert.equal(r.nivel, 'GRAVE');
+  assert.match(r.motivo, /bien formados, pero van neutros → fríos → cálidos; la guía pide cálidos → fríos → neutros/);
+  assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, ordenEstricto: false } }).nivel, 'OBSERVACIÓN');
   assert.equal(revisarColor(img, { regla: { ...REGLA_COLOR, direccion: 'der-izq' } }).nivel, 'CUMPLE');
+});
+
+test('colorización: tringla de vestidos → NO_CALIFICA con su motivo, sin medir', () => {
+  const r = revisarColor(tringla([P.calido[0], P.frio[2], P.calido[3], P.neutro[2]]), { vestidos: true });
+  assert.equal(r.nivel, 'NO_CALIFICA');
+  assert.match(r.motivo, /Vestidos/);
+  assert.equal(r.evidencia.vestidos, true);
+});
+
+test('colorización: un brillo angosto y quemado no parte el bloque (luz recortada, no una prenda)', () => {
+  const img = tringla(BIEN);
+  const W = img.width, H = img.height, ancho = 0.9 * W / BIEN.length, cx = 0.05 * W + 5.5 * ancho;
+  for (let y = Math.round(0.2 * H); y < 0.8 * H; y++) for (let x = Math.round(cx - 0.0125 * W); x < cx + 0.0125 * W; x++) {
+    const k = (y * W + x) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+  }
+  const r = revisarColor(img);
+  assert.equal(r.nivel, 'CUMPLE', r.motivo);
+  assert.equal(r.evidencia.brillos, 1);
+  /* Sin la regla del brillo, la misma foto salía GRAVE «neutro entre fríos». */
+  const antes = BRILLO.claridad;
+  try { BRILLO.claridad = 999; assert.equal(revisarColor(img).nivel, 'GRAVE'); } finally { BRILLO.claridad = antes; }
+});
+
+test('colorización: si solo un color dudoso rompe el orden → OBSERVACIÓN «revísalo a ojo», ni GRAVE ni CUMPLE', () => {
+  /* Un gris azulado pálido entre los fríos: ¿azul cielo o gris? La foto no deja decidir. */
+  const r = revisarColor(tringla([P.calido[0], P.calido[1], P.frio[0], P.frio[1], '#D8DEE8', P.frio[2], P.frio[3], P.neutro[2], P.neutro[3]]));
+  assert.equal(r.nivel, 'OBSERVACIÓN', r.motivo);
+  assert.equal(r.evidencia.dudosos, 1);
+  assert.match(r.motivo, /en el filo .* Revísalo a ojo/);
+  assert.ok(r.marcas.tramos.some(t => t.dudoso && t.fueraGrupo));
+  /* Un color franco en el mismo lugar sigue siendo GRAVE. */
+  const g = revisarColor(tringla([P.calido[0], P.calido[1], P.frio[0], P.frio[1], P.calido[1], P.frio[2], P.frio[3], P.neutro[2], P.neutro[3]]));
+  assert.equal(g.nivel, 'GRAVE');
+});
+
+test('colorización: qué colores quedan en el filo', () => {
+  assert.equal(clasificar(85, 8, 250).dudoso, true, 'azul cielo o gris claro');
+  assert.equal(clasificar(70, 30, 100).dudoso, true, 'amarillo verdoso: cálido o frío');
+  assert.equal(clasificar(50, 60, 20).dudoso, false, 'rojo franco');
+  assert.equal(clasificar(15, 2, 0).dudoso, false, 'negro');
+  assert.equal(clasificar(30, 5, 260).dudoso, false, 'mezclilla lavada (confirmada por Gerardo)');
+  assert.equal(clasificar(21, 8, 262).dudoso, false, 'azul marino');
 });
 
 test('colorización: menos de 3 bloques, oscura o movida → NO_CALIFICA', () => {
