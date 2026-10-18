@@ -445,6 +445,9 @@ function empezarDibujo() {
   if (st.modo === 'tocar') $('rv-ayuda').hidden = true;
   st.modo = 'dibujar'; st.trazo = null;
   pintarZonas(); dibujar(1);
+  /* Tras un resultado la página bajó a las tarjetas: la foto vuelve a la vista para dibujar. */
+  const r = $('rv-escena').getBoundingClientRect();
+  if (r.top < 0 || r.bottom > innerHeight) $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
 }
 
 /** Cierra el recuadro dibujado y mide la zona nueva. @param {{x0:number,y0:number,x1:number,y1:number}} t en píxeles de la imagen */

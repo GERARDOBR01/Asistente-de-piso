@@ -1,0 +1,186 @@
+// La pantalla de Revisar de punta a punta, en un Chromium sin ventana, en
+// celular (390×844, táctil) y en escritorio. Lo corre el CI: las pruebas de
+// lab/ miden las reglas sobre los píxeles; aquí se prueba lo que toca la
+// persona (ejemplos, galería, zonas, vestidos, puntos del focal, compartir,
+// otra foto) y que nada truene en la página. Sin fotos reales: las imágenes
+// las dibuja demo.js en la propia página, y el focal se toca con «Punto
+// exacto», que no necesita bajar ningún modelo.
+//
+// Uso: node eval/revisar-pantalla.mjs [--capturas <carpeta>]
+//   (Playwright como en eval/arnes.mjs: PLAYWRIGHT_CORE, CANAL, CHROMIUM)
+import fs from 'node:fs';
+import path from 'node:path';
+import { servirRepo, cargarPlaywright } from './navegador.mjs';
+
+const args = process.argv.slice(2);
+const capturas = args.includes('--capturas') ? args[args.indexOf('--capturas') + 1] : null;
+if (capturas) fs.mkdirSync(capturas, { recursive: true });
+
+const pw = await cargarPlaywright();
+if (!pw) { console.error('Falta Playwright: npm i --no-save playwright-core, o PLAYWRIGHT_CORE=<ruta a index.mjs>'); process.exit(2); }
+const srv = await servirRepo();
+const b = await pw.chromium.launch({ executablePath: process.env.CHROMIUM || undefined, channel: process.env.CANAL || undefined });
+const url = `http://127.0.0.1:${/** @type {any} */ (srv.address()).port}/index.html`;
+
+/** @type {{vista:string, q:string, ok:boolean, detalle:string}[]} */
+const filas = [];
+
+/**
+ * Sube como si viniera de la galería una imagen que dibuja demo.js en la página.
+ * @param {any} p @param {string} quien `tringla` | `anaquel` | `focal`
+ */
+async function subirDemo(p, quien) {
+  await p.evaluate(async (/** @type {string} */ quien) => {
+    const D = await import('/src/revision/demo.js');
+    const P = D.PALETA;
+    const g = quien === 'tringla' ? D.tringla([P.calido[0], P.calido[1], P.frio[0], P.calido[3], P.frio[1], P.neutro[2], P.neutro[3]], { w: 960, h: 720, semilla: 5 })
+      : quien === 'anaquel' ? D.anaquel({ w: 960, h: 720, semilla: 3, huecos: [[1, 2], [1, 3]] })
+      : D.focal([0.45, 0.62, 0.8, 0.6], { w: 960, h: 720, semilla: 2 }).img;
+    const c = document.createElement('canvas');
+    c.width = g.width; c.height = g.height;
+    /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).putImageData(new ImageData(Uint8ClampedArray.from(g.data), g.width, g.height), 0, 0);
+    const blob = /** @type {Blob} */ (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92)));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], `${quien}.jpg`, { type: 'image/jpeg' }));
+    const inp = /** @type {HTMLInputElement} */ (document.getElementById('rv-archivo'));
+    inp.files = dt.files;
+    inp.dispatchEvent(new Event('change'));
+  }, quien);
+}
+
+/** Los niveles de las tarjetas de resultado, en orden. @param {any} p @returns {Promise<string[]>} */
+const niveles = p => p.evaluate(() => [...document.querySelectorAll('#rv-res .rv-ver .rv-nivel')].map(e => /** @type {HTMLElement} */ (e).innerText.trim()));
+/** @param {any} p @param {number} ms */
+const espera = (p, ms) => p.waitForTimeout(ms);
+
+/**
+ * Un punto del lienzo, en fracción de la foto, a coordenadas de la página.
+ * @param {any} p @param {number} fx @param {number} fy
+ */
+async function enLienzo(p, fx, fy) {
+  return p.evaluate(({ fx, fy }) => {
+    const lz = /** @type {HTMLCanvasElement} */ (document.getElementById('rv-lienzo'));
+    const r = lz.getBoundingClientRect();
+    const k = Math.min(r.width / lz.width, r.height / lz.height), w = lz.width * k, h = lz.height * k;
+    return { x: r.left + (r.width - w) / 2 + fx * w, y: r.top + (r.height - h) / 2 + fy * h };
+  }, { fx, fy });
+}
+
+for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true }, { nombre: 'escritorio', width: 1280, height: 900, tactil: false }]) {
+  const ctx = await b.newContext({ viewport: { width: vista.width, height: vista.height }, hasTouch: vista.tactil, deviceScaleFactor: vista.tactil ? 2 : 1 });
+  const p = await ctx.newPage();
+  /** @type {string[]} */
+  const errores = [];
+  p.on('pageerror', (/** @type {Error} */ e) => errores.push(e.message));
+  const fila = (/** @type {string} */ q, /** @type {any} */ ok, detalle = '') => filas.push({ vista: vista.nombre, q, ok: !!ok, detalle: String(detalle) });
+  const foto = async (/** @type {string} */ n) => { if (capturas) await p.screenshot({ path: path.join(capturas, `${vista.nombre}-${n}.png`) }); };
+  try {
+    await p.goto(url, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision && /** @type {any} */ (window).tocarPestana, null, { timeout: 60000 });
+    await p.evaluate(() => /** @type {any} */ (window).tocarPestana('revisar'));
+    await espera(p, 400);
+    const tipo = (/** @type {string} */ t) => p.evaluate((/** @type {string} */ t) => /** @type {HTMLElement} */ (document.querySelector(`[data-tipo="${t}"]`)).click(), t);
+    const ejemplo = async () => { await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-demo')).click()); await espera(p, 1300); };
+
+    /* 1. Ejemplos: los tres de tringla, los dos de anaquel y los dos de focal. */
+    await tipo('tringla');
+    const vistos = [];
+    for (let i = 0; i < 3; i++) { await ejemplo(); vistos.push((await niveles(p))[0]); }
+    fila('tringla: los ejemplos dan GRAVE, CUMPLE y OBSERVACIÓN (color dudoso)', vistos.join() === 'GRAVE,CUMPLE,OBSERVACIÓN', vistos.join());
+    await foto('tringla-ejemplo');
+    /* 2. Vestidos: el primer ejemplo (GRAVE) se vuelve NO_CALIFICA y regresa. */
+    await ejemplo();   // los ejemplos dan la vuelta: de nuevo el primero (GRAVE)
+    const antesV = (await niveles(p))[0];
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-vestidos]')).click());
+    await espera(p, 900);
+    const conV = await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-res .rv-ver')).innerText);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-vestidos]')).click());
+    await espera(p, 900);
+    const sinV = (await niveles(p))[0];
+    fila('vestidos: la tarjeta pasa a NO_CALIFICA «sin regla de color» y regresa', antesV === 'GRAVE' && /NO_CALIFICA/.test(conV) && /vestidos/i.test(conV) && sinV === 'GRAVE', `${antesV} → ${conV.slice(0, 60).replace(/\s+/g, ' ')} → ${sinV}`);
+    await tipo('anaquel');
+    const an = [];
+    for (let i = 0; i < 2; i++) { await ejemplo(); an.push((await niveles(p))[0]); }
+    fila('anaquel: los ejemplos dan GRAVE (huecos) y CUMPLE', an.join() === 'GRAVE,CUMPLE', an.join());
+    await foto('anaquel-ejemplo');
+    await tipo('focal');
+    await ejemplo();
+    const fo = await niveles(p);
+    fila('focal: el ejemplo trae triangulación y alturas', fo.length === 2, fo.join());
+    await foto('focal-ejemplo');
+
+    /* 3. Galería: una tringla sin metadatos → resultado + evidencia «SIN DATOS». */
+    await tipo('tringla');
+    await subirDemo(p, 'tringla');
+    await p.waitForFunction(() => document.querySelectorAll('#rv-res .rv-ver').length > 0, null, { timeout: 30000 });
+    const origen = await p.evaluate(() => /** @type {HTMLElement|null} */ (document.querySelector('#rv-res .rv-origen'))?.innerText || '');
+    fila('galería: la foto se revisa y la evidencia dice SIN DATOS', /SIN DATOS/.test(origen), origen.slice(0, 50).replace(/\s+/g, ' '));
+
+    /* 4. Zonas: «＋ Zona» y arrastrar dos recuadros. El primero reemplaza al de la guía. */
+    const arrastrar = async (/** @type {number[]} */ [x0, y0, x1, y1]) => {
+      const a = await enLienzo(p, x0, y0), z = await enLienzo(p, x1, y1);
+      await p.mouse.move(a.x, a.y); await p.mouse.down();
+      await p.mouse.move((a.x + z.x) / 2, (a.y + z.y) / 2, { steps: 4 }); await p.mouse.move(z.x, z.y, { steps: 4 });
+      await p.mouse.up();
+      /* La cifra sube a la vista a los ~950 ms: se espera a que la página se quede quieta. */
+      await espera(p, 1600);
+    };
+    /* «＋ Zona» regresa la foto a la vista (la página había bajado a las tarjetas). */
+    const masZona = async () => { await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-zona-nueva')).click()); await espera(p, 800); };
+    await masZona();
+    await arrastrar([0.05, 0.15, 0.6, 0.85]);
+    await masZona();
+    await arrastrar([0.55, 0.15, 0.95, 0.85]);
+    const zonas = await p.evaluate(() => document.querySelectorAll('#rv-zonas-lista .rv-zona').length);
+    const general = await p.evaluate(() => /** @type {HTMLElement|null} */ (document.querySelector('#rv-res .rv-general'))?.innerText || '');
+    fila('zonas: dos recuadros dibujados dan dos zonas y un resumen general', zonas === 2 && /2 zonas/i.test(general), `${zonas} zonas · ${general.slice(0, 40).replace(/\s+/g, ' ')}`);
+    await foto('zonas');
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-zonas-lista [data-quitar="1"]')).click());
+    await espera(p, 400);
+    fila('zonas: la × quita una zona', await p.evaluate(() => document.querySelectorAll('#rv-zonas-lista .rv-zona').length) === 1);
+
+    /* 5. Focal a mano con «Punto exacto»: tres toques y Revisar. */
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await tipo('focal');
+    await subirDemo(p, 'focal');
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-ayuda'))).hidden, null, { timeout: 30000 });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-exacto')).click());
+    for (const [fx, fy] of [[0.25, 0.45], [0.5, 0.2], [0.75, 0.42]]) {
+      const q = await enLienzo(p, fx, fy);
+      await p.mouse.click(q.x, q.y);
+      await espera(p, 500);
+    }
+    const listo = await p.evaluate(() => !(/** @type {HTMLButtonElement} */ (document.getElementById('rv-listo'))).disabled);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-listo')).click());
+    await espera(p, 1300);
+    const tri = await niveles(p);
+    fila('focal: tres puntos exactos habilitan Revisar y dan triangulación y alturas', listo && tri.length === 2 && tri[0] === 'CUMPLE', `${listo} · ${tri.join()}`);
+    await foto('focal-puntos');
+
+    /* 6. Compartir: la imagen del reporte (sin abrir la hoja del sistema). */
+    const rep = await p.evaluate(() => { const c = /** @type {any} */ (window).__revision.reporteParaCompartir(); return { w: c.width, h: c.height }; });
+    fila('compartir: el reporte mide 1080 de ancho y trae foto y tarjetas', rep.w === 1080 && rep.h > 1200, `${rep.w}×${rep.h}`);
+
+    /* 7. Otra foto: la pantalla vuelve a empezar. */
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await espera(p, 300);
+    const vacia = await p.evaluate(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-vacia'))).hidden && !document.querySelector('#rv-res .rv-ver'));
+    fila('«Nueva foto» deja la pantalla vacía', vacia);
+
+    /* 8. En el celular nada se sale de lado. */
+    if (vista.tactil) {
+      const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+      fila('celular: sin desplazamiento de lado (390 px)', ancho <= vista.width, `${ancho} px`);
+    }
+  } catch (e) {
+    fila('el recorrido termina sin tronar', false, /** @type {any} */ (e)?.message || e);
+  } finally {
+    fila('sin errores de la página', !errores.length, errores.join(' | '));
+    await ctx.close();
+  }
+}
+await b.close(); srv.close();
+const malas = filas.filter(f => !f.ok);
+for (const f of filas) console.log(`${f.ok ? '✓' : '✗'} [${f.vista}] ${f.q}${f.ok ? '' : ` — ${f.detalle}`}`);
+console.log(`${filas.length - malas.length}/${filas.length} en verde`);
+process.exit(malas.length ? 1 : 0);
