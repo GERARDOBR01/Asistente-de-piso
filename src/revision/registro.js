@@ -113,7 +113,7 @@ export function resumenCambios(filas) {
 /**
  * Los datos de una revisión para guardar (sin la foto ni la miniatura).
  * `antes`: la revisión de la que esta es «Volver a revisar».
- * @param {{zonas: any[], origen: any, area: string, via: string, tomada: Date|null, revisado: string[], tam: {w:number,h:number}, antes?: {id:string, zonas:any[]}|null}} r
+ * @param {{zonas: any[], origen: any, area: string, via: string, tomada: Date|null, revisado: string[], tam: {w:number,h:number}, antes?: {id:string, zonas:any[]}|null, notas?: any[]}} r
  */
 export function registroDe(r) {
   const zonas = r.zonas.map(z => aDatos({
@@ -131,6 +131,7 @@ export function registroDe(r) {
     revisado: r.revisado.filter(x => typeof x === 'string'),
     tam: { w: r.tam.w, h: r.tam.h },
     antes: r.antes ? r.antes.id : null,
+    notas: aDatos(r.notas || []),
     cambios: r.antes ? resumenCambios(comparar(r.antes.zonas, zonas)) : null,
   };
 }

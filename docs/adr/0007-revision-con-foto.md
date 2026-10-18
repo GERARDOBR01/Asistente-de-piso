@@ -740,6 +740,25 @@ Una ronda es un área en un día: se deriva del historial, sin guardar nada apar
 `ronda`, `rondas`, `vigentes` y `porcentaje` son puras (`registro.js`, con pruebas); la
 página la dibuja `rondas.js`.
 
+## Sello de evidencia y anotar a mano (18-oct)
+
+- **Sello en la foto.** Al compartir, abajo a la izquierda de la foto (no en el panel) va:
+  cuándo se tomó (la hora de la app; de la galería, la fecha de la cámara; si no hay, «sin
+  fecha de cámara · compartida …»), el área, el origen y los primeros 12 caracteres de la
+  huella. Si alguien recorta la foto del reporte, el sello sigue ahí. `textoSello` y
+  `fechaDeToma` (`notas.js`) son puras.
+- **Anotar.** «✎ Anotar la foto», junto a «Compartir», pone la foto en modo anotar. La barra de
+  herramientas toma el lugar de las zonas:
+  - **Flecha:** se arrastra de lo que se señala a la punta.
+  - **Trazo:** a mano, para encerrar algo. Se simplifica (un punto cada 0.6 % del lado).
+  - **Nota:** se toca donde va y se escribe, hasta 60 caracteres.
+  - **Deshacer** y **Listo**.
+
+  Va en rojo con halo blanco, para que se lea sobre ropa clara y oscura. Las anotaciones
+  están en fracción de la foto, viajan en el reporte (salen del lienzo) y en el texto
+  («Anotado a mano: 3 marcas («Falta la talla M»)»). Se guardan con la revisión y vuelven al
+  reabrirla. «Volver a revisar» no las copia: son de esa foto.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

@@ -13,6 +13,8 @@ import { medirZona, pintarZonas } from './zonas.js';
 import { nuevaRevision } from './ui.js';
 import { guardarPronto, pintarArea } from './historial.js';
 import { comparar, resumenCambios, cuando, cuandoEnFrase } from './registro.js';
+import { textoSello } from './notas.js';
+import { empezarAnotar } from './anotar.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {import('./zonas.js').Zona} Zona */
@@ -232,8 +234,9 @@ export function pintarResultados(subir = false) {
     ${st.origen ? tarjetaOrigen(origenVisto(), undefined, true) : ''}
     <div class="rv-lista"><h3>Lo que no se ve en una foto</h3><p>Se revisa a mano; la app no lo adivina.</p>
       ${listaManual().map(m => `<label><input type="checkbox" data-item="${esc(m)}"${revisadoAMano().has(m) ? ' checked' : ''}> ${esc(m)}</label>`).join('')}</div>
+    <button class="rv-otra" id="rv-anotar-abrir" type="button">✎ Anotar la foto${st.notas.length ? ` · ${st.notas.length} ${st.notas.length === 1 ? 'anotación' : 'anotaciones'}` : ''}</button>
     <button class="rv-compartir" id="rv-compartir" type="button">${ICONO_COMPARTIR}Compartir la revisión</button>
-    <p class="rv-nota">Se comparte la foto marcada y el resumen con la huella de la foto original.</p>
+    <p class="rv-nota">Se comparte la foto marcada, con un sello de fecha, área, origen y huella, y el resumen.</p>
     <button class="rv-otra" id="rv-otra" type="button">↺ Revisar otra foto</button>`;
   /* El veredicto se siente: un toque corto si cumple, dos si algo está mal. */
   if (subir) vibrar(general === 'GRAVE' || general === 'OBSERVACIÓN' ? [14, 70, 14] : 12);
@@ -252,6 +255,7 @@ export function pintarResultados(subir = false) {
     if (r && r.bottom > innerHeight - 90) v.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }, 950);
   $('rv-compartir').onclick = compartir;
+  $('rv-anotar-abrir').onclick = empezarAnotar;
   /* Vestidos llevan su propio mercadeo (presentación de básicos): la persona lo dice y la zona se vuelve a medir. */
   caja.querySelectorAll('[data-vestidos]').forEach((/** @type {HTMLElement} */ b) => b.addEventListener('click', () => {
     const z = st.zonas[Number(b.dataset.vestidos)];
@@ -270,6 +274,32 @@ export function pintarResultados(subir = false) {
   conectarSynthid();
   /* Cada resultado nuevo (o cambiado) queda en el historial. */
   guardarPronto(); pintarArea();
+}
+
+/** Las líneas del sello de la revisión en pantalla. */
+export function selloActual() {
+  const o = origenVisto();
+  return textoSello({ origen: o, area: st.area, origenTexto: o ? nivelOrigen(o) : 'SIN DATOS', ahora: new Date() });
+}
+
+/**
+ * El sello de evidencia, quemado abajo a la izquierda de la foto: si alguien
+ * la recorta del reporte, la fecha, el área, el origen y la huella siguen ahí.
+ * @param {CanvasRenderingContext2D} ctx @param {number} ancho @param {number} alto
+ */
+function selloEnFoto(ctx, ancho, alto) {
+  const [l1, l2] = selloActual(), M = 24;
+  ctx.save();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '600 25px Geist, system-ui, sans-serif';
+  const w1 = ctx.measureText(l1).width;
+  ctx.font = '500 21px "Geist Mono", ui-monospace, monospace';
+  const w2 = ctx.measureText(l2).width;
+  const w = Math.min(ancho - 2 * M, Math.max(w1, w2) + 36), h = 86, y = alto - h - M;
+  redondo(ctx, M, y, w, h, 18); ctx.fillStyle = 'rgba(10,11,13,.66)'; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '600 25px Geist, system-ui, sans-serif'; ctx.fillText(l1, M + 18, y + 14, w - 36);
+  ctx.fillStyle = '#C9C6CE'; ctx.font = '500 21px "Geist Mono", ui-monospace, monospace'; ctx.fillText(l2, M + 18, y + 50, w - 36);
+  ctx.restore();
 }
 
 /* ── Antes y después («Volver a revisar») ──────────────────────────────── */
@@ -305,6 +335,8 @@ function resumenTexto() {
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
   if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
   if (o?.evidencia?.huella) l.push(`Huella SHA-256 de la foto original: ${o.evidencia.huella}…`);
+  const notas = st.notas.filter(n => n.tipo === 'nota').map(n => `«${/** @type {{texto:string}} */ (n).texto}»`);
+  if (st.notas.length) l.push(`Anotado a mano en la foto: ${st.notas.length} ${st.notas.length === 1 ? 'marca' : 'marcas'}${notas.length ? ` (${notas.join(', ')})` : ''}.`);
   const marcados = listaManual().filter(m => revisadoAMano().has(m));
   if (marcados.length) l.push(`Revisado a mano: ${marcados.join(', ')}.`);
   l.push(lista.some(x => conIA(x.r))
@@ -426,6 +458,7 @@ export function reporteParaCompartir() {
   c.width = ANCHO; c.height = altoFoto + altoPanel;
   const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   ctx.drawImage(lz, 0, 0, ANCHO, altoFoto);
+  selloEnFoto(ctx, ANCHO, altoFoto);
   ctx.fillStyle = '#111217'; ctx.fillRect(0, altoFoto, ANCHO, altoPanel);
   ctx.fillStyle = COLOR_NIVEL[/** @type {'CUMPLE'} */ (lista.length ? peor(lista.map(x => x.r.nivel)) : 'NO_CALIFICA')];
   ctx.fillRect(0, altoFoto, ANCHO, 4 * u);

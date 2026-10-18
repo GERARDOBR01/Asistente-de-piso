@@ -18,6 +18,7 @@ import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
 import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
+import { textoSello, fechaDeToma, normalizarNota, esFlecha, simplificar, puntaFlecha, LARGO_NOTA } from '../src/revision/notas.js';
 import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, cuandoEnFrase, TOPE_HISTORIAL, comparar, resumenCambios, vigentes, ronda, rondas, porcentaje, PUNTOS } from '../src/revision/registro.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
@@ -29,7 +30,7 @@ const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigato
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
 /* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
-const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js', 'rondas.js'];
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js', 'rondas.js', 'anotar.js'];
 const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
 
 test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
@@ -914,6 +915,38 @@ test('antes y después: cada básico contra el de antes, zona por zona', () => {
   /* El registro guarda de cuál viene y el resumen. */
   const reg = registroDe({ zonas: ahora.slice(0, 1), origen: null, area: '', via: 'app', tomada: null, revisado: [], tam: { w: 1, h: 1 }, antes: { id: 'rv-1', zonas: antes.slice(0, 1) } });
   assert.equal(reg.antes, 'rv-1'); assert.equal(reg.cambios?.todo, true);
+});
+
+test('sello: cuándo, dónde, el origen y la huella, quemados en la foto', () => {
+  const ahora = new Date(2026, 9, 18, 13, 5);
+  /* De la app: la hora en que se tomó. */
+  const app = { nivel: 'CUMPLE', evidencia: { via: 'app', tomada: new Date(2026, 9, 18, 12, 40).toISOString(), huella: '0123456789abcdef' } };
+  assert.deepEqual(textoSello({ origen: app, area: 'Caballeros', origenTexto: 'CUMPLE', ahora }), ['18/10/2026 12:40 · Caballeros', 'origen: CUMPLE · huella 0123456789ab']);
+  /* De la galería con fecha de cámara. */
+  const gal = { evidencia: { via: 'galeria', fecha_original: '2026:10:17 09:03:00', huella: 'ffff' } };
+  assert.equal(fechaDeToma(gal)?.getDate(), 17);
+  assert.equal(textoSello({ origen: gal, area: '', origenTexto: 'OBSERVACIÓN', ahora })[0], '17/10/2026 09:03');
+  /* Sin datos: lo dice, con la hora en que se compartió. */
+  assert.deepEqual(textoSello({ origen: { evidencia: {} }, area: 'Damas', origenTexto: 'SIN DATOS', ahora }), ['sin fecha de cámara · compartida 18/10/2026 13:05 · Damas', 'origen: SIN DATOS']);
+  assert.equal(fechaDeToma(null), null);
+});
+
+test('anotar: notas, flechas y trazos', () => {
+  assert.equal(normalizarNota('  falta   precio \n'), 'falta precio');
+  assert.equal(normalizarNota('x'.repeat(99)).length, LARGO_NOTA);
+  assert.equal(esFlecha({ x: 0.1, y: 0.1 }, { x: 0.11, y: 0.1 }), false);
+  assert.equal(esFlecha({ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.2 }), true);
+  /* El trazo pierde lo que no se ve y se queda con sus puntas. */
+  const p = Array.from({ length: 101 }, (_, i) => ({ x: i / 1000, y: 0.5 }));
+  const s = simplificar(p);
+  assert.ok(s.length < 20 && s[0] === p[0] && s[s.length - 1] === p[100]);
+  fc.assert(fc.property(fc.array(fc.record({ x: fc.double({ min: 0, max: 1, noNaN: true }), y: fc.double({ min: 0, max: 1, noNaN: true }) }), { minLength: 2, maxLength: 60 }), q => {
+    const r = simplificar(q);
+    return r.length >= 2 && r.length <= q.length && r[0] === q[0] && r[r.length - 1] === q[q.length - 1];
+  }));
+  /* La punta: dos rayas del mismo largo, simétricas respecto a la flecha. */
+  const [i, d] = puntaFlecha({ x: 0, y: 0 }, { x: 100, y: 0 }, 20);
+  assert.ok(Math.abs(Math.hypot(i.x - 100, i.y) - 20) < 1e-9 && Math.abs(i.y + d.y) < 1e-9 && i.x < 100);
 });
 
 test('ronda: el índice de exhibición de un área en un día', () => {

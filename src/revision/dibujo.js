@@ -9,6 +9,7 @@ import { peor } from './veredicto.js';
 import { NOMBRE_GRUPO } from './color.js';
 import { REGLA_TRIANGULO } from './triangulo.js';
 import { NOMBRE_TIPO, COLOR_NIVEL, $, st, ease } from './comun.js';
+import { puntaFlecha } from './notas.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {import('./comun.js').PuntoFocal} PuntoFocal */
@@ -86,6 +87,7 @@ export function dibujar(p) {
     if (varias) dibujarMarcoZona(ctx, z, i, u);
   });
   if (za) dibujarAsas(ctx, za.marco, u);
+  dibujarNotas(ctx, u);
   if (st.trazo) {
     const t = st.trazo;
     ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#fff';
@@ -159,6 +161,52 @@ function dibujarMarcoZona(ctx, z, i, u) {
   const ancho = ctx.measureText(txt).width + 16 * u;
   const y = m.y * H > 26 * u ? m.y * H - 14 * u : m.y * H + 14 * u;
   pildora(ctx, txt, m.x * W + ancho / 2, y, n ? color : '#16171B', u, n === 'OBSERVACIÓN' || n === 'CUMPLE' || n === 'NO_CALIFICA' ? '#16171B' : '#fff');
+}
+
+const ROJO_NOTA = '#FF3347';
+
+/**
+ * Lo anotado a mano: flechas y trazos rojos con un halo blanco (se leen sobre
+ * ropa oscura y clara) y notas en una pastilla blanca con su punto rojo.
+ * @param {CanvasRenderingContext2D} ctx @param {number} u
+ */
+function dibujarNotas(ctx, u) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const px = (/** @type {{x:number,y:number}} */ p) => ({ x: p.x * W, y: p.y * H });
+  const todas = st.notaViva ? [...st.notas, st.notaViva] : st.notas;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  /** @param {(c: CanvasRenderingContext2D) => void} ruta */
+  const linea = ruta => {
+    for (const [ancho, color] of [[7.5 * u, 'rgba(255,255,255,.9)'], [4 * u, ROJO_NOTA]]) {
+      ctx.beginPath(); ruta(ctx); ctx.lineWidth = /** @type {number} */ (ancho); ctx.strokeStyle = /** @type {string} */ (color); ctx.stroke();
+    }
+  };
+  for (const n of todas) {
+    if (n.tipo === 'flecha') {
+      const a = px(n.a), b = px(n.b), [i, d] = puntaFlecha(a, b, 16 * u);
+      linea(c => { c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.moveTo(i.x, i.y); c.lineTo(b.x, b.y); c.lineTo(d.x, d.y); });
+    } else if (n.tipo === 'trazo') {
+      linea(c => n.p.forEach((q, k) => { const p = px(q); if (k) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); }));
+    }
+  }
+  for (const n of todas) {
+    if (n.tipo !== 'nota') continue;
+    const a = px(n.a);
+    ctx.font = `600 ${Math.round(13 * u)}px Geist, system-ui, sans-serif`;
+    const w = ctx.measureText(n.texto).width + 20 * u, h = 26 * u;
+    const x = Math.min(W - w - 4 * u, Math.max(4 * u, a.x + 8 * u)), y = Math.max(4 * u, a.y - h - 8 * u);
+    redondo(ctx, x, y, w, h, h / 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 2 * u; ctx.strokeStyle = ROJO_NOTA; ctx.stroke();
+    ctx.fillStyle = '#16171B'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(n.texto, x + 10 * u, y + h / 2);
+    ctx.beginPath(); ctx.arc(a.x, a.y, 5.5 * u, 0, Math.PI * 2); ctx.fillStyle = ROJO_NOTA; ctx.fill();
+    ctx.lineWidth = 2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
+  }
+  if (st.modo === 'anotar' && st.notaPunto) {
+    const a = px(st.notaPunto);
+    ctx.setLineDash([4 * u, 3 * u]); ctx.beginPath(); ctx.arc(a.x, a.y, 11 * u, 0, Math.PI * 2);
+    ctx.lineWidth = 2.5 * u; ctx.strokeStyle = ROJO_NOTA; ctx.stroke(); ctx.setLineDash([]);
+  }
 }
 
 /**

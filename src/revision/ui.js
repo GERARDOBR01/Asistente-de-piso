@@ -16,10 +16,11 @@ import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
 import { pedirSensor, empezarToma, pararToma } from './guia.js';
+import { engancharAnotar } from './anotar.js';
 import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea, ponerMiniActual, pintarArea, rondaElegida, imagenDeRonda } from './historial.js';
 import { girar, animar, dibujar } from './dibujo.js';
 import { medirTodo, medirZona, empezarRevision, empezarConZonas, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
-import { tarjetaOrigen, pintarResultados, reporteParaCompartir, ponerRevisado } from './reporte.js';
+import { tarjetaOrigen, pintarResultados, reporteParaCompartir, ponerRevisado, selloActual } from './reporte.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
 /** @typedef {import('./comun.js').Tipo} Tipo */
@@ -230,7 +231,7 @@ export function nuevaRevision() {
   st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
   st.exacto = false; st.buscando = false;
-  $('rv-ayuda').hidden = true;
+  $('rv-ayuda').hidden = true; $('rv-anotar').hidden = true;
   $('rv-res').innerHTML = '';
   proporcion(4, 3); mostrar('vacia'); pintarZonas();
   $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
@@ -444,6 +445,7 @@ async function reabrir(reg, previa) {
   ponerArea(reg.area);
   ponerRevisado(reg.huella, reg.revisado || []);
   st.zonas = reg.zonas.map((/** @type {any} */ z) => ({ ...z, puntos: z.puntos || [], res: z.res ?? null }));
+  st.notas = reg.notas || [];
   st.activa = 0; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   $('rv-ayuda').hidden = true;
   const lz = $('rv-lienzo');
@@ -610,6 +612,7 @@ function iniciar() {
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
   engancharLienzo();
   engancharAjuste();
+  engancharAnotar();
   iniciarHistorial(reabrir, volverARevisar);
   $('rv-repetir-x').addEventListener('click', () => { st.repetir = null; pintarRepetir(); cerrarCamara(); if (!st.foto) mostrar('vacia'); });
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);
@@ -654,5 +657,5 @@ function iniciar() {
 iniciar();
 
 /* Para eval/revision.mjs y las capturas: el mismo código que corre en el teléfono. */
-/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st, reporteParaCompartir, rondaElegida, imagenDeRonda,
+/** @type {any} */ (globalThis).__revision = { analizarArchivo, MARCOS, peor, puntosDeCajas, st, reporteParaCompartir, rondaElegida, imagenDeRonda, selloActual,
   sugerirPuntos: async (/** @type {any} */ a, /** @type {any} */ m, /** @type {any} */ p, /** @type {any} */ o) => (await import('./detector.js')).sugerirPuntos(a, m, p, o) };

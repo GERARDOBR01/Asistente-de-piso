@@ -352,6 +352,55 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await espera(p, 800);
     await foto('ronda', true);
 
+    /* 12. Anotar y el sello: flecha, trazo y nota; viajan en el reporte y se guardan con la revisión. */
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await tipo('tringla');
+    await subirDemo(p, 'tringla');
+    await p.waitForFunction(() => document.querySelectorAll('#rv-res .rv-ver').length > 0, null, { timeout: 30000 });
+    await espera(p, 1200);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-anotar-abrir')).click());
+    await espera(p, 800);
+    const barra = await p.evaluate(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-anotar'))).hidden && /** @type {HTMLElement} */ (document.getElementById('rv-zonas')).hidden);
+    const herr = (/** @type {string} */ h) => p.evaluate((/** @type {string} */ h) => /** @type {HTMLElement} */ (document.querySelector(`#rv-anotar [data-herr="${h}"]`)).click(), h);
+    const nota = async (/** @type {string} */ t) => {
+      await herr('nota');
+      const q = await enLienzo(p, 0.5, 0.3); await p.mouse.click(q.x, q.y); await espera(p, 200);
+      await p.fill('#rv-nota-txt', t);
+      await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nota-ok')).click());
+    };
+    await arrastrar([0.2, 0.8, 0.4, 0.55]);
+    await herr('trazo');
+    await arrastrar([0.6, 0.3, 0.8, 0.5]);
+    await nota('Falta la talla M');
+    const tipos = await p.evaluate(() => /** @type {any} */ (window).__revision.st.notas.map((/** @type {any} */ n) => n.tipo).join());
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-anotar-deshacer')).click());
+    const trasDeshacer = await p.evaluate(() => /** @type {any} */ (window).__revision.st.notas.length);
+    await nota('Falta la talla M');
+    await foto('anotar');
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-anotar-listo')).click());
+    await espera(p, 600);
+    const boton = await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-anotar-abrir')).textContent);
+    fila('anotar: flecha, trazo y nota (con deshacer); la barra toma el lugar de las zonas', barra && tipos === 'flecha,trazo,nota' && trasDeshacer === 2 && /3 anotaciones/.test(boton || ''), `${barra} · ${tipos} · ${trasDeshacer} · ${boton}`);
+    const estampa = await p.evaluate(() => {
+      const R = /** @type {any} */ (window).__revision, lz = /** @type {HTMLCanvasElement} */ (document.getElementById('rv-lienzo'));
+      const c = R.reporteParaCompartir(), alto = Math.round(lz.height * 1080 / lz.width);
+      const px = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).getImageData(30, alto - 24 - 6, 1, 1).data;
+      return { lineas: R.selloActual(), oscuro: (px[0] + px[1] + px[2]) / 3 < 90 };
+    });
+    fila('sello: fecha, área, origen y huella quemados abajo a la izquierda de la foto', /^sin fecha de cámara · compartida .+ · Caballeros · mesa 1$/.test(estampa.lineas[0]) && /^origen: SIN DATOS · huella [0-9a-f]{12}$/.test(estampa.lineas[1]) && estampa.oscuro, JSON.stringify(estampa));
+    if (capturas) {
+      const png = await p.evaluate(() => /** @type {any} */ (window).__revision.reporteParaCompartir().toDataURL('image/png'));
+      fs.writeFileSync(path.join(capturas, `${vista.nombre}-reporte-anotado.png`), Buffer.from(png.split(',')[1], 'base64'));
+    }
+    await espera(p, 1800);
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision && /** @type {any} */ (window).tocarPestana, null, { timeout: 60000 });
+    await p.evaluate(() => /** @type {any} */ (window).tocarPestana('revisar'));
+    await p.waitForFunction(() => document.querySelectorAll('#rv-hist-lista [data-abrir]').length > 0, null, { timeout: 15000 });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-abrir]')).click());
+    await espera(p, 1200);
+    fila('anotar: las anotaciones se guardan con la revisión y vuelven al reabrir', await p.evaluate(() => /** @type {any} */ (window).__revision.st.notas.map((/** @type {any} */ n) => n.texto || n.tipo).join()) === 'flecha,trazo,Falta la talla M');
+
     /* 8. En el celular nada se sale de lado. */
     if (vista.tactil) {
       const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
