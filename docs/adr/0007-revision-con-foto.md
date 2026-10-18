@@ -587,6 +587,52 @@ mercadeo por temporada.
     las dos mezclillas se leen marino.
   - ¿Una tringla de blusas rojas y negras alternadas por colección es GRAVE?
 
+## Focal: «Sugerir» solo dentro de la exhibición (17-oct)
+
+Gerardo: «la triangulación es donde más funciona, pero a veces agrega la sugerencia en puntos
+fuera de la exhibición». En 27 focales reales, sin zona dibujada, los puntos de más eran:
+- la corbata, la mochila puesta o la bolsa en la mano de un maniquí;
+- la base de un maniquí, que el detector llama «suitcase»;
+- un maniquí o un cliente cortado por la orilla de la foto;
+- un póster con una persona;
+- bolsas o ropa doblada de otro mueble.
+
+`enLaExhibicion` (`sugerir.js`, pura y con pruebas) quita, después de elegir las cajas:
+- **Maniquíes:** el guía es el más alto de los que no tocan la orilla. Se quitan los cortados
+  por la orilla y más chicos que él, y los que «flotan» (pies a más de 35 % de su alto por
+  arriba de los suyos).
+- **Objetos:**
+  - lo que un maniquí lleva puesto (70 % dentro de su caja, arriba de los pies);
+  - su base (empieza en el último 20 % del maniquí, debajo de él);
+  - lo cortado por la orilla;
+  - lo que queda a más de 1.6 anchos de maniquí del grupo. Lo de la exhibición quedó a
+    0.2–1.5 y el muro de bolsas de al lado, a 1.9;
+  - lo que queda en el 20 % de arriba (decoración del muro).
+- Sin maniquíes no hay grupo contra el cual medir y los objetos se quedan.
+- **Con zona dibujada,** un punto que cae fuera del recuadro (en el margen con que mira el
+  detector) ya no se sugiere.
+- **La barra de ayuda dice qué no contó y por qué:** «No conté 2: la base de un maniquí, lo
+  que lleva puesto un maniquí».
+- Cambia una decisión del 11-oct: la bolsa que lleva un maniquí ya no es otro elemento. Está
+  donde el maniquí y sumaría una «altura» de más a alturas y niveles.
+
+**Medido** (cimas marcadas: 5 de tienda, 10 del lote de confirmación —con una cima corrida
+corregida— y 12 focales nuevos con su zona y sus maniquíes; fuera del repo,
+`eval-revision/sugerir`):
+
+| | Antes | Ahora |
+|---|---|---|
+| Desarrollo, sin zona: recall | 27/50 | 27/50 |
+| Desarrollo, sin zona: precisión | 27/38 (71 %) | **27/32 (84 %)** |
+| Desarrollo, con zona: precisión | 27/36 | 27/33 |
+| Nuevos, sin zona: maniquíes encontrados | 24/27 | 24/27 |
+| Nuevos: puntos fuera de la exhibición | 4 | 2 |
+| Nuevos: puntos sobre el cuerpo de un maniquí | 1 | 0 |
+| `--sugerir` de tienda (con zona) | 11/17 · 11/12 | 11/17 · 11/12 |
+
+Quedan dos: un póster de una persona del mismo tamaño que los maniquíes, y una foto donde el
+detector no vio al maniquí (sin maniquíes no hay grupo y los objetos se quedan).
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

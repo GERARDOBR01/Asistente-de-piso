@@ -546,16 +546,49 @@ test('silueta: un toque en el hueco del fondo (entre los brazos) agarra el objet
   assert.equal(r.cima.y, 0.3);
 });
 
-test('sugerir: duplicados solo dentro de la misma categoría; la bolsa sobre el maniquí se queda', () => {
+test('sugerir: duplicados solo dentro de la misma categoría; lo que lleva puesto el maniquí no es otro elemento', () => {
   const rec = { w: 1000, h: 1000, cortadoArriba: false };
   const persona = { x: 300, y: 100, w: 200, h: 700, categoria: 'person', score: 0.9 };
   const r = elegirCajas([
     persona,
     { ...persona, x: 310, score: 0.6 },                                         // la misma persona
-    { x: 360, y: 400, w: 80, h: 90, categoria: 'handbag', score: 0.5 },         // la bolsa que lleva
+    { x: 360, y: 400, w: 80, h: 90, categoria: 'handbag', score: 0.5 },         // la bolsa que lleva en la mano
   ], rec);
-  assert.deepEqual(r.map(c => c.categoria).sort(), ['handbag', 'person']);
+  /* La bolsa en la mano está donde el maniquí y sumaría una «altura» que no es de la exhibición. */
+  assert.deepEqual(r.map(c => c.categoria), ['person']);
   assert.ok(iou(persona, { ...persona, x: 310 }) > 0.5);
+});
+
+test('sugerir: solo lo que está en la exhibición (17-oct, puntos fuera que vio Gerardo)', () => {
+  const rec = { w: 1000, h: 1000, cortadoArriba: false };
+  const m1 = { x: 300, y: 150, w: 140, h: 700, categoria: 'person', score: 0.9 };
+  const m2 = { x: 520, y: 120, w: 140, h: 660, categoria: 'person', score: 0.8 };
+  /** @type {{categoria:string, motivo:string}[]} */
+  const fuera = [];
+  const r = elegirCajas([
+    m1, m2,
+    { x: 560, y: 260, w: 50, h: 120, categoria: 'tie', score: 0.5 },            // la corbata de m2
+    { x: 520, y: 700, w: 180, h: 160, categoria: 'suitcase', score: 0.5 },      // la base de m2
+    { x: 960, y: 300, w: 40, h: 500, categoria: 'person', score: 0.6 },         // cortado por la orilla
+    { x: 0, y: 600, w: 120, h: 250, categoria: 'suitcase', score: 0.6 },        // ropa de otra mesa, en la orilla
+    { x: 20, y: 300, w: 80, h: 120, categoria: 'handbag', score: 0.6 },         // muro de bolsas, lejos del grupo
+    { x: 880, y: 20, w: 60, h: 90, categoria: 'potted plant', score: 0.6 },     // planta arriba de todo
+    { x: 760, y: 640, w: 110, h: 100, categoria: 'handbag', score: 0.5 },       // bolsa en su base, junto al grupo
+  ], rec, undefined, fuera);
+  assert.deepEqual(r.map(c => `${c.categoria}@${c.x}`).sort(), ['handbag@760', 'person@300', 'person@520']);
+  /* Y dice por qué no contó cada cosa, para la barra de ayuda. */
+  assert.deepEqual(fuera.map(f => `${f.categoria}:${f.motivo}`).sort(),
+    ['handbag:lejos', 'person:orilla', 'potted plant:arriba', 'suitcase:base', 'suitcase:orilla', 'tie:puesto']);
+});
+
+test('sugerir: sin maniquíes los objetos se quedan (salvo la decoración de arriba)', () => {
+  const rec = { w: 1000, h: 1000, cortadoArriba: false };
+  const r = elegirCajas([
+    { x: 100, y: 500, w: 120, h: 120, categoria: 'handbag', score: 0.6 },
+    { x: 700, y: 520, w: 120, h: 120, categoria: 'handbag', score: 0.6 },
+    { x: 400, y: 30, w: 80, h: 100, categoria: 'potted plant', score: 0.6 },
+  ], rec);
+  assert.deepEqual(r.map(c => c.x).sort((a, b) => a - b), [100, 700]);
 });
 
 test('sugerir: fuera lo que es fondo (llena la zona, sigue al techo, persona chica al fondo) y las bases', () => {
