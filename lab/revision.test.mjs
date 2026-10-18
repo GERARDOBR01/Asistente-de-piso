@@ -342,6 +342,53 @@ test('surtido: oscura → NO_CALIFICA', () => {
   assert.equal(revisarSurtido(anaquel({ brillo: 0.12 })).nivel, 'NO_CALIFICA');
 });
 
+/** Un anaquel lleno en la parte de abajo de una foto de área, con techo liso
+ * arriba partido por lámparas (lo que deja el marco de la guía). */
+function anaquelConTecho(op = {}) {
+  const W = 640, H = 480, techo = 150, a = anaquel({ ...op, w: W, h: H - techo });
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = (y * W + x) * 4;
+    if (y >= techo) { const j = ((y - techo) * W + x) * 4; data[k] = a.data[j]; data[k + 1] = a.data[j + 1]; data[k + 2] = a.data[j + 2]; }
+    else {
+      /* Plafones de lámparas de arriba abajo del techo, con rayas: parten lo liso en pedazos angostos. */
+      const lampara = (x % 130) > 55 && (x % 130) < 80 && y < techo - 12;
+      const v = lampara ? (y % 6 < 3 ? 255 : 150) : 228 - y * 0.05;
+      data[k] = v; data[k + 1] = v - 2; data[k + 2] = v - 6;
+    }
+    data[k + 3] = 255;
+  }
+  return { width: W, height: H, data };
+}
+
+test('surtido: sin zona, el techo de una foto de área no es hueco aunque las lámparas lo partan', () => {
+  const img = anaquelConTecho({ semilla: 3 });
+  const conGuia = revisarSurtido(img);
+  assert.equal(conGuia.nivel, 'CUMPLE', JSON.stringify(conGuia.evidencia));
+  /* El mismo recuadro dibujado a mano dice «esto es el mueble»: ahí lo vacío sí cuenta. */
+  const aMano = revisarSurtido(img, { marco: { x: 0.04 * 640, y: 0.04 * 480, w: 0.92 * 640, h: 0.92 * 480 } });
+  assert.notEqual(aMano.nivel, 'CUMPLE');
+});
+
+test('surtido: con zona, lo que tapa un maniquí no es hueco ni producto', () => {
+  const img = anaquel({ huecos: [[1, 2], [1, 3]], ...SUCIA, semilla: 2 });
+  const marco = { x: 0.04 * img.width, y: 0.04 * img.height, w: 0.92 * img.width, h: 0.92 * img.height };
+  assert.notEqual(revisarSurtido(img, { marco }).nivel, 'CUMPLE', 'sin el maniquí, las casillas se ven vacías');
+  /* Un maniquí parado justo enfrente de esas casillas. */
+  const maniqui = { x: img.width * 0.33, y: img.height * 0.32, w: img.width * 0.35, h: img.height * 0.34 };
+  const r = revisarSurtido(img, { marco, excluir: [maniqui] });
+  assert.equal(r.nivel, 'CUMPLE', JSON.stringify(r.evidencia));
+  assert.ok(Number(r.evidencia.celdas_maniqui) > 0);
+  assert.match(r.motivo, /maniquí/);
+});
+
+test('surtido: sin zona y con maniquí → NO_CALIFICA, pide marcar la mesa', () => {
+  const img = anaquel({ semilla: 4 });
+  const r = revisarSurtido(img, { excluir: [{ x: 10, y: 10, w: 120, h: 400 }] });
+  assert.equal(r.nivel, 'NO_CALIFICA');
+  assert.match(r.motivo, /Zona/);
+});
+
 /* ── Triangulación ─────────────────────────────────────────────────────── */
 const TAM = { width: 640, height: 480 };
 test('triangulación: una sola cima → CUMPLE (al centro o a un lado); plano → GRAVE; cima empatada → OBSERVACIÓN', () => {

@@ -69,22 +69,42 @@ function cuantil(v, q) {
 /**
  * Revisa el surtido de un anaquel o una mesa.
  * @param {Imagen} img foto ya reducida
- * @param {{marco?:{x:number,y:number,w:number,h:number}, cols?:number, filas?:number, fondo?:typeof FONDO_SURTIDO}} [op]
+ * @param {{marco?:{x:number,y:number,w:number,h:number}, guia?:boolean, excluir?:{x:number,y:number,w:number,h:number}[], cols?:number, filas?:number, fondo?:typeof FONDO_SURTIDO}} [op]
+ *   `guia`: el marco es el de la guía, no lo dibujó la persona; arriba de la
+ *   mesa o del mueble hay techo o pared. `excluir`: cajas en píxeles que no son
+ *   ni producto ni hueco (maniquíes); sus celdas no cuentan.
  * @returns {Resultado}
  */
 export function revisarSurtido(img, op = {}) {
   const marco = op.marco || { x: img.width * 0.04, y: img.height * 0.04, w: img.width * 0.92, h: img.height * 0.92 };
+  const guia = op.guia ?? !op.marco;
   const malo = noCalifica(img, marco);
   if (malo) return resultado('surtido', 'NO_CALIFICA', malo.motivo, malo.evidencia, { marco });
   const cols = op.cols || 16, filas = op.filas || 16;
   const cs = celdas(img, marco, cols, filas);
+  /* Un maniquí junto a la mesa no es producto ni hueco: sus celdas se quitan
+     de la cuenta, y lo vacío a su lado se juzga solo si es parte del mueble. */
+  const tapada = (/** @type {{x:number,y:number,w:number,h:number}} */ c) => (op.excluir || []).some(b => {
+    const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+    return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
+  });
+  const excluidas = new Set(cs.filter(tapada).map(c => c.f * cols + c.c));
   /* Umbral de bordes relativo a la propia foto (lo lleno de esta foto) con
      un piso absoluto: así sirve igual con poca o mucha luz. */
-  const lleno = cuantil(cs.map(c => c.borde), 0.8);
+  const cuentan = cs.filter(c => !excluidas.has(c.f * cols + c.c));
+  /* Sin zona dibujada y con un maniquí en la foto, es una foto de área: no se
+     sabe qué parte es la mesa, y lo de junto (una base, una columna, el piso)
+     saldría como hueco. No se adivina: se pide la zona. */
+  if (guia && excluidas.size)
+    return resultado('surtido', 'NO_CALIFICA', 'En la foto hay maniquíes: marca solo la mesa o el mueble con «＋ Zona» y se revisa ese recuadro.', { celdas: cs.length, celdas_maniqui: excluidas.size }, { marco });
+  if (cuentan.length < cs.length * 0.25)
+    return resultado('surtido', 'NO_CALIFICA', 'El recuadro es casi todo maniquí: marca solo la mesa o el mueble.', { celdas: cs.length, celdas_maniqui: excluidas.size }, { marco });
+  const lleno = cuantil(cuentan.map(c => c.borde), 0.8);
   const umbral = Math.max(2.2, lleno * 0.22);
-  const lisas = cs.filter(c => c.borde < umbral);
+  const lisas = cuentan.filter(c => c.borde < umbral);
   /** @type {Record<string, string|number|boolean|null>} */
-  const ev = { celdas: cs.length, umbral_bordes: redondear(umbral, 2) };
+  const ev = { celdas: cuentan.length, umbral_bordes: redondear(umbral, 2) };
+  if (excluidas.size) ev.celdas_maniqui = excluidas.size;
   if (!lisas.length) {
     ev.vacio_pct = 0;
     return resultado('surtido', 'CUMPLE', 'Sin huecos: todo el mueble tiene producto a la vista.', ev, { marco, celdas: [], huecos: [] });
@@ -138,16 +158,24 @@ export function revisarSurtido(img, op = {}) {
      (techo o pared): una casilla vacía del entrepaño de arriba es angosta. */
   const filasDe = (/** @type {number[]} */ h) => new Set(h.map(i => Math.floor(i / cols))).size;
   const columnasDe = (/** @type {number[]} */ h) => new Set(h.map(i => i % cols)).size;
+  /* Con el marco de la guía en una foto de área, arriba de la mesa queda techo
+     o pared. Las lámparas lo parten en pedazos angostos, así que se mira el
+     borde de arriba entero: si lo vacío que lo toca, sumando todos los
+     pedazos, cubre al menos la mitad del ancho, es techo. Una casilla vacía
+     del entrepaño de arriba de un mueble que llena el cuadro no llega a tanto. */
+  const arriba = new Set(huecos.filter(h => h.some(i => i < cols)).flatMap(h => h.map(i => i % cols)));
+  const techo = guia && arriba.size >= cols / 2;
   const enBorde = (/** @type {number[]} */ h) =>
     h.some(i => i >= cs.length - cols) ||
+    (techo && h.some(i => i < cols)) ||
     (h.some(i => i % cols === 0 || i % cols === cols - 1) && filasDe(h) >= filas * 0.4) ||
     (h.some(i => i < cols) && columnasDe(h) >= cols / 2);
   const fuera = huecos.filter(h => enBorde(h) || columnasDe(h) < 2);
   for (const h of fuera) for (const i of h) reales.delete(i);
   huecos.splice(0, huecos.length, ...huecos.filter(h => !enBorde(h) && columnasDe(h) >= 2));
   huecos.sort((a, b) => b.length - a.length);
-  const pct = (reales.size / cs.length) * 100;
-  const mayor = huecos.length ? (huecos[0].length / cs.length) * 100 : 0;
+  const pct = (reales.size / cuentan.length) * 100;
+  const mayor = huecos.length ? (huecos[0].length / cuentan.length) * 100 : 0;
   ev.vacio_pct = redondear(pct);
   ev.huecos = huecos.length;
   ev.hueco_mayor_pct = redondear(mayor);
@@ -156,9 +184,10 @@ export function revisarSurtido(img, op = {}) {
     huecos: huecos.map(h => h.map(i => { const c = cs[i]; return { x: c.x, y: c.y, w: c.w, h: c.h }; })),
   };
   const U = UMBRAL_SURTIDO;
+  const sinManiqui = excluidas.size ? ' No cuenta lo que tapa el maniquí.' : '';
   if (pct >= U.grave || mayor >= U.huecoGrande)
-    return resultado('surtido', 'GRAVE', `${redondear(pct, 0)} % del mueble está vacío${huecos.length ? `; el hueco mayor ocupa ${redondear(mayor, 0)} %` : ''}. Lo que no se ve no se vende.`, ev, marcas);
+    return resultado('surtido', 'GRAVE', `${redondear(pct, 0)} % del mueble está vacío${huecos.length ? `; el hueco mayor ocupa ${redondear(mayor, 0)} %` : ''}. Lo que no se ve no se vende.${sinManiqui}`, ev, marcas);
   if (pct >= U.observacion)
-    return resultado('surtido', 'OBSERVACIÓN', `${redondear(pct, 0)} % vacío en ${huecos.length} ${huecos.length === 1 ? 'hueco' : 'huecos'}: conviene resurtir.`, ev, marcas);
-  return resultado('surtido', 'CUMPLE', huecos.length ? `Surtido: solo ${redondear(pct, 0)} % vacío.` : 'Sin huecos: todo el mueble tiene producto a la vista.', ev, marcas);
+    return resultado('surtido', 'OBSERVACIÓN', `${redondear(pct, 0)} % vacío en ${huecos.length} ${huecos.length === 1 ? 'hueco' : 'huecos'}: conviene resurtir.${sinManiqui}`, ev, marcas);
+  return resultado('surtido', 'CUMPLE', (huecos.length ? `Surtido: solo ${redondear(pct, 0)} % vacío.` : 'Sin huecos: todo el mueble tiene producto a la vista.') + sinManiqui, ev, marcas);
 }
