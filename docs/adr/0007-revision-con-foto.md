@@ -633,11 +633,54 @@ corregida— y 12 focales nuevos con su zona y sus maniquíes; fuera del repo,
 Quedan dos: un póster de una persona del mismo tamaño que los maniquíes, y una foto donde el
 detector no vio al maniquí (sin maniquíes no hay grupo y los objetos se quedan).
 
+## Zonas: ajustar sin volver a dibujar (18-oct)
+
+Antes, un recuadro mal puesto se quitaba con la × y se dibujaba otra vez, y una zona marcada
+con el tipo equivocado también. Ahora «✎ Ajustar», junto a «＋ Zona», entra a un modo:
+- arrastrar dentro de la zona activa la mueve; arrastrar una esquina cambia su tamaño, con la
+  esquina opuesta quieta. Nunca se sale de la foto ni baja de 6 % por lado (lo mismo que al
+  dibujarla), ni se voltea;
+- al soltar se vuelve a medir. Deja de ser la zona de la guía y los maniquíes del surtido se
+  buscan otra vez dentro del recuadro nuevo;
+- los botones de arriba (Tringla, Anaquel o mesa, Focal) cambian qué es la zona, igual que
+  al dibujar eligen qué se dibuja. Un focal sin puntos los pide al terminar;
+- tocar otra zona la elige (la más chica que contiene el toque);
+- «Listo» sale. Es un modo, y no un gesto siempre activo, porque la zona suele cubrir casi
+  toda la foto: deslizar sobre la foto para bajar la página la movería sin querer.
+
+La geometría vive en `marco.js` (pura, con pruebas de propiedades). `eval/revisar-pantalla.mjs`
+la prueba en la pantalla: esquina, mover, cambiar de tringla a mesa y salir.
+
+## Captura guiada en vivo (18-oct)
+
+Una foto oscura o movida se descubría después de tomarla, con un NO_CALIFICA. Ahora, con la
+cámara abierta, `guia.js` mide un cuadro del video cada ~450 ms y lo dice sobre el video:
+- **Luz y nitidez** con los umbrales de `noCalifica` (`CALIDAD`), por el mismo camino que la
+  foto (lienzo de ≤ 1600 px y luego 640 px), dentro de la guía del tipo elegido. `noCalifica`
+  da solo el primer problema; `revisarToma` (`toma.js`, pura) da los dos a la vez. Una prueba
+  de propiedades pide que digan lo mismo.
+- **Nivel** con la gravedad del acelerómetro (`devicemotion`): «Derecho» hasta 2°, «Casi
+  derecho» hasta 6°, «Ladeado N°» arriba de eso, y «Ponlo de frente» si mira más de 20°
+  hacia arriba o abajo (deforma el mueble). Una línea del horizonte gira en la guía y se
+  alinea con las marcas de la orilla cuando el teléfono está derecho. Android e iOS dan la
+  gravedad con signos opuestos: el ángulo se pliega a ±90°. iOS pide permiso al abrir la
+  cámara; sin sensor o sin permiso, no hay nivel y lo demás sigue.
+- El disparo se pinta de verde cuando todo está bien. **Avisa, no bloquea:** se puede tomar
+  la foto igual, y la revisión sigue diciendo NO_CALIFICA si no da.
+
+La prueba de pantalla abre la cámara falsa de Chromium y simula el sensor (8° → «Ladeado 8°»,
+0° → «Derecho»). Lo que falta medir en el A54: que «Nítida» en el video y la nitidez de la
+foto tomada coincidan (la foto viene de `takePhoto` a resolución completa) y el signo del
+nivel con el teléfono de lado.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan
   sobre `{width,height,data}` como `ImageData`, así que corren igual en Node y en el navegador, y
   las pruebas no necesitan navegador.
-- La pantalla (`src/revision/ui.js`) es la única que toca el DOM y la cámara, junto con
-  `detector.js`, que solo carga MediaPipe cuando alguien lo pide.
+- La pantalla (`src/revision/{ui,comun,zonas,dibujo,reporte}.js`) es la única que toca el DOM y
+  la cámara, junto con `detector.js`, que solo carga MediaPipe cuando alguien lo pide.
+  `ui.js` (1,500 líneas) se partió el 18-oct sin cambiar comportamiento: la escena y el focal
+  en `ui.js`, el estado en `comun.js`, las zonas, el dibujo sobre la foto y el reporte aparte.
+  `eval/revisar-pantalla.mjs` recorre la pantalla en el CI.
 - El motor del manual no se toca: el golden master tiene que salir idéntico.

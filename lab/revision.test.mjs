@@ -16,6 +16,8 @@ import { revisarColor, clasificar, lab, enOrden, REGLA_COLOR, balanceBlancos, BR
 import { revisarSurtido } from '../src/revision/surtido.js';
 import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '../src/revision/triangulo.js';
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
+import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
+import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,10 +27,21 @@ const SUCIA = { ruido: 8, desenfoque: 1, sombra: 0.35 };
 const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigator|indexedDB|alert|confirm)\b/;
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
-test('frontera: las piezas de la revisión no usan APIs del navegador (solo ui.js y los cargadores de modelos)', () => {
+/* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js'];
+const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
+
+test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
   const dir = path.join(RAIZ, 'src', 'revision');
-  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['ui.js', 'detector.js', 'silueta.js', 'c2pa.js'].includes(f))
+  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !PUERTAS.includes(f))
     .filter(f => DEL_NAVEGADOR.test(sinComentarios(fs.readFileSync(path.join(dir, f), 'utf8'))));
+  assert.deepEqual(malos, []);
+});
+
+test('frontera: las piezas puras no importan a la pantalla', () => {
+  const dir = path.join(RAIZ, 'src', 'revision');
+  const malos = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !PUERTAS.includes(f))
+    .filter(f => PANTALLA.some(p => sinComentarios(fs.readFileSync(path.join(dir, f), 'utf8')).includes(`'./${p}'`)));
   assert.deepEqual(malos, []);
 });
 
@@ -691,4 +704,125 @@ test('SynthID: hecha con IA → GRAVE; partes con IA → OBSERVACIÓN; sin marca
   /* Donde no se ofrece, anotar no cambia nada. */
   const app = await origen(JPEG_MINIMO, 'app');
   assert.equal(conSynthid(app, 'generada'), app);
+});
+
+/* ── Ajustar una zona con el dedo (18-oct) ────────────────────────────── */
+
+const marcoValido = fc.record({ x: fc.double({ min: 0, max: 0.9, noNaN: true }), y: fc.double({ min: 0, max: 0.9, noNaN: true }), w: fc.double({ min: 0.06, max: 1, noNaN: true }), h: fc.double({ min: 0.06, max: 1, noNaN: true }) })
+  .map(m => ({ ...m, w: Math.min(m.w, 1 - m.x), h: Math.min(m.h, 1 - m.y) }))
+  .filter(m => m.w >= LADO_MINIMO && m.h >= LADO_MINIMO);
+const desplazamiento = fc.double({ min: -1.5, max: 1.5, noNaN: true });
+const esquina = fc.constantFrom(null, [0, 0], [1, 0], [0, 1], [1, 1]);
+const casi = 1e-9;
+
+test('ajustar zona: nunca se sale de la foto ni queda más chica que al dibujarla', () => {
+  fc.assert(fc.property(marcoValido, esquina, desplazamiento, desplazamiento, (m0, e, dx, dy) => {
+    const m = ajustarMarco(m0, /** @type {any} */ (e), dx, dy);
+    return m.x >= -casi && m.y >= -casi && m.x + m.w <= 1 + casi && m.y + m.h <= 1 + casi
+      && m.w >= LADO_MINIMO - casi && m.h >= LADO_MINIMO - casi;
+  }));
+});
+
+test('ajustar zona: moverla no cambia su tamaño; estirar una esquina deja quieta la opuesta', () => {
+  fc.assert(fc.property(marcoValido, desplazamiento, desplazamiento, (m0, dx, dy) => {
+    const m = ajustarMarco(m0, null, dx, dy);
+    return Math.abs(m.w - m0.w) < casi && Math.abs(m.h - m0.h) < casi;
+  }));
+  fc.assert(fc.property(marcoValido, fc.constantFrom([0, 0], [1, 0], [0, 1], [1, 1]), desplazamiento, desplazamiento, (m0, e, dx, dy) => {
+    const [cx, cy] = /** @type {[number, number]} */ (e);
+    const m = ajustarMarco(m0, [cx, cy], dx, dy);
+    const fijaX = m0.x + (1 - cx) * m0.w, fijaY = m0.y + (1 - cy) * m0.h;
+    return Math.abs((cx ? m.x : m.x + m.w) - fijaX) < casi && Math.abs((cy ? m.y : m.y + m.h) - fijaY) < casi;
+  }));
+  /* Un caso a mano: la esquina de abajo a la derecha se estira 10 % y 5 %. */
+  const r = ajustarMarco({ x: 0.2, y: 0.2, w: 0.4, h: 0.4 }, [1, 1], 0.1, 0.05);
+  assert.deepEqual(Object.values(r).map(v => +v.toFixed(6)), [0.2, 0.2, 0.5, 0.45]);
+  /* Arrastrar la esquina de arriba a la izquierda más allá de la opuesta: se topa en el mínimo, no se voltea. */
+  const t = ajustarMarco({ x: 0.2, y: 0.2, w: 0.4, h: 0.4 }, [0, 0], 0.9, 0.9);
+  assert.deepEqual(Object.values(t).map(v => +v.toFixed(6)), [0.54, 0.54, 0.06, 0.06]);
+});
+
+test('ajustar zona: el dedo agarra la esquina más cercana, la zona o nada; y elige la zona más chica', () => {
+  const m = { x: 0.2, y: 0.2, w: 0.4, h: 0.4 };
+  assert.deepEqual(agarrar(m, 0.21, 0.59, 0.05, 0.05), { esquina: [0, 1] });
+  assert.deepEqual(agarrar(m, 0.4, 0.4, 0.05, 0.05), { esquina: null });
+  assert.equal(agarrar(m, 0.9, 0.9, 0.05, 0.05), null);
+  /* Una zona angosta: las dos esquinas de arriba quedan al alcance; gana la más cercana. */
+  assert.deepEqual(agarrar({ x: 0.5, y: 0.5, w: 0.06, h: 0.3 }, 0.545, 0.5, 0.05, 0.05), { esquina: [1, 0] });
+  const area = { x: 0, y: 0, w: 1, h: 1 }, mesa = { x: 0.1, y: 0.5, w: 0.3, h: 0.3 };
+  assert.equal(zonaEn([area, mesa], 0.2, 0.6), 1);
+  assert.equal(zonaEn([area, mesa], 0.8, 0.2), 0);
+  assert.equal(zonaEn([mesa], 0.8, 0.2), -1);
+});
+
+/* ── Toma en vivo: luz, nitidez y nivel antes de tomar (18-oct) ────────── */
+
+/** Caja 5×5 tres veces: una foto movida. @param {{width:number,height:number,data:Uint8ClampedArray}} img */
+function movida(img) {
+  let d = Uint8ClampedArray.from(img.data);
+  const W = img.width, H = img.height;
+  for (let pasada = 0; pasada < 3; pasada++) {
+    const o = new Uint8ClampedArray(d.length);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (let c = 0; c < 4; c++) {
+      let s = 0, n = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = Math.min(W - 1, Math.max(0, x + dx)), yy = Math.min(H - 1, Math.max(0, y + dy));
+        s += d[(yy * W + xx) * 4 + c]; n++;
+      }
+      o[(y * W + x) * 4 + c] = s / n;
+    }
+    d = o;
+  }
+  return { width: W, height: H, data: d };
+}
+
+test('toma en vivo: luz y nitidez dicen lo mismo que noCalifica, las dos a la vez', () => {
+  const base = tringla([P.calido[0], P.frio[0], P.neutro[2]], { w: 320, h: 240, semilla: 4 });
+  const guia = { x: 0.04 * 320, y: 0.1 * 240, w: 0.92 * 320, h: 0.8 * 240 };
+  const borrosa = movida(base);
+  fc.assert(fc.property(fc.double({ min: 0.05, max: 1, noNaN: true }), fc.boolean(), (luz, mov) => {
+    const src = mov ? borrosa : base;
+    const img = { width: src.width, height: src.height, data: src.data.map((v, i) => (i % 4 === 3 ? v : v * luz)) };
+    const t = revisarToma(img, guia), nc = noCalifica(img, guia);
+    return (nc === null) === (t.luz && t.nitida)
+      && (!nc || (/oscura/.test(nc.motivo) ? !t.luz : !t.nitida));
+  }), { numRuns: 25 });
+  /* Oscura Y movida: noCalifica solo dice «oscura»; la toma avisa de las dos. */
+  const ambas = { ...borrosa, data: borrosa.data.map((v, i) => (i % 4 === 3 ? v : v * 0.1)) };
+  const t = revisarToma(ambas, guia);
+  assert.equal(t.luz, false); assert.equal(t.nitida, false);
+});
+
+test('toma en vivo: el nivel sale de la gravedad, igual en Android, iOS y de lado', () => {
+  const g = 9.81, rad = (/** @type {number} */ d) => d * Math.PI / 180;
+  const cerca = (/** @type {number} */ a, /** @type {number} */ b) => Math.abs(a - b) < 1e-6;
+  assert.deepEqual(inclinacion({ x: 0, y: g, z: 0 }), { ladeo: 0, frente: 0 });
+  /* Ladeado 10° a la derecha (Android: la gravedad apunta hacia arriba del teléfono). */
+  const and = /** @type {{ladeo:number,frente:number}} */ (inclinacion({ x: -g * Math.sin(rad(10)), y: g * Math.cos(rad(10)), z: 0 }));
+  assert.ok(cerca(and.ladeo, 10));
+  /* iOS da los signos al revés: la misma lectura. */
+  const ios = /** @type {{ladeo:number,frente:number}} */ (inclinacion({ x: g * Math.sin(rad(10)), y: -g * Math.cos(rad(10)), z: 0 }));
+  assert.ok(cerca(ios.ladeo, 10));
+  /* De lado (landscape, la pantalla girada 90°) y derecho: 0. */
+  assert.ok(cerca(/** @type {any} */ (inclinacion({ x: g, y: 0, z: 0 }, 90)).ladeo, 0));
+  /* Mirando 30° hacia arriba. */
+  assert.ok(cerca(/** @type {any} */ (inclinacion({ x: 0, y: g * Math.cos(rad(30)), z: g * Math.sin(rad(30)) })).frente, 30));
+  /* Acostado sobre la mesa o sin sensor: sin lectura. */
+  assert.equal(inclinacion({ x: 0, y: 0.3, z: g }), null);
+  assert.equal(inclinacion({ x: null, y: null, z: null }), null);
+  fc.assert(fc.property(fc.double({ min: -1e3, max: 1e3, noNaN: true }), fc.double({ min: -1e3, max: 1e3, noNaN: true }), fc.double({ min: -1e3, max: 1e3, noNaN: true }), fc.constantFrom(0, 90, 180, 270), (x, y, z, a) => {
+    const n = inclinacion({ x, y, z }, a);
+    return n === null || (n.ladeo > -90 - 1e-9 && n.ladeo <= 90 + 1e-9 && n.frente >= 0 && n.frente <= 90 + 1e-9);
+  }));
+});
+
+test('toma en vivo: el aviso del nivel y el suavizado', () => {
+  assert.deepEqual(avisoNivel({ ladeo: 1, frente: 5 }), { ok: true, texto: 'Derecho' });
+  assert.equal(avisoNivel({ ladeo: -4, frente: 5 }).texto, 'Casi derecho · 4°');
+  assert.equal(avisoNivel({ ladeo: 9.4, frente: 5 }).texto, 'Ladeado 9°');
+  assert.equal(avisoNivel({ ladeo: 0, frente: NIVEL.deFrente + 5 }).texto, 'Ponlo de frente');
+  let s = null;
+  for (let i = 0; i < 40; i++) s = suavizar(s, { ladeo: 8, frente: 0 });
+  assert.ok(Math.abs(/** @type {any} */ (s).ladeo - 8) < 0.01);
+  assert.equal(suavizar({ ladeo: 0, frente: 0 }, { ladeo: 8, frente: 0 }).ladeo, 2);
 });

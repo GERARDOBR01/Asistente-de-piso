@@ -35,6 +35,10 @@ jobs:
         run: node --test "lab/*.test.mjs"
       - name: Arnés
         run: node eval/arnes.mjs
+      # Revisar de punta a punta como la usa la persona (celular y escritorio),
+      # con las imágenes de demo.js: sin fotos reales ni modelos que bajar.
+      - name: Pantalla de Revisar
+        run: node eval/revisar-pantalla.mjs
       # Como GitHub Pages (max-age=600): una versión nueva tiene que llegar
       # entera a la página y a la caché sin señal, sin mezclar archivos viejos.
       - name: Despliegue del service worker
