@@ -18,6 +18,7 @@ import { revisarTriangulo, revisarNiveles, puntosDeCajas, cimaDeSilueta } from '
 import { elegirCajas, cimaCreible, fusionarPuntos, recorteDe, iou } from '../src/revision/sugerir.js';
 import { ajustarMarco, agarrar, zonaEn, LADO_MINIMO } from '../src/revision/marco.js';
 import { revisarToma, inclinacion, suavizar, avisoNivel, NIVEL } from '../src/revision/toma.js';
+import { aDatos, normalizarArea, resumen, registroDe, sugerenciasDeArea, aRecortar, cuando, TOPE_HISTORIAL } from '../src/revision/registro.js';
 import { tringla, anaquel, focal, PALETA as P, exifMuestra, xmpMuestra, c2paMuestra, conMetadatos, JPEG_MINIMO, rgb } from '../src/revision/demo.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,7 +29,7 @@ const DEL_NAVEGADOR = /\b(?:document|window|localStorage|sessionStorage|navigato
 const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
 /* La pantalla (ui.js partida en cinco) y los cargadores de modelos tocan el navegador; el resto no. */
-const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js'];
+const PANTALLA = ['ui.js', 'comun.js', 'zonas.js', 'dibujo.js', 'reporte.js', 'guia.js', 'historial.js'];
 const PUERTAS = [...PANTALLA, 'detector.js', 'silueta.js', 'c2pa.js'];
 
 test('frontera: las piezas de la revisión no usan APIs del navegador (solo la pantalla y los cargadores de modelos)', () => {
@@ -825,4 +826,61 @@ test('toma en vivo: el aviso del nivel y el suavizado', () => {
   for (let i = 0; i < 40; i++) s = suavizar(s, { ladeo: 8, frente: 0 });
   assert.ok(Math.abs(/** @type {any} */ (s).ladeo - 8) < 0.01);
   assert.equal(suavizar({ ladeo: 0, frente: 0 }, { ladeo: 8, frente: 0 }).ladeo, 2);
+});
+
+/* ── Historial: lo que se guarda de una revisión (18-oct) ─────────────── */
+
+test('historial: aDatos deja solo datos planos (sin lienzos ni funciones) y no toca el original', () => {
+  class Lienzo { constructor() { this.width = 3; } }
+  const punto = { x: 1, y: 2, capa: new Lienzo(), sugerido: true, f: () => 1 };
+  const d = aDatos({ puntos: [punto, new Lienzo()], n: 0, s: 'a', b: false, z: null, u: undefined });
+  assert.deepEqual(d, { puntos: [{ x: 1, y: 2, sugerido: true }], n: 0, s: 'a', b: false, z: null });
+  assert.ok(punto.capa instanceof Lienzo);
+  /* Lo que sale de aDatos sobrevive a un viaje por JSON sin cambiar: es lo que IndexedDB puede guardar. */
+  fc.assert(fc.property(fc.jsonValue(), v => {
+    const d = aDatos(v);
+    return JSON.stringify(d) === JSON.stringify(JSON.parse(JSON.stringify(d ?? null)));
+  }));
+});
+
+test('historial: el resumen es el peor nivel, por básico y de toda la revisión', () => {
+  const r = (/** @type {string} */ basico, /** @type {any} */ nivel) => ({ basico, nivel, motivo: '', evidencia: {}, fuente: /** @type {'CÓDIGO'} */ ('CÓDIGO') });
+  const zonas = [
+    { res: [r('colorizacion', 'CUMPLE')] },
+    { res: [r('surtido', 'OBSERVACIÓN')] },
+    { res: [r('colorizacion', 'GRAVE')] },
+    { res: null },
+  ];
+  assert.deepEqual(resumen(zonas), { nivel: 'GRAVE', basicos: { colorizacion: 'GRAVE', surtido: 'OBSERVACIÓN' } });
+  assert.deepEqual(resumen([{ res: null }]), { nivel: null, basicos: {} });
+  const reg = registroDe({
+    zonas: [{ tipo: 'focal', marco: { x: 0, y: 0, w: 1, h: 1 }, guia: true, puntos: [{ x: 1, y: 2, capa: new Map() }], origenPuntos: 'manual', res: [r('triangulacion', 'CUMPLE')] }],
+    origen: { nivel: 'CUMPLE', evidencia: { huella: 'abc' } }, area: '  Caballeros   mesa 1 ', via: 'app', tomada: new Date(5), revisado: ['manos', /** @type {any} */ (3)], tam: { w: 640, h: 480 },
+  });
+  assert.equal(reg.area, 'Caballeros mesa 1');
+  assert.equal(reg.huella, 'abc');
+  assert.equal(reg.tomada, 5);
+  assert.deepEqual(reg.revisado, ['manos']);
+  assert.deepEqual(reg.zonas[0].puntos, [{ x: 1, y: 2 }]);
+  assert.equal(reg.nivel, 'CUMPLE');
+});
+
+test('historial: sugerencias de área, tope y fechas', () => {
+  const regs = [
+    { area: 'Caballeros', creada: 1 }, { area: 'caballeros ', creada: 5 }, { area: 'Niños', creada: 9 },
+    { area: '', creada: 10 }, { area: 'Zapatería', creada: 3 },
+  ];
+  assert.deepEqual(sugerenciasDeArea(regs, ''), ['caballeros', 'Niños', 'Zapatería']);
+  assert.deepEqual(sugerenciasDeArea(regs, 'NIN'), ['Niños']);
+  assert.deepEqual(sugerenciasDeArea(regs, 'ería', ['Lencería']), ['Zapatería', 'Lencería']);
+  assert.deepEqual(sugerenciasDeArea([], 'da', ['Damas', 'Caballeros']), ['Damas']);
+  assert.equal(normalizarArea('x'.repeat(80)).length, 40);
+  const muchas = Array.from({ length: TOPE_HISTORIAL + 2 }, (_, i) => ({ id: 'r' + i, creada: 1000 - i }));
+  assert.deepEqual(aRecortar(muchas), ['r' + (TOPE_HISTORIAL + 1), 'r' + TOPE_HISTORIAL]);
+  assert.deepEqual(aRecortar(muchas.slice(0, 5)), []);
+  const ahora = new Date(2026, 9, 18, 13, 5).getTime();
+  assert.equal(cuando(new Date(2026, 9, 18, 9, 7).getTime(), ahora), 'Hoy · 9:07');
+  assert.equal(cuando(new Date(2026, 9, 17, 21, 30).getTime(), ahora), 'Ayer · 21:30');
+  assert.equal(cuando(new Date(2026, 8, 3, 8, 0).getTime(), ahora), '3 sep · 8:00');
+  assert.equal(cuando(new Date(2025, 11, 24, 8, 0).getTime(), ahora), '24 dic 2025 · 8:00');
 });

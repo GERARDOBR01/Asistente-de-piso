@@ -673,6 +673,32 @@ La prueba de pantalla abre la cámara falsa de Chromium y simula el sensor (8° 
 foto tomada coincidan (la foto viene de `takePhoto` a resolución completa) y el signo del
 nivel con el teléfono de lado.
 
+## Historial: que la revisión no se pierda (18-oct)
+
+Antes, al cerrar la app o tomar otra foto, la revisión se perdía; solo quedaba lo compartido.
+Ahora cada revisión de una foto real se guarda sola en el teléfono (IndexedDB, base
+`asistente_piso_revisar`, aparte de los manuales). Los ejemplos no se guardan.
+- **Qué se guarda:** la foto a ≤ 1280 px, una miniatura de 320 px con las marcas, las zonas
+  con sus resultados y marcas, el origen (con la huella), el área y lo revisado a mano. Unos
+  300 KB por revisión. Los datos pasan por `aDatos` (`registro.js`, pura): solo datos planos.
+  El lienzo de la silueta de un punto abortaría la transacción.
+- **Cuándo:** 1.2 s después de cada cambio (una medida, el área, lo revisado a mano), en la
+  misma revisión. Al cambiar de foto, lo pendiente se guarda ya. Una firma de los datos evita
+  reescribir lo mismo.
+- **Área o departamento:** un campo con sugerencias (las ya usadas, la más usada primero, y
+  unas de siempre). Una foto nueva empieza con el área de la anterior, porque una ronda suele
+  ser del mismo departamento. El área sale en el reporte que se comparte.
+- **La lista:** miniatura con el color del peor nivel, área, fecha, zonas y un chip por
+  básico; filtro por área. Tocar una la reabre **como se guardó, sin volver a medir**: es la
+  evidencia de ese día.
+- **Borrar:** una (dos toques) o todo (dos toques). Si se borra la revisión abierta, ya no se
+  vuelve a guardar sola.
+- **Tope:** 300 revisiones (~90 MB). Al pasarlo se borra la más vieja y se avisa. Se pide
+  almacenamiento persistente para que el navegador no lo desaloje.
+
+La prueba de pantalla cubre: cámara, galería y focal se guardan y el ejemplo no; recargar la
+página; reabrir con los mismos niveles y el área; que no se duplique; y borrar.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

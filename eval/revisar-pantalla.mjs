@@ -78,7 +78,7 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
   const errores = [];
   p.on('pageerror', (/** @type {Error} */ e) => errores.push(e.message));
   const fila = (/** @type {string} */ q, /** @type {any} */ ok, detalle = '') => filas.push({ vista: vista.nombre, q, ok: !!ok, detalle: String(detalle) });
-  const foto = async (/** @type {string} */ n) => { if (capturas) await p.screenshot({ path: path.join(capturas, `${vista.nombre}-${n}.png`) }); };
+  const foto = async (/** @type {string} */ n, completa = false) => { if (capturas) await p.screenshot({ path: path.join(capturas, `${vista.nombre}-${n}.png`), fullPage: completa }); };
   try {
     await p.goto(url, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => /** @type {any} */ (window).__revision && /** @type {any} */ (window).tocarPestana, null, { timeout: 60000 });
@@ -228,6 +228,45 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await espera(p, 300);
     const vacia = await p.evaluate(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-vacia'))).hidden && !document.querySelector('#rv-res .rv-ver'));
     fila('«Nueva foto» deja la pantalla vacía', vacia);
+
+    /* 9. Historial: lo real se guarda solo y los ejemplos no; sobrevive a recargar, se reabre igual y se borra. */
+    const cuantas = () => p.evaluate(() => document.querySelectorAll('#rv-hist-lista .rv-hist-item').length);
+    await espera(p, 1500);
+    const n0 = await cuantas();
+    await tipo('tringla');
+    await ejemplo();
+    await espera(p, 1600);
+    const n1 = await cuantas();
+    await subirDemo(p, 'tringla');
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-area-caja'))).hidden, null, { timeout: 30000 });
+    await p.fill('#rv-area', 'Caballeros · mesa 1');
+    await espera(p, 2000);
+    const n2 = await cuantas();
+    const antes = await niveles(p);
+    fila('historial: las fotos reales se guardan solas (cámara, galería, focal) y los ejemplos no', n0 === 3 && n1 === n0 && n2 === n0 + 1, `${n0} → ${n1} → ${n2}`);
+    await foto('historial', true);
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => /** @type {any} */ (window).__revision && /** @type {any} */ (window).tocarPestana, null, { timeout: 60000 });
+    await p.evaluate(() => /** @type {any} */ (window).tocarPestana('revisar'));
+    await p.waitForFunction(() => document.querySelectorAll('#rv-hist-lista .rv-hist-item').length > 0, null, { timeout: 15000 });
+    const primera = await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista .rv-hist-item b')).textContent);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-abrir]')).click());
+    await espera(p, 1500);
+    const reab = await niveles(p), area = await p.inputValue('#rv-area');
+    const sello = await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-guardada')).textContent);
+    fila('historial: tras recargar, la revisión se reabre con sus resultados y su área', primera === 'Caballeros · mesa 1' && reab.join() === antes.join() && area === 'Caballeros · mesa 1' && /^Guardada · Hoy/.test(sello || ''),
+      `${primera} · ${reab.join()} (antes ${antes.join()}) · ${area} · ${sello}`);
+    await espera(p, 1800);
+    fila('historial: reabrir no la duplica', await cuantas() === n2, String(await cuantas()));
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-borrar]')).click());
+    const tras1 = await cuantas();
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#rv-hist-lista [data-borrar]')).click());
+    await espera(p, 600);
+    fila('historial: borrar una pide un segundo toque', tras1 === n2 && await cuantas() === n2 - 1, `${tras1} → ${await cuantas()}`);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-hist-borrar')).click());
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-hist-borrar')).click());
+    await espera(p, 600);
+    fila('historial: «Borrar todo» (dos toques) lo deja vacío', await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-historial')).hidden));
 
     /* 8. En el celular nada se sale de lado. */
     if (vista.tactil) {

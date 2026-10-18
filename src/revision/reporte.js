@@ -11,6 +11,7 @@ import { COLOR_NIVEL, $, st, aviso, vibrar, ease, esc } from './comun.js';
 import { animar, redondo, dibujar } from './dibujo.js';
 import { medirZona, pintarZonas } from './zonas.js';
 import { nuevaRevision } from './ui.js';
+import { guardarPronto, pintarArea } from './historial.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {import('./zonas.js').Zona} Zona */
@@ -204,7 +205,7 @@ function todos() {
 export function pintarResultados(subir = false) {
   const caja = $('rv-res');
   const lista = todos();
-  if (!lista.length) { caja.innerHTML = st.origen && st.foto ? tarjetaOrigen(origenVisto(), undefined, true) : ''; conectarSynthid(); return; }
+  if (!lista.length) { caja.innerHTML = st.origen && st.foto ? tarjetaOrigen(origenVisto(), undefined, true) : ''; conectarSynthid(); pintarArea(); return; }
   const varias = st.zonas.length > 1;
   const general = peor(lista.map(x => x.r.nivel));
   const cuenta = (/** @type {string} */ n) => lista.filter(x => x.r.nivel === n).length;
@@ -263,8 +264,11 @@ export function pintarResultados(subir = false) {
     const s = revisadoAMano();
     if (inp.checked) s.add(/** @type {string} */ (inp.dataset.item)); else s.delete(/** @type {string} */ (inp.dataset.item));
     guardarRevisado();
+    guardarPronto();
   }));
   conectarSynthid();
+  /* Cada resultado nuevo (o cambiado) queda en el historial. */
+  guardarPronto(); pintarArea();
 }
 
 /* ── Compartir ──────────────────────────────────────────────────────────── */
@@ -272,6 +276,7 @@ export function pintarResultados(subir = false) {
 function resumenTexto() {
   const o = origenVisto(), lista = todos();
   const l = ['Revisión con foto · Asistente de Piso'];
+  if (st.area) l.push(`Área: ${st.area}`);
   if (lista.length > 1) l.push(`Resultado: ${peor(lista.map(x => x.r.nivel))} (${lista.length} básicos en ${st.zonas.length} ${st.zonas.length === 1 ? 'zona' : 'zonas'})`);
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
   if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
@@ -291,7 +296,7 @@ const CLAVE_REVISADO = 'ap_rv_revisado';
 const revisados = new Map();
 const huellaActual = () => String(st.origen?.evidencia?.huella || 'sin-huella');
 /** @returns {Set<string>} */
-function revisadoAMano() {
+export function revisadoAMano() {
   const h = huellaActual();
   if (!revisados.has(h)) {
     let guardado = [];
@@ -300,6 +305,11 @@ function revisadoAMano() {
   }
   return /** @type {Set<string>} */ (revisados.get(h));
 }
+/** Al reabrir del historial, lo revisado a mano vuelve con la foto. @param {string} h huella @param {string[]} lista */
+export function ponerRevisado(h, lista) {
+  revisados.set(h || 'sin-huella', new Set(lista));
+}
+
 function guardarRevisado() {
   try {
     const todo = JSON.parse(localStorage.getItem(CLAVE_REVISADO) || '{}') || {};
@@ -348,7 +358,7 @@ export function reporteParaCompartir() {
   const fecha = `${f2(d.getDate())}/${f2(d.getMonth() + 1)}/${d.getFullYear()} · ${f2(d.getHours())}:${f2(d.getMinutes())}`;
   bloques.push({ alto: 110, pinta: (ctx, y) => {
     ctx.font = F.titulo; ctx.fillStyle = '#F4F2F0'; ctx.fillText('Revisión con foto', M, y + 8);
-    ctx.font = F.sub; ctx.fillStyle = '#9A97A2'; ctx.fillText(`Asistente de Piso · ${fecha}`, M, y + 62);
+    ctx.font = F.sub; ctx.fillStyle = '#9A97A2'; ctx.fillText(`${st.area ? st.area + ' · ' : 'Asistente de Piso · '}${fecha}`, M, y + 62);
   } });
   for (const { r, i } of lista) {
     const c = cifra(r);
