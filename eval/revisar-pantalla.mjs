@@ -32,13 +32,14 @@ const filas = [];
 
 /**
  * Sube como si viniera de la galería una imagen que dibuja demo.js en la página.
- * @param {any} p @param {string} quien `tringla` | `anaquel` | `focal`
+ * @param {any} p @param {string} quien `tringla` (revuelta) | `tringla-bien` | `anaquel` | `focal`
  */
 async function subirDemo(p, quien) {
   await p.evaluate(async (/** @type {string} */ quien) => {
     const D = await import('/src/revision/demo.js');
     const P = D.PALETA;
     const g = quien === 'tringla' ? D.tringla([P.calido[0], P.calido[1], P.frio[0], P.calido[3], P.frio[1], P.neutro[2], P.neutro[3]], { w: 960, h: 720, semilla: 5 })
+      : quien === 'tringla-bien' ? D.tringla([P.calido[0], P.calido[1], P.calido[3], P.frio[0], P.frio[1], P.neutro[2], P.neutro[3]], { w: 960, h: 720, semilla: 5 })
       : quien === 'anaquel' ? D.anaquel({ w: 960, h: 720, semilla: 3, huecos: [[1, 2], [1, 3]] })
       : D.focal([0.45, 0.62, 0.8, 0.6], { w: 960, h: 720, semilla: 2 }).img;
     const c = document.createElement('canvas');
@@ -267,6 +268,65 @@ for (const vista of [{ nombre: 'celular', width: 390, height: 844, tactil: true 
     await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-hist-borrar')).click());
     await espera(p, 600);
     fila('historial: «Borrar todo» (dos toques) lo deja vacío', await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-historial')).hidden));
+
+    /* 10. Antes y después: la tringla revuelta se vuelve a revisar ya corregida, con la misma zona. */
+    await subirDemo(p, 'tringla');
+    await p.waitForFunction(() => document.querySelectorAll('#rv-res .rv-ver').length > 0, null, { timeout: 30000 });
+    await espera(p, 2000);
+    const marcoAntes = await p.evaluate(() => JSON.stringify(/** @type {any} */ (window).__revision.st.zonas.map((/** @type {any} */ z) => z.marco)));
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-repetir')).click());
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-fantasma'))).hidden, null, { timeout: 20000 });
+    const camaraRep = await p.evaluate(() => ({
+      fantasma: /** @type {HTMLImageElement} */ (document.getElementById('rv-fantasma')).src.startsWith('blob:'),
+      guia: /** @type {HTMLElement} */ (document.getElementById('rv-guia')).hidden,
+      aviso: /** @type {HTMLElement} */ (document.getElementById('rv-repetir-t')).textContent,
+    }));
+    fila('antes y después: «Volver a revisar» abre la cámara con la foto de antes en fantasma', camaraRep.fantasma && camaraRep.guia && /Volviendo a revisar «Caballeros · mesa 1» de hoy, \d/.test(camaraRep.aviso || ''), JSON.stringify(camaraRep));
+    await foto('repetir-camara');
+    await subirDemo(p, 'tringla-bien');
+    await p.waitForFunction(() => !!document.querySelector('#rv-res .rv-cambios'), null, { timeout: 30000 });
+    await espera(p, 2200);
+    const cmp = await p.evaluate(() => ({
+      texto: /** @type {HTMLElement} */ (document.querySelector('.rv-cambios-cab b')).textContent,
+      filas: [...document.querySelectorAll('.rv-cambios li')].map(li => /** @type {HTMLElement} */ (li).dataset.cambio),
+      ahora: /** @type {HTMLImageElement} */ (document.getElementById('rv-cambios-ahora')).src.startsWith('blob:'),
+      marcos: JSON.stringify(/** @type {any} */ (window).__revision.st.zonas.map((/** @type {any} */ z) => z.marco)),
+      area: /** @type {HTMLInputElement} */ (document.getElementById('rv-area')).value,
+    }));
+    fila('antes y después: misma zona y área, y la tarjeta dice «1 de 1 corregido» (GRAVE → CUMPLE)', cmp.texto === '1 de 1 corregido' && cmp.filas.join() === 'corregido' && cmp.ahora && cmp.marcos === marcoAntes && cmp.area === 'Caballeros · mesa 1', JSON.stringify(cmp));
+    await foto('antes-despues', true);
+    const vuelta = await p.evaluate(() => [...document.querySelectorAll('#rv-hist-lista .rv-hist-item')].map(e => /** @type {HTMLElement} */ (e.querySelector('.rv-hist-vuelta'))?.textContent || ''));
+    fila('antes y después: el historial guarda las dos y la nueva dice «↻ 1 de 1 corregido»', vuelta.length === 2 && vuelta[0] === '↻ 1 de 1 corregido' && vuelta[1] === '', vuelta.join(' | '));
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelectorAll('#rv-hist-lista [data-abrir]')[1]).click());
+    await espera(p, 1200);
+    const sinCmp = await p.evaluate(() => !document.querySelector('.rv-cambios'));
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelectorAll('#rv-hist-lista [data-abrir]')[0]).click());
+    await espera(p, 1200);
+    const conCmp = await p.evaluate(() => /** @type {HTMLElement|null} */ (document.querySelector('.rv-cambios-cab b'))?.textContent);
+    fila('antes y después: al reabrir, la de antes va sola y la de después trae su comparación', sinCmp && conCmp === '1 de 1 corregido', `${sinCmp} · ${conCmp}`);
+
+    /* 10b. Un focal: los puntos de la vez pasada llegan como sugerencia y hay que confirmarlos con «Revisar». */
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-nueva-foto')).click());
+    await tipo('focal');
+    await subirDemo(p, 'focal');
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-ayuda'))).hidden, null, { timeout: 30000 });
+    if (!await p.evaluate(() => /** @type {any} */ (window).__revision.st.exacto)) await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-exacto')).click());
+    for (const [fx, fy] of [[0.25, 0.45], [0.5, 0.2], [0.75, 0.42]]) { const q = await enLienzo(p, fx, fy); await p.mouse.click(q.x, q.y); await espera(p, 400); }
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-listo')).click());
+    await espera(p, 2400);
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-repetir')).click());
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-fantasma'))).hidden, null, { timeout: 20000 });
+    await subirDemo(p, 'focal');
+    await p.waitForFunction(() => !(/** @type {HTMLElement} */ (document.getElementById('rv-ayuda'))).hidden, null, { timeout: 30000 });
+    const pide = await p.evaluate(() => {
+      const z = /** @type {any} */ (window).__revision.st.zonas[0];
+      return { n: z.puntos.length, sugeridos: z.puntos.every((/** @type {any} */ q) => q.sugerido), res: z.res, nota: /** @type {HTMLElement} */ (document.getElementById('rv-ayuda-t')).textContent, listo: !(/** @type {HTMLButtonElement} */ (document.getElementById('rv-listo'))).disabled, cmp: !!document.querySelector('.rv-cambios') };
+    });
+    await p.evaluate(() => /** @type {HTMLElement} */ (document.getElementById('rv-listo')).click());
+    await espera(p, 1500);
+    const tras = await p.evaluate(() => [...document.querySelectorAll('.rv-cambios li')].map(li => /** @type {HTMLElement} */ (li).dataset.cambio).join());
+    fila('antes y después: en el focal los puntos llegan sugeridos, se confirman con Revisar y se comparan', pide.n === 3 && pide.sugeridos && pide.res === null && /vez pasada/.test(pide.nota || '') && pide.listo && !pide.cmp && tras === 'igual,igual',
+      `${JSON.stringify(pide)} → ${tras}`);
 
     /* 8. En el celular nada se sale de lado. */
     if (vista.tactil) {

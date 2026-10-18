@@ -9,15 +9,16 @@
 // (tarjetas y compartir). Las mediciones viven en los módulos puros.
 
 import { peor } from './veredicto.js';
+import { cuandoEnFrase } from './registro.js';
 import { leerMetadatos, huella, veredictoOrigen, dimensiones, formato, jpegCompleto, interpretarC2pa } from './procedencia.js';
 import { puntosDeCajas } from './triangulo.js';
 import { MOTIVO_FUERA } from './sugerir.js';
 import { tringla, anaquel, focal, PALETA as P, conMetadatos, exifMuestra, c2paMuestra, xmpMuestra } from './demo.js';
 import { MARCOS, TEXTOS, $, st, mostrar, proporcion, aviso, conTope, activa, vibrar, marcarTipo, aImagen, aLienzo, pixeles } from './comun.js';
 import { pedirSensor, empezarToma, pararToma } from './guia.js';
-import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea } from './historial.js';
+import { iniciarHistorial, revisionNueva, marcarGuardada, ponerArea, ponerMiniActual, pintarArea } from './historial.js';
 import { girar, animar, dibujar } from './dibujo.js';
-import { medirTodo, medirZona, empezarRevision, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
+import { medirTodo, medirZona, empezarRevision, empezarConZonas, tocarZona, pintarZonas, empezarDibujo, terminarDibujo, empezarAjuste, cambiarTipo, engancharAjuste } from './zonas.js';
 import { tarjetaOrigen, pintarResultados, reporteParaCompartir, ponerRevisado } from './reporte.js';
 
 /** @typedef {import('./veredicto.js').Imagen} Imagen */
@@ -181,8 +182,20 @@ export async function analizarArchivo(blob, tipo, op = {}) {
 async function cargarArchivo(blob, via, tomada) {
   try {
     const a = await analizarArchivo(blob, st.tipo, { via, tomada: tomada || undefined });
+    const rep = st.repetir;
     revisionNueva();
     st.foto = { img: a.img, base: a.base, via, bytes: a.bytes, tomada };
+    if (rep) {
+      /* La foto de «Volver a revisar»: mismas zonas, misma área, y se compara con la de antes. */
+      st.repetir = null;
+      st.antes = { id: rep.id, zonas: rep.zonas, miniatura: rep.miniatura || null, creada: rep.creada };
+      ponerArea(rep.area);
+      st.origen = a.origen;
+      st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
+      pintarRepetir();
+      empezarConZonas(rep.zonas, rep.tam || { w: a.img.width, h: a.img.height });
+      return;
+    }
     st.origen = a.origen;
     st.synthid = null; st.synthidAbierto = false;
   } catch (e) {
@@ -200,6 +213,7 @@ function cargarDemo(imgDemo, puntos) {
   c.width = imgDemo.width; c.height = imgDemo.height;
   /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).putImageData(new ImageData(Uint8ClampedArray.from(imgDemo.data), imgDemo.width, imgDemo.height), 0, 0);
   revisionNueva();
+  st.repetir = null; pintarRepetir();
   st.foto = { img: pixeles(c), base: c, via: 'demo', bytes: null, tomada: null };
   st.synthid = null; st.synthidAbierto = false;
   st.origen = { basico: 'origen', nivel: 'DEMO', motivo: 'Imagen de ejemplo dibujada por la app: no hay origen que probar. Con una foto real aquí sale si se tomó en la app, si viene de galería o si declara IA.', evidencia: {}, fuente: 'CÓDIGO' };
@@ -211,6 +225,7 @@ function cargarDemo(imgDemo, puntos) {
 /** Deja la pestaña como recién abierta, lista para otra foto, sin recargar. */
 export function nuevaRevision() {
   revisionNueva();
+  st.repetir = null; pintarRepetir();
   cerrarCamara();
   st.foto = null; st.zonas = []; st.activa = -1; st.modo = 'ver'; st.trazo = null; st.ajuste = null;
   st.origen = null; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
@@ -408,10 +423,11 @@ async function muestraOrigen(cual) {
 /**
  * Una revisión del historial vuelve a la pantalla como se guardó: la foto, las
  * zonas con sus resultados y marcas, el origen, el área y lo revisado a mano.
- * No se vuelve a medir: es la evidencia de ese día.
- * @param {any} reg
+ * No se vuelve a medir: es la evidencia de ese día. Si fue un «Volver a
+ * revisar», vuelve también la comparación con la de antes.
+ * @param {any} reg @param {any} [previa] la revisión de antes, si sigue guardada
  */
-async function reabrir(reg) {
+async function reabrir(reg, previa) {
   cerrarCamara();
   let base;
   try {
@@ -422,6 +438,9 @@ async function reabrir(reg) {
   st.foto = { img: pixeles(base), base, via: reg.via, bytes: null, tomada: reg.tomada ? new Date(reg.tomada) : null };
   st.origen = reg.origen; st.synthid = null; st.synthidAbierto = false; st.puntosDemo = [];
   st.registro = reg.id;
+  st.repetir = null; pintarRepetir();
+  st.antes = previa ? { id: previa.id, zonas: previa.zonas, miniatura: previa.miniatura || null, creada: previa.creada } : null;
+  ponerMiniActual(reg.miniatura);
   ponerArea(reg.area);
   ponerRevisado(reg.huella, reg.revisado || []);
   st.zonas = reg.zonas.map((/** @type {any} */ z) => ({ ...z, puntos: z.puntos || [], res: z.res ?? null }));
@@ -433,6 +452,43 @@ async function reabrir(reg) {
   dibujar(1); pintarZonas(); pintarResultados();
   marcarGuardada();
   $('rv-escena').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+}
+
+/**
+ * «↻ Volver a revisar»: la cámara se abre con la foto de antes en fantasma y
+ * sus zonas encima, para encuadrar igual. La foto que siga (de la cámara o de
+ * la galería) se mide con esas zonas y se compara.
+ * @param {any} reg
+ */
+async function volverARevisar(reg) {
+  nuevaRevision();
+  st.repetir = reg;
+  ponerArea(reg.area);
+  pintarRepetir();
+  try { await ponerFantasma(reg); } catch (e) { console.warn('Revisar: sin fantasma', e); }
+  abrirCamara();
+}
+
+/** La foto de antes, con sus zonas punteadas, para ponerla sobre el video. @param {any} reg */
+async function ponerFantasma(reg) {
+  const bmp = await createImageBitmap(reg.foto);
+  const c = aLienzo(bmp, 1280, bmp.width, bmp.height);
+  bmp.close();
+  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')), u = c.width / 400;
+  ctx.setLineDash([8 * u, 6 * u]); ctx.lineWidth = 2.5 * u; ctx.strokeStyle = '#fff';
+  for (const z of reg.zonas) ctx.strokeRect(z.marco.x * c.width, z.marco.y * c.height, z.marco.w * c.width, z.marco.h * c.height);
+  const img = $('rv-fantasma');
+  if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  img.src = URL.createObjectURL(/** @type {Blob} */ (await new Promise(r => c.toBlob(/** @type {BlobCallback} */ (r), 'image/jpeg', 0.8))));
+}
+
+/** El aviso de «Volviendo a revisar» mientras se espera la foto nueva. */
+function pintarRepetir() {
+  const r = st.repetir, caja = $('rv-repetir-aviso');
+  caja.hidden = !r;
+  if (r) $('rv-repetir-t').textContent = `↻ Volviendo a revisar ${r.area ? `«${r.area}»` : 'la revisión'} ${cuandoEnFrase(r.creada)}: encuadra igual que la foto de fondo.`;
+  if (!r && !st.stream) $('rv-fantasma').hidden = true;
+  pintarArea();
 }
 
 /* ── Arranque ───────────────────────────────────────────────────────────── */
@@ -554,7 +610,8 @@ function iniciar() {
   document.querySelectorAll('[data-muestra]').forEach(b => b.addEventListener('click', () => muestraOrigen(/** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.muestra))));
   engancharLienzo();
   engancharAjuste();
-  iniciarHistorial(reabrir);
+  iniciarHistorial(reabrir, volverARevisar);
+  $('rv-repetir-x').addEventListener('click', () => { st.repetir = null; pintarRepetir(); cerrarCamara(); if (!st.foto) mostrar('vacia'); });
   $('rv-zona-nueva').addEventListener('click', empezarDibujo);
   $('rv-zona-ajustar').addEventListener('click', empezarAjuste);
   $('rv-nueva-foto').addEventListener('click', nuevaRevision);

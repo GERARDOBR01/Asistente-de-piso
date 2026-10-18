@@ -60,9 +60,60 @@ export function resumen(zonas) {
   return { nivel: todos.length ? peor(todos) : null, basicos };
 }
 
+/* ── Antes y después ──────────────────────────────────────────────────── */
+
+/** @typedef {'corregido'|'mejoro'|'igual'|'empeoro'|'nuevo'|'sin dato'} Cambio */
+
+const GRAVEDAD = /** @type {Record<string, number>} */ ({ CUMPLE: 0, 'OBSERVACIÓN': 1, GRAVE: 2 });
+
+/**
+ * Cada básico de la revisión de ahora contra el de antes, zona por zona (las
+ * zonas de «Volver a revisar» van en el mismo orden). Corregido: antes no
+ * cumplía y ahora cumple. Si alguna de las dos no calificó, no hay con qué
+ * comparar. Una zona de otro tipo, o una que antes no estaba, es nueva.
+ * @param {{tipo:string, res: Resultado[]|null}[]} antes @param {{tipo:string, res: Resultado[]|null}[]} ahora
+ * @returns {{zona:number, basico:string, antes:Nivel|null, ahora:Nivel, cambio:Cambio}[]}
+ */
+export function comparar(antes, ahora) {
+  /** @type {{zona:number, basico:string, antes:Nivel|null, ahora:Nivel, cambio:Cambio}[]} */
+  const filas = [];
+  ahora.forEach((z, i) => {
+    const za = antes[i] && antes[i].tipo === z.tipo ? antes[i] : null;
+    for (const r of z.res || []) {
+      const ra = za?.res?.find(x => x.basico === r.basico) || null;
+      /** @type {Cambio} */
+      let cambio;
+      if (!ra) cambio = 'nuevo';
+      else if (!(ra.nivel in GRAVEDAD) || !(r.nivel in GRAVEDAD)) cambio = 'sin dato';
+      else if (GRAVEDAD[ra.nivel] > 0 && GRAVEDAD[r.nivel] === 0) cambio = 'corregido';
+      else if (GRAVEDAD[r.nivel] < GRAVEDAD[ra.nivel]) cambio = 'mejoro';
+      else if (GRAVEDAD[r.nivel] === GRAVEDAD[ra.nivel]) cambio = 'igual';
+      else cambio = 'empeoro';
+      filas.push({ zona: i, basico: r.basico, antes: ra ? ra.nivel : null, ahora: r.nivel, cambio });
+    }
+  });
+  return filas;
+}
+
+/**
+ * En una frase y en números: cuántos se corrigieron de los que estaban mal.
+ * @param {{antes:Nivel|null, ahora:Nivel, cambio:Cambio}[]} filas
+ */
+export function resumenCambios(filas) {
+  const malos = filas.filter(f => f.antes && f.antes !== 'CUMPLE' && f.antes !== 'NO_CALIFICA');
+  const corregidos = filas.filter(f => f.cambio === 'corregido').length;
+  const empeoraron = filas.filter(f => f.cambio === 'empeoro').length;
+  const pendientes = malos.length - corregidos;
+  const texto = !malos.length
+    ? (empeoraron ? `${empeoraron} ${empeoraron === 1 ? 'empeoró' : 'empeoraron'}` : 'Ya cumplía')
+    : `${corregidos} de ${malos.length} ${malos.length === 1 ? 'corregido' : 'corregidos'}${empeoraron ? ` · ${empeoraron} ${empeoraron === 1 ? 'empeoró' : 'empeoraron'}` : ''}`;
+  return { corregidos, pendientes, empeoraron, todo: malos.length > 0 && pendientes === 0 && !empeoraron, texto };
+}
+
 /**
  * Los datos de una revisión para guardar (sin la foto ni la miniatura).
- * @param {{zonas: any[], origen: any, area: string, via: string, tomada: Date|null, revisado: string[], tam: {w:number,h:number}}} r
+ * `antes`: la revisión de la que esta es «Volver a revisar».
+ * @param {{zonas: any[], origen: any, area: string, via: string, tomada: Date|null, revisado: string[], tam: {w:number,h:number}, antes?: {id:string, zonas:any[]}|null}} r
  */
 export function registroDe(r) {
   const zonas = r.zonas.map(z => aDatos({
@@ -79,6 +130,8 @@ export function registroDe(r) {
     tomada: r.tomada ? r.tomada.getTime() : null,
     revisado: r.revisado.filter(x => typeof x === 'string'),
     tam: { w: r.tam.w, h: r.tam.h },
+    antes: r.antes ? r.antes.id : null,
+    cambios: r.antes ? resumenCambios(comparar(r.antes.zonas, zonas)) : null,
   };
 }
 
@@ -114,6 +167,15 @@ export function sugerenciasDeArea(registros, escrito, base = []) {
 export function aRecortar(registros, tope = TOPE_HISTORIAL) {
   if (registros.length <= tope) return [];
   return [...registros].sort((a, b) => a.creada - b.creada).slice(0, registros.length - tope).map(r => r.id);
+}
+
+/**
+ * Lo mismo, dentro de una frase: «de hoy, 9:07», «de ayer, 21:30», «del 3 sep, 8:00».
+ * @param {number} ms @param {number} [ahora]
+ */
+export function cuandoEnFrase(ms, ahora = Date.now()) {
+  const [dia, hora] = cuando(ms, ahora).split(' · ');
+  return `${dia === 'Hoy' ? 'de hoy' : dia === 'Ayer' ? 'de ayer' : `del ${dia}`}, ${hora}`;
 }
 
 /**

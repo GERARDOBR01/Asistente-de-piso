@@ -699,6 +699,27 @@ Ahora cada revisión de una foto real se guarda sola en el teléfono (IndexedDB,
 La prueba de pantalla cubre: cámara, galería y focal se guardan y el ejemplo no; recargar la
 página; reabrir con los mismos niveles y el área; que no se duplique; y borrar.
 
+## Antes y después: volver a revisar (18-oct)
+
+Lo que se encuentra en una ronda se corrige y se vuelve a ver. En una revisión guardada,
+«↻ Volver a revisar»:
+- abre la cámara con **la foto de antes en fantasma** (38 %) y sus zonas punteadas encima, en
+  lugar de la guía, para encuadrar igual. Un aviso dice cuál se vuelve a revisar, y se puede
+  cancelar;
+- la foto que sigue, de la cámara o de la galería, se mide **con las mismas zonas** (marco,
+  tipo y vestidos) y la misma área;
+- en un focal, **los puntos de la vez pasada llegan como sugerencia** (punteados, en el mismo
+  lugar relativo) y hay que confirmarlos con «Revisar». Si se midieran tal cual, el focal
+  saldría igual aunque lo hayan cambiado;
+- **«Antes y después»** va arriba de los resultados: las dos miniaturas marcadas lado a lado y,
+  por básico, el nivel de antes → el de ahora con «Corregido», «Mejoró», «Igual»,
+  «Empeoró», «Sin dato» (alguna no calificó) o «Nueva». Arriba, «2 de 3 corregidos».
+  `comparar` y `resumenCambios` (`registro.js`, puras) emparejan zona por zona; una zona de
+  otro tipo es nueva;
+- la revisión nueva guarda de cuál viene y el resumen. El historial lo muestra («↻ 1 de 1
+  corregido», en verde si se corrigió todo), y al reabrirla vuelve la comparación. El texto
+  que se comparte lo incluye.
+
 ## Consecuencias
 
 - Las piezas puras (`src/revision/{procedencia,color,surtido,triangulo,veredicto,demo}.js`) trabajan

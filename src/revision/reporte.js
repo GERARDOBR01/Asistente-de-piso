@@ -12,6 +12,7 @@ import { animar, redondo, dibujar } from './dibujo.js';
 import { medirZona, pintarZonas } from './zonas.js';
 import { nuevaRevision } from './ui.js';
 import { guardarPronto, pintarArea } from './historial.js';
+import { comparar, resumenCambios, cuando, cuandoEnFrase } from './registro.js';
 
 /** @typedef {import('./veredicto.js').Resultado} Resultado */
 /** @typedef {import('./zonas.js').Zona} Zona */
@@ -214,7 +215,7 @@ export function pintarResultados(subir = false) {
     : '';
   /* La zona activa primero, para que lo que se acaba de medir quede arriba. */
   const orden = lista.slice().sort((a, b) => (b.i === st.activa ? 1 : 0) - (a.i === st.activa ? 1 : 0) || a.i - b.i);
-  caja.innerHTML = `${resumen}
+  caja.innerHTML = `${tarjetaCambios()}${resumen}
     ${orden.map(({ r, z, i }, j) => {
       const c = cifra(r);
       return `<div class="rv-ver" data-n="${esc(r.nivel)}">
@@ -271,12 +272,35 @@ export function pintarResultados(subir = false) {
   guardarPronto(); pintarArea();
 }
 
+/* ── Antes y después («Volver a revisar») ──────────────────────────────── */
+
+const CAMBIO = /** @type {Record<string, string>} */ ({ corregido: 'Corregido', mejoro: 'Mejoró', igual: 'Igual', empeoro: 'Empeoró', nuevo: 'Nueva', 'sin dato': 'Sin dato' });
+
+/** Las dos fotos lado a lado y, por básico, cómo estaba y cómo quedó. */
+function tarjetaCambios() {
+  const a = st.antes;
+  if (!a) return '';
+  const filas = comparar(a.zonas, st.zonas), r = resumenCambios(filas);
+  if (a.miniatura && !a.url) a.url = URL.createObjectURL(a.miniatura);
+  const varias = st.zonas.length > 1;
+  return `<div class="rv-cambios" data-todo="${r.todo}">
+    <div class="rv-cambios-cab"><span>Antes y después</span><b>${esc(r.texto)}</b></div>
+    <div class="rv-cambios-fotos"><figure><img src="${a.url || ''}" alt="La revisión de antes"><figcaption>Antes · ${esc(cuando(a.creada))}</figcaption></figure><figure><img id="rv-cambios-ahora" src="${st.miniActual}" alt="La revisión de ahora"><figcaption>Ahora</figcaption></figure></div>
+    <ul>${filas.map(f => `<li data-cambio="${esc(f.cambio)}"><span>${varias ? `Zona ${f.zona + 1} · ` : ''}${esc(BASICO[/** @type {'surtido'} */ (f.basico)] || f.basico)}</span><em>${esc(f.antes || '—')} → ${esc(f.ahora)}</em><b>${CAMBIO[f.cambio]}</b></li>`).join('')}</ul>
+  </div>`;
+}
+
 /* ── Compartir ──────────────────────────────────────────────────────────── */
 
 function resumenTexto() {
   const o = origenVisto(), lista = todos();
   const l = ['Revisión con foto · Asistente de Piso'];
   if (st.area) l.push(`Área: ${st.area}`);
+  if (st.antes) {
+    const filas = comparar(st.antes.zonas, st.zonas);
+    l.push(`Antes y después (la revisión ${cuandoEnFrase(st.antes.creada)}): ${resumenCambios(filas).texto}.`);
+    for (const f of filas) l.push(`  ${st.zonas.length > 1 ? `Zona ${f.zona + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (f.basico)] || f.basico}: ${f.antes || '—'} → ${f.ahora} (${CAMBIO[f.cambio].toLowerCase()})`);
+  }
   if (lista.length > 1) l.push(`Resultado: ${peor(lista.map(x => x.r.nivel))} (${lista.length} básicos en ${st.zonas.length} ${st.zonas.length === 1 ? 'zona' : 'zonas'})`);
   for (const { r, i } of lista) l.push(`${st.zonas.length > 1 ? `Zona ${i + 1} · ` : ''}${BASICO[/** @type {'surtido'} */ (r.basico)] || r.basico}: ${r.nivel}. ${r.motivo}`);
   if (o) l.push(`Evidencia de la foto: ${nivelOrigen(o)}. ${o.motivo}`);
