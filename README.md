@@ -231,13 +231,13 @@ Tres arreglos salieron de estas mediciones:
   «[RESPTESTA FINAL AL ASESOR]» y envolvió la contestación entre los corchetes de la plantilla;
   el asesor veía la marca y el verificador la tomaba por un nombre sin respaldo.
 
-## Cómo funciona, en 13 segundos
+## Cómo funciona, en 15 segundos
 
 <p align="center">
-  <a href="docs/como-funciona.mp4"><img src="docs/preview.gif" alt="La app real con el manual de ejemplo: una pregunta con faltas («a q altura va la alarma del pantalon») contesta con la lámina y su página; después Revisar mide un focal de ejemplo con su triángulo y sus alturas" width="420"></a>
+  <a href="https://gerardobr01.github.io/Asistente-de-piso/"><img src="docs/demo.webp" alt="La app real con el manual de ejemplo: una pregunta con faltas («a q altura va la alarma del pantalon») contesta con el dato, su página y la lámina; después Revisar mide una tringla de ejemplo y marca el tramo de color que rompe el orden" width="390"></a>
 </p>
 
-Lee tu manual → lo parte en láminas → preguntas como hablas → responde con la página y la lámina. La pregunta, la lámina que gana, el texto y el dibujo salen del motor real corriendo sobre el manual de ejemplo: **[ver en MP4](docs/como-funciona.mp4)**.
+Lee tu manual → lo parte en láminas → preguntas como hablas → responde con la página y la lámina. Grabado en la app publicada, a doble resolución, con el manual de ejemplo: la pregunta, la lámina que gana, el texto y la medición salen del motor real. **[Probarlo tú](https://gerardobr01.github.io/Asistente-de-piso/)**.
 
 ## Qué resuelve
 
